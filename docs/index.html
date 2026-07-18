@@ -69,6 +69,7 @@
   .install pre{padding:20px 18px;font-family:"JetBrains Mono",monospace;font-size:clamp(11.5px,1.6vw,14px);
     line-height:1.9;overflow-x:auto;white-space:pre}
   .install .p{color:var(--pink)} .install .c{color:var(--ink)} .install .cm{color:var(--faint)}
+  .install .v{color:var(--gold);font-weight:600}
   .copy{margin-left:auto;font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--cyan);
     background:rgba(0,229,255,.08);border:1px solid rgba(0,229,255,.4);border-radius:8px;
     padding:6px 14px;cursor:pointer;transition:.2s}
@@ -152,9 +153,10 @@
         <span style="margin-left:6px">install — python 3.9+ is all you need</span>
         <button class="copy" id="copyBtn" aria-label="Copy install commands">copy</button>
       </div>
-      <pre id="cli"><span class="cm"># clone into your vault as a dot-folder</span>
-<span class="p">$</span> <span class="c">git clone https://github.com/chuong1224/agents-knowledge-base "YourVault/.graph3d"</span>
-<span class="p">$</span> <span class="c">cd "YourVault/.graph3d"</span>
+      <pre id="cli"><span class="cm"># ⚠ replace <span class="v">YourVault</span> below with the path to YOUR vault —</span>
+<span class="cm">#   the folder that holds your markdown notes, e.g. "D:/Notes" or ~/Documents/Vault</span>
+<span class="p">$</span> <span class="c">git clone https://github.com/chuong1224/agents-knowledge-base "<span class="v">YourVault</span>/.graph3d"</span>
+<span class="p">$</span> <span class="c">cd "<span class="v">YourVault</span>/.graph3d"</span>
 <span class="p">$</span> <span class="c">python ensure_graph3d.py</span></pre>
     </div>
     <div class="req in-up d5">no pip · no npm · no build step · 127.0.0.1 only — your notes never leave your machine</div>

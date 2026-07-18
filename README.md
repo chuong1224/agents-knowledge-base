@@ -57,6 +57,8 @@ Requirements: **Python 3.9+** and a modern browser. Primary platform is **Window
 
 ```bash
 # clone INTO your vault as a dot-folder (keeps it invisible to your note tools)
+# ⚠ replace "path/to/YourVault" with the real path to YOUR vault — the folder
+#   that holds your markdown notes, e.g. "D:/Notes" or ~/Documents/Vault
 git clone https://github.com/chuong1224/agents-knowledge-base "path/to/YourVault/.graph3d"
 cd "path/to/YourVault/.graph3d"
 python ensure_graph3d.py
@@ -141,7 +143,7 @@ This is the daily driver for the author's own agent-operated knowledge base: AI 
 
 Trỏ vào một thư mục note markdown (vault kiểu Obsidian), app phục vụ giao diện web local: graph 3D synthwave toàn bộ note/tag/file, kèm panel đọc note, tìm kiếm full-text, workspace đa tab — và lớp đặc sản: **hiển thị realtime + replay + thống kê hoạt động AI agent** (Claude Code dùng ngay; agent khác qua hook JSONL đơn giản).
 
-- **Cài đặt:** chỉ cần Python 3.9+ — clone vào vault thành thư mục `.graph3d`, chạy `python ensure_graph3d.py`, app mở tại `http://127.0.0.1:8321`. Không pip, không npm, không build. Windows có thể double-click `Start-Graph3D.bat`.
+- **Cài đặt:** chỉ cần Python 3.9+ — clone vào vault thành thư mục `.graph3d` (trong lệnh mẫu, thay `YourVault` bằng **đường dẫn thư mục vault của bạn** — thư mục chứa các note markdown, ví dụ `D:/Notes`), chạy `python ensure_graph3d.py`, app mở tại `http://127.0.0.1:8321`. Không pip, không npm, không build. Windows có thể double-click `Start-Graph3D.bat`.
 - **Graph:** physics co giãn theo degree, 🧲 gom cụm theo nhóm màu, chống chồng node, lọc tag / đuôi file / nhóm màu (spotlight vs declutter), heatmap tần suất truy cập, độ chói neon chỉnh được, hỗ trợ tiếp cận (AA, bàn phím, reduced-motion).
 - **Agent:** hook `PostToolUse` của Claude Code (mẫu ở phần tiếng Anh) ghi mọi thao tác đọc/sửa → hiệu ứng sao chổi, cú nhảy siêu không gian giữa các note, chuỗi truy xuất replay được, thanh tua cả ngày + dashboard per-agent. Agent khác truyền `--agent "Tên"` là có màu riêng.
 - **Đọc & tìm:** click node đọc note ngay (wikilink, ảnh, backlink), cây thư mục kéo-giãn, `Ctrl+P` tìm tên / `#tag` / nội dung không dấu, tab + 2 pane + ghim + lịch sử đọc (persist).
