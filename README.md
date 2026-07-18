@@ -6,7 +6,25 @@ Point it at a folder of markdown notes (an Obsidian-style vault) and it serves a
 
 > Python stdlib server + vanilla ES modules + vendored three.js. **No pip install, no npm, no build step.**
 
+![The vault as a synthwave galaxy — tag groups form colored continents](docs/hero.png)
+
+<p align="center"><em>The full cockpit: reader, finder tree, live agent feed and retrieval chains around the graph</em></p>
+
+![Full cockpit UI with reader, agent feed and retrieval chains](docs/cockpit-ui.png)
+
+<p align="center"><em>Two agents at work — Claude sweeps the Research cluster (green trail), Nova runs ops (yellow)</em></p>
+
+![Agent activity lighting up the graph](docs/agent-activity.png)
+
+*All screenshots come from the bundled synthetic [demo vault](demo/vault) — spin it up yourself.*
+
+## How it works
+
+![Architecture: vault → Python server → 3D cockpit, agents feed the activity layer](docs/how-it-works.svg)
+
 ## Features
+
+![Feature map](docs/features.svg)
 
 ### 🌌 The graph
 - Force-directed 3D graph of notes, tags and attachments, colored by tag groups, with a bloom "neon" glow and adjustable intensity
@@ -102,7 +120,7 @@ The suite is designed to run with the app installed inside a real vault.
 - Standalone mode (`--vault path`) without installing into the vault
 - English UI / i18n
 - Cross-platform process management (mac/linux)
-- Demo vault + screenshots/GIF
+- Animated GIF / video walkthrough
 - Semantic search for vaults that outgrow full-text
 
 ## Origin
@@ -117,7 +135,7 @@ This is the daily driver for the author's own agent-operated knowledge base: AI 
 
 # 🇻🇳 Tiếng Việt
 
-**Buồng lái 3D cho vault ghi chú markdown — và cửa sổ realtime nhìn các AI agent đang làm việc bên trong.**
+**Buồng lái 3D cho vault ghi chú markdown — và cửa sổ realtime nhìn các AI agent đang làm việc bên trong.** (Toàn bộ ảnh chụp phía trên lấy từ [demo vault](demo/vault) tổng hợp kèm repo — không phải dữ liệu thật.)
 
 Trỏ vào một thư mục note markdown (vault kiểu Obsidian), app phục vụ giao diện web local: graph 3D synthwave toàn bộ note/tag/file, kèm panel đọc note, tìm kiếm full-text, workspace đa tab — và lớp đặc sản: **hiển thị realtime + replay + thống kê hoạt động AI agent** (Claude Code dùng ngay; agent khác qua hook JSONL đơn giản).
 

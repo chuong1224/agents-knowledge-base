@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 640" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ff2e97"/><stop offset="1" stop-color="#00e5ff"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8d83bb"/>
+    </marker>
+    <marker id="arrp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#ff2e97"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="640" fill="#07081a"/>
+  <text x="60" y="64" font-size="30" font-weight="700" fill="url(#brand)" letter-spacing="1">HOW IT WORKS</text>
+  <text x="60" y="92" font-size="15" fill="#8d83bb">One Python file serves your vault as a living 3D cockpit — agents light it up in real time</text>
+
+  <!-- Vault -->
+  <g filter="url(#glow)">
+    <rect x="60" y="150" width="250" height="150" rx="14" fill="#0d0f2b" stroke="#00e5ff" stroke-width="1.6"/>
+  </g>
+  <text x="185" y="186" font-size="30" text-anchor="middle">📁</text>
+  <text x="185" y="216" font-size="17" font-weight="700" fill="#eaf6ff" text-anchor="middle">Your vault</text>
+  <text x="185" y="240" font-size="12.5" fill="#8d83bb" text-anchor="middle">Plain markdown + wikilinks</text>
+  <text x="185" y="258" font-size="12.5" fill="#8d83bb" text-anchor="middle">(Obsidian-style, stays untouched)</text>
+  <text x="185" y="283" font-size="11" fill="#556" text-anchor="middle">clone the app into  vault/.graph3d</text>
+
+  <!-- Server -->
+  <g filter="url(#glow)">
+    <rect x="475" y="150" width="250" height="150" rx="14" fill="#0d0f2b" stroke="#ff2e97" stroke-width="1.6"/>
+  </g>
+  <text x="600" y="186" font-size="30" text-anchor="middle">🐍</text>
+  <text x="600" y="216" font-size="17" font-weight="700" fill="#eaf6ff" text-anchor="middle">Python server</text>
+  <text x="600" y="240" font-size="12.5" fill="#8d83bb" text-anchor="middle">stdlib only · self-healing</text>
+  <text x="600" y="258" font-size="12.5" fill="#8d83bb" text-anchor="middle">loopback 127.0.0.1 · no install</text>
+  <text x="600" y="283" font-size="11" fill="#556" text-anchor="middle">scans notes → graph · full-text search</text>
+
+  <!-- Browser -->
+  <g filter="url(#glow)">
+    <rect x="890" y="150" width="250" height="150" rx="14" fill="#0d0f2b" stroke="#2ed573" stroke-width="1.6"/>
+  </g>
+  <text x="1015" y="186" font-size="30" text-anchor="middle">🌌</text>
+  <text x="1015" y="216" font-size="17" font-weight="700" fill="#eaf6ff" text-anchor="middle">3D cockpit</text>
+  <text x="1015" y="240" font-size="12.5" fill="#8d83bb" text-anchor="middle">three.js force graph · reader</text>
+  <text x="1015" y="258" font-size="12.5" fill="#8d83bb" text-anchor="middle">finder · tabs · replay · dashboard</text>
+  <text x="1015" y="283" font-size="11" fill="#556" text-anchor="middle">vanilla ES modules — no build step</text>
+
+  <!-- Agents -->
+  <g filter="url(#glow)">
+    <rect x="380" y="440" width="440" height="130" rx="14" fill="#151032" stroke="#f9ca24" stroke-width="1.6"/>
+  </g>
+  <text x="600" y="478" font-size="28" text-anchor="middle">🤖</text>
+  <text x="600" y="506" font-size="17" font-weight="700" fill="#eaf6ff" text-anchor="middle">AI agents working in the vault</text>
+  <text x="600" y="530" font-size="12.5" fill="#8d83bb" text-anchor="middle">Claude Code hook out of the box · any agent via one JSONL writer</text>
+  <text x="600" y="549" font-size="12.5" fill="#8d83bb" text-anchor="middle">every read / edit is logged — nothing is invisible</text>
+
+  <!-- arrows top row -->
+  <line x1="310" y1="225" x2="465" y2="225" stroke="#8d83bb" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="388" y="212" font-size="11.5" fill="#8d83bb" text-anchor="middle">scan · serve</text>
+  <line x1="725" y1="225" x2="880" y2="225" stroke="#8d83bb" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="802" y="212" font-size="11.5" fill="#8d83bb" text-anchor="middle">graph + notes</text>
+
+  <!-- agents to vault / server -->
+  <path d="M 420 440 C 300 390 220 360 190 305" fill="none" stroke="#8d83bb" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="255" y="392" font-size="11.5" fill="#8d83bb" text-anchor="middle">read · write notes</text>
+  <path d="M 600 440 L 600 305" fill="none" stroke="#ff2e97" stroke-width="2" marker-end="url(#arrp)"/>
+  <text x="668" y="380" font-size="11.5" fill="#ff2e97" text-anchor="middle">activity log (JSONL)</text>
+  <path d="M 780 440 C 900 390 970 360 1000 305" fill="none" stroke="#ff2e97" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrp)"/>
+  <text x="955" y="392" font-size="11.5" fill="#ff2e97" text-anchor="middle">live effects · replay · heatmap</text>
+
+  <text x="600" y="614" font-size="12" fill="#556" text-anchor="middle">Two machines syncing one vault (OneDrive / Drive / Syncthing) merge their agent journals automatically</text>
+</svg>

@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ff2e97"/><stop offset="1" stop-color="#00e5ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="560" fill="#07081a"/>
+  <text x="60" y="64" font-size="30" font-weight="700" fill="url(#brand)" letter-spacing="1">WHAT YOU GET</text>
+  <text x="60" y="92" font-size="15" fill="#8d83bb">A cockpit, not just a graph — read, find, work, and watch your agents</text>
+
+  <!-- row 1 -->
+  <g>
+    <rect x="60"  y="130" width="255" height="180" rx="14" fill="#0d0f2b" stroke="#ff2e97" stroke-opacity="0.55"/>
+    <text x="84" y="176" font-size="26">🌌</text><text x="122" y="176" font-size="16" font-weight="700" fill="#eaf6ff">3D graph</text>
+    <text x="84" y="206" font-size="12.5" fill="#8d83bb">Synthwave force graph of notes,</text>
+    <text x="84" y="224" font-size="12.5" fill="#8d83bb">tags &amp; files · bloom neon glow</text>
+    <text x="84" y="242" font-size="12.5" fill="#8d83bb">degree-aware physics · cluster</text>
+    <text x="84" y="260" font-size="12.5" fill="#8d83bb">magnet 🧲 · collision guard</text>
+  </g>
+  <g>
+    <rect x="335" y="130" width="255" height="180" rx="14" fill="#0d0f2b" stroke="#f9ca24" stroke-opacity="0.55"/>
+    <text x="359" y="176" font-size="26">🤖</text><text x="397" y="176" font-size="16" font-weight="700" fill="#eaf6ff">Agents, live</text>
+    <text x="359" y="206" font-size="12.5" fill="#8d83bb">Comet trails &amp; hyperspace hops</text>
+    <text x="359" y="224" font-size="12.5" fill="#8d83bb">as agents read/edit · per-agent</text>
+    <text x="359" y="242" font-size="12.5" fill="#8d83bb">colors · retrieval chains you can</text>
+    <text x="359" y="260" font-size="12.5" fill="#8d83bb">replay on the graph</text>
+  </g>
+  <g>
+    <rect x="610" y="130" width="255" height="180" rx="14" fill="#0d0f2b" stroke="#00e5ff" stroke-opacity="0.55"/>
+    <text x="634" y="176" font-size="26">⏱</text><text x="672" y="176" font-size="16" font-weight="700" fill="#eaf6ff">Replay &amp; analytics</text>
+    <text x="634" y="206" font-size="12.5" fill="#8d83bb">Scrub a full day of agent work</text>
+    <text x="634" y="224" font-size="12.5" fill="#8d83bb">on a timeline · dashboard with</text>
+    <text x="634" y="242" font-size="12.5" fill="#8d83bb">per-agent stats, hourly histogram,</text>
+    <text x="634" y="260" font-size="12.5" fill="#8d83bb">top notes · access heatmaps 🔥</text>
+  </g>
+  <g>
+    <rect x="885" y="130" width="255" height="180" rx="14" fill="#0d0f2b" stroke="#2ed573" stroke-opacity="0.55"/>
+    <text x="909" y="176" font-size="26">📖</text><text x="947" y="176" font-size="16" font-weight="700" fill="#eaf6ff">Reader</text>
+    <text x="909" y="206" font-size="12.5" fill="#8d83bb">Click a node, read the note —</text>
+    <text x="909" y="224" font-size="12.5" fill="#8d83bb">wikilinks resolve, images embed,</text>
+    <text x="909" y="242" font-size="12.5" fill="#8d83bb">backlinks listed · multi-tab,</text>
+    <text x="909" y="260" font-size="12.5" fill="#8d83bb">two-pane split, pins &amp; history</text>
+  </g>
+
+  <!-- row 2 -->
+  <g>
+    <rect x="60"  y="330" width="255" height="180" rx="14" fill="#0d0f2b" stroke="#8d83bb" stroke-opacity="0.55"/>
+    <text x="84" y="376" font-size="26">🔎</text><text x="122" y="376" font-size="16" font-weight="700" fill="#eaf6ff">Finder</text>
+    <text x="84" y="406" font-size="12.5" fill="#8d83bb">Folder tree sidebar · Ctrl+P</text>
+    <text x="84" y="424" font-size="12.5" fill="#8d83bb">quick switcher: names, #tags,</text>
+    <text x="84" y="442" font-size="12.5" fill="#8d83bb">diacritic-insensitive full-text</text>
+    <text x="84" y="460" font-size="12.5" fill="#8d83bb">search with snippets</text>
+  </g>
+  <g>
+    <rect x="335" y="330" width="255" height="180" rx="14" fill="#0d0f2b" stroke="#ff2e97" stroke-opacity="0.55"/>
+    <text x="359" y="376" font-size="26">🖥</text><text x="397" y="376" font-size="16" font-weight="700" fill="#eaf6ff">Multi-machine</text>
+    <text x="359" y="406" font-size="12.5" fill="#8d83bb">Per-host journals live in the</text>
+    <text x="359" y="424" font-size="12.5" fill="#8d83bb">vault — machines syncing via</text>
+    <text x="359" y="442" font-size="12.5" fill="#8d83bb">OneDrive/Drive/Syncthing merge</text>
+    <text x="359" y="460" font-size="12.5" fill="#8d83bb">history automatically</text>
+  </g>
+  <g>
+    <rect x="610" y="330" width="255" height="180" rx="14" fill="#0d0f2b" stroke="#f9ca24" stroke-opacity="0.55"/>
+    <text x="634" y="376" font-size="26">🛡</text><text x="672" y="376" font-size="16" font-weight="700" fill="#eaf6ff">Self-healing</text>
+    <text x="634" y="406" font-size="12.5" fill="#8d83bb">Single instance keyed by port ·</text>
+    <text x="634" y="424" font-size="12.5" fill="#8d83bb">auto-restart on source change ·</text>
+    <text x="634" y="442" font-size="12.5" fill="#8d83bb">stale-process cleanup · loopback</text>
+    <text x="634" y="460" font-size="12.5" fill="#8d83bb">only, vault never leaves localhost</text>
+  </g>
+  <g>
+    <rect x="885" y="330" width="255" height="180" rx="14" fill="#0d0f2b" stroke="#00e5ff" stroke-opacity="0.55"/>
+    <text x="909" y="376" font-size="26">⚡</text><text x="947" y="376" font-size="16" font-weight="700" fill="#eaf6ff">Zero friction</text>
+    <text x="909" y="406" font-size="12.5" fill="#8d83bb">Python stdlib + vanilla ES</text>
+    <text x="909" y="424" font-size="12.5" fill="#8d83bb">modules + vendored three.js —</text>
+    <text x="909" y="442" font-size="12.5" fill="#8d83bb">no pip, no npm, no build step ·</text>
+    <text x="909" y="460" font-size="12.5" fill="#8d83bb">tests run in ~3 seconds</text>
+  </g>
+</svg>

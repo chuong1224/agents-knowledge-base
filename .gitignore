@@ -6,3 +6,6 @@ heat_cumulative-*.json
 activity-*.jsonl
 *.bak-*
 .DS_Store
+
+# local demo-app copy for screenshots
+demo/vault/.graph3d/
