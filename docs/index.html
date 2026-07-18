@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agents Knowledge Base — a 3D cockpit for your markdown vault</title>
+<meta name="description" content="Turn a markdown vault into a synthwave 3D cockpit and watch AI agents work inside it — live effects, replay, analytics. Zero dependencies, no build step.">
+<meta property="og:title" content="Agents Knowledge Base">
+<meta property="og:description" content="A 3D cockpit for your markdown vault — and a live window into the AI agents working inside it.">
+<meta property="og:image" content="https://chuong1224.github.io/agents-knowledge-base/hero.png">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌌</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#05060f; --panel:#0d0f2b; --ink:#eaf6ff; --faint:#8d83bb;
+    --pink:#ff2e97; --cyan:#00e5ff; --green:#2ed573; --gold:#f9ca24;
+    --glass:rgba(13,15,43,.55); --line:rgba(141,131,187,.25);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:"Space Grotesk",system-ui,Segoe UI,sans-serif;
+    overflow-x:hidden; line-height:1.6;
+  }
+  /* ---- ambient: stars + neon nebulas ---- */
+  .sky{position:fixed;inset:0;z-index:-2;background:
+    radial-gradient(1px 1px at 12% 22%,rgba(255,255,255,.7),transparent 50%),
+    radial-gradient(1px 1px at 33% 78%,rgba(255,255,255,.5),transparent 50%),
+    radial-gradient(1.5px 1.5px at 58% 12%,rgba(255,255,255,.6),transparent 50%),
+    radial-gradient(1px 1px at 71% 55%,rgba(255,255,255,.45),transparent 50%),
+    radial-gradient(1px 1px at 86% 30%,rgba(255,255,255,.6),transparent 50%),
+    radial-gradient(1.5px 1.5px at 45% 92%,rgba(255,255,255,.4),transparent 50%),
+    radial-gradient(1px 1px at 92% 82%,rgba(255,255,255,.5),transparent 50%),
+    radial-gradient(1px 1px at 5% 60%,rgba(255,255,255,.4),transparent 50%),
+    var(--bg)}
+  .nebula{position:fixed;border-radius:50%;filter:blur(120px);opacity:.16;z-index:-1;pointer-events:none}
+  .n1{width:560px;height:560px;background:var(--pink);top:-180px;left:-120px}
+  .n2{width:640px;height:640px;background:var(--cyan);bottom:-260px;right:-180px}
+  .n3{width:400px;height:400px;background:#6c5ce7;top:40%;left:55%}
+  /* ---- nav ---- */
+  nav{position:sticky;top:0;z-index:10;display:flex;justify-content:space-between;align-items:center;
+    padding:14px clamp(20px,6vw,72px);background:rgba(5,6,15,.6);backdrop-filter:blur(14px);
+    border-bottom:1px solid var(--line)}
+  .logo{font-weight:700;letter-spacing:.5px;font-size:15px;
+    background:linear-gradient(90deg,var(--pink),var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent}
+  nav a.gh{color:var(--ink);text-decoration:none;font-size:13.5px;border:1px solid var(--line);
+    padding:7px 16px;border-radius:999px;transition:.25s}
+  nav a.gh:hover{border-color:var(--cyan);box-shadow:0 0 18px rgba(0,229,255,.35);color:var(--cyan)}
+  main{max-width:1120px;margin:0 auto;padding:0 clamp(20px,5vw,48px)}
+  /* ---- hero ---- */
+  .hero{text-align:center;padding:84px 0 30px}
+  .eyebrow{font-family:"JetBrains Mono",monospace;font-size:12.5px;letter-spacing:3px;color:var(--cyan);text-transform:uppercase}
+  h1{font-size:clamp(40px,7vw,84px);font-weight:700;line-height:1.05;margin:18px 0 20px;letter-spacing:-1px}
+  h1 .grad{background:linear-gradient(92deg,var(--pink) 10%,#b465ff 45%,var(--cyan) 90%);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--faint);font-size:clamp(15px,2vw,19px);max-width:680px;margin:0 auto}
+  .sub b{color:var(--ink);font-weight:600}
+  /* ---- install / CLI ---- */
+  .install{margin:44px auto 0;max-width:760px;text-align:left;border-radius:16px;overflow:hidden;
+    background:var(--glass);backdrop-filter:blur(16px);border:1px solid var(--line);
+    box-shadow:0 0 0 1px rgba(255,46,151,.12), 0 24px 70px rgba(0,0,0,.6), 0 0 60px rgba(0,229,255,.07)}
+  .install .bar{display:flex;align-items:center;gap:8px;padding:11px 16px;border-bottom:1px solid var(--line);
+    font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--faint)}
+  .dot{width:11px;height:11px;border-radius:50%}
+  .install pre{padding:20px 18px;font-family:"JetBrains Mono",monospace;font-size:clamp(11.5px,1.6vw,14px);
+    line-height:1.9;overflow-x:auto;white-space:pre}
+  .install .p{color:var(--pink)} .install .c{color:var(--ink)} .install .cm{color:var(--faint)}
+  .copy{margin-left:auto;font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--cyan);
+    background:rgba(0,229,255,.08);border:1px solid rgba(0,229,255,.4);border-radius:8px;
+    padding:6px 14px;cursor:pointer;transition:.2s}
+  .copy:hover{background:rgba(0,229,255,.18);box-shadow:0 0 16px rgba(0,229,255,.4)}
+  .copy.ok{color:var(--green);border-color:rgba(46,213,115,.5);background:rgba(46,213,115,.1)}
+  .req{margin-top:14px;font-size:12.5px;color:var(--faint);font-family:"JetBrains Mono",monospace;text-align:center}
+  /* ---- floating screenshot + mirror reflection ---- */
+  .stage{padding:64px 0 40px;perspective:1200px}
+  .shot{display:block;width:100%;border-radius:16px;border:1px solid var(--line);
+    box-shadow:0 30px 90px rgba(0,0,0,.65), 0 0 70px rgba(255,46,151,.10), 0 0 110px rgba(0,229,255,.08);
+    -webkit-box-reflect:below 14px linear-gradient(transparent 62%, rgba(255,255,255,.16));}
+  .float{animation:float 8s ease-in-out infinite}
+  .float.slow{animation-duration:11s}
+  @keyframes float{0%,100%{transform:translateY(0) rotateX(0)}50%{transform:translateY(-14px) rotateX(.6deg)}}
+  /* ---- big statements ---- */
+  .statements{padding:70px 0 10px;text-align:center}
+  .statement{font-size:clamp(30px,5.4vw,62px);font-weight:700;line-height:1.12;letter-spacing:-.5px;margin:54px 0}
+  .statement small{display:block;font-size:clamp(13px,1.6vw,16px);font-weight:400;color:var(--faint);
+    letter-spacing:0;margin-top:14px;max-width:640px;margin-left:auto;margin-right:auto}
+  .tp{background:linear-gradient(92deg,var(--pink),#ff7ab8);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tc{background:linear-gradient(92deg,var(--cyan),#7df9ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tg{background:linear-gradient(92deg,var(--green),#aef9c7);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .ty{background:linear-gradient(92deg,var(--gold),#ffe28a);-webkit-background-clip:text;background-clip:text;color:transparent}
+  /* ---- feature cards ---- */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;padding:30px 0 10px}
+  .card{background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:16px;
+    padding:26px 22px;transition:transform .35s,box-shadow .35s,border-color .35s}
+  .card:hover{transform:translateY(-8px);border-color:rgba(0,229,255,.45);
+    box-shadow:0 18px 50px rgba(0,0,0,.5), 0 0 40px rgba(0,229,255,.12)}
+  .card .ico{font-size:26px}
+  .card h3{font-size:16.5px;margin:12px 0 8px}
+  .card p{font-size:13.5px;color:var(--faint)}
+  /* ---- how ---- */
+  .how{padding:60px 0}
+  .how img{width:100%;border-radius:16px;border:1px solid var(--line);
+    box-shadow:0 24px 70px rgba(0,0,0,.55)}
+  h2.sec{font-size:clamp(24px,3.4vw,36px);text-align:center;margin-bottom:8px}
+  p.secsub{text-align:center;color:var(--faint);margin-bottom:28px;font-size:15px}
+  /* ---- footer ---- */
+  footer{border-top:1px solid var(--line);margin-top:70px;padding:34px clamp(20px,6vw,72px);
+    display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:center;
+    color:var(--faint);font-size:13px}
+  footer a{color:var(--cyan);text-decoration:none}
+  footer a:hover{text-shadow:0 0 12px rgba(0,229,255,.6)}
+  /* ---- entrance animations ---- */
+  .in-up{opacity:0;transform:translateY(30px);animation:inup .8s cubic-bezier(.22,.8,.3,1) forwards}
+  @keyframes inup{to{opacity:1;transform:none}}
+  .d1{animation-delay:.05s}.d2{animation-delay:.18s}.d3{animation-delay:.32s}.d4{animation-delay:.48s}.d5{animation-delay:.65s}
+  .reveal{opacity:0;transform:translateY(34px);transition:opacity .8s cubic-bezier(.22,.8,.3,1),transform .8s cubic-bezier(.22,.8,.3,1)}
+  .reveal.show{opacity:1;transform:none}
+  @media (prefers-reduced-motion: reduce){
+    .in-up,.reveal{opacity:1;transform:none;animation:none;transition:none}
+    .float{animation:none}
+    html{scroll-behavior:auto}
+  }
+</style>
+</head>
+<body>
+<div class="sky"></div>
+<div class="nebula n1"></div><div class="nebula n2"></div><div class="nebula n3"></div>
+
+<nav>
+  <span class="logo">AGENTS KNOWLEDGE BASE</span>
+  <a class="gh" href="https://github.com/chuong1224/agents-knowledge-base">GitHub ↗</a>
+</nav>
+
+<main>
+  <!-- HERO -->
+  <section class="hero">
+    <div class="eyebrow in-up d1">markdown vault → synthwave galaxy</div>
+    <h1 class="in-up d2">A <span class="grad">3D cockpit</span><br>for your knowledge vault</h1>
+    <p class="sub in-up d3">Point it at a folder of markdown notes and fly through it — then <b>watch your AI agents
+      light it up in real time</b>: comet trails, retrieval chains, full-day replay, analytics.</p>
+
+    <!-- INSTALL / CLI -->
+    <div class="install in-up d4">
+      <div class="bar">
+        <span class="dot" style="background:#ff5f57"></span>
+        <span class="dot" style="background:#febc2e"></span>
+        <span class="dot" style="background:#28c840"></span>
+        <span style="margin-left:6px">install — python 3.9+ is all you need</span>
+        <button class="copy" id="copyBtn" aria-label="Copy install commands">copy</button>
+      </div>
+      <pre id="cli"><span class="cm"># clone into your vault as a dot-folder</span>
+<span class="p">$</span> <span class="c">git clone https://github.com/chuong1224/agents-knowledge-base "YourVault/.graph3d"</span>
+<span class="p">$</span> <span class="c">cd "YourVault/.graph3d"</span>
+<span class="p">$</span> <span class="c">python ensure_graph3d.py</span></pre>
+    </div>
+    <div class="req in-up d5">no pip · no npm · no build step · 127.0.0.1 only — your notes never leave your machine</div>
+  </section>
+
+  <!-- FLOATING HERO SHOT + REFLECTION -->
+  <section class="stage reveal">
+    <img class="shot float" src="hero.png" alt="The vault rendered as a synthwave 3D galaxy — tag groups form colored continents">
+  </section>
+
+  <!-- BIG STATEMENTS -->
+  <section class="statements">
+    <div class="statement reveal"><span class="ty">Watch AI agents work</span> — live.
+      <small>Every read and edit an agent makes fires comet trails and hyperspace hops across the graph.
+      Nothing your agents do is invisible anymore.</small></div>
+
+    <div class="statement reveal"><span class="tc">Replay a full day</span> in seconds.
+      <small>Scrub the timeline like a video edit. Per-agent stats, hourly histograms, hottest notes —
+      retrieval, measured.</small></div>
+
+    <div class="statement reveal"><span class="tg">Zero dependencies.</span> No build step.
+      <small>One Python-stdlib server, vanilla ES modules, vendored three.js.
+      Clone, run, done — and the test suite finishes in ~3 seconds.</small></div>
+
+    <div class="statement reveal"><span class="tp">Your vault stays plain markdown.</span>
+      <small>No database of truth, no lock-in. Obsidian and this cockpit read the same files, forever.</small></div>
+  </section>
+
+  <!-- COCKPIT SHOT -->
+  <section class="stage reveal">
+    <h2 class="sec">Not just a graph — a <span class="tc">cockpit</span></h2>
+    <p class="secsub">Reader with wikilinks &amp; backlinks · folder tree · Ctrl+P everything-search · tabs, split panes, pins</p>
+    <img class="shot float slow" src="cockpit-ui.png" alt="Full cockpit UI: markdown reader, folder tree, live agent feed and retrieval chains">
+  </section>
+
+  <!-- FEATURE CARDS -->
+  <section class="reveal">
+    <div class="grid">
+      <div class="card"><div class="ico">🌌</div><h3>Synthwave 3D graph</h3><p>Force-directed galaxy of notes, tags and files. Degree-aware physics, cluster magnet, collision guard, adjustable neon.</p></div>
+      <div class="card"><div class="ico">🤖</div><h3>Agent activity layer</h3><p>Claude Code hook out of the box; any agent via one JSONL writer. Per-agent colors and replayable retrieval chains.</p></div>
+      <div class="card"><div class="ico">🔥</div><h3>Heatmaps</h3><p>Recent-window and long-term cumulative access frequency — your vault's hot zones glow and swell.</p></div>
+      <div class="card"><div class="ico">🖥</div><h3>Multi-machine</h3><p>Per-host journals live in the vault. Machines syncing over OneDrive / Drive / Syncthing merge history automatically.</p></div>
+      <div class="card"><div class="ico">🛡</div><h3>Self-healing server</h3><p>Single instance keyed by port, auto-restart on source change, stale-process cleanup — and it never kills what it can't verify.</p></div>
+      <div class="card"><div class="ico">📖</div><h3>Reader &amp; finder</h3><p>Click a node to read the note. Quick switcher searches names, #tags and full text — diacritic-insensitive.</p></div>
+    </div>
+  </section>
+
+  <!-- AGENT SHOT -->
+  <section class="stage reveal">
+    <h2 class="sec">Two agents, <span class="ty">one story</span></h2>
+    <p class="secsub">Claude sweeps the research cluster (green) while Nova runs ops (yellow) — captured from the bundled demo vault</p>
+    <img class="shot float" src="agent-activity.png" alt="Agent trails lighting up the graph: Claude in green, Nova in yellow">
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="how reveal">
+    <h2 class="sec">How it works</h2>
+    <p class="secsub">One Python file serves your vault as a living cockpit — agents feed the activity layer</p>
+    <img src="how-it-works.svg" alt="Architecture diagram: vault to Python server to 3D cockpit; agents feed the activity log">
+  </section>
+</main>
+
+<footer>
+  <span>MIT © 2026 Chuong Phan</span>
+  <span><a href="https://github.com/chuong1224/agents-knowledge-base">Source on GitHub</a> · built with an AI pair-programmer, logged on its own graph 🌌</span>
+</footer>
+
+<script>
+  // copy CLI
+  const btn = document.getElementById('copyBtn');
+  btn.addEventListener('click', async () => {
+    const cmds = ['git clone https://github.com/chuong1224/agents-knowledge-base "YourVault/.graph3d"',
+                  'cd "YourVault/.graph3d"',
+                  'python ensure_graph3d.py'].join('\n');
+    try { await navigator.clipboard.writeText(cmds); } catch (e) {}
+    btn.textContent = 'copied ✓'; btn.classList.add('ok');
+    setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('ok'); }, 2200);
+  });
+  // slide-in on scroll
+  const io = new IntersectionObserver((es) => es.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add('show'); io.unobserve(e.target); }
+  }), {threshold: 0.12});
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+</script>
+</body>
+</html>
