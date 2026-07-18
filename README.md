@@ -2,6 +2,8 @@
 
 **A 3D cockpit for your markdown knowledge vault — and a live window into the AI agents working inside it.**
 
+**🌐 Landing page: [chuong1224.github.io/agents-knowledge-base](https://chuong1224.github.io/agents-knowledge-base/)**
+
 Point it at a folder of markdown notes (an Obsidian-style vault) and it serves a local web app: an interactive, synthwave-styled 3D force graph of every note, tag and attachment — with a built-in reader, full-text finder, tabbed workspace, and a layer no PKM tool has: **real-time visualization, replay and analytics of AI-agent activity** (Claude Code out of the box; any agent via a simple JSONL hook).
 
 > Python stdlib server + vanilla ES modules + vendored three.js. **No pip install, no npm, no build step.**
