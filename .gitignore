@@ -1,0 +1,8 @@
+# Runtime data written next to the app when it lives inside a real vault
+backup/
+__pycache__/
+*.lock
+heat_cumulative-*.json
+activity-*.jsonl
+*.bak-*
+.DS_Store

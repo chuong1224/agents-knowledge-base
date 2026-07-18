@@ -1,0 +1,4 @@
+# Khoi phuc BYTE-NGUYEN o moi may: cam git doi line-ending khi checkout/clone
+# (gotcha #15 — file .graph3d dung LF; autocrlf=true global cua Windows se pha).
+# .gitattributes di theo bundle nen luat nay song sot qua moi lan clone.
+* -text

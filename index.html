@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>KB Graph 3D — Knowledge Base</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+<div id="graph"></div>
+
+<div id="brand">
+  <h1>KB GRAPH 3D</h1>
+  <div class="sub">KNOWLEDGE BASE · SYNTHWAVE · <span style="color:var(--cyan)">v1.34.0</span></div>
+</div>
+
+<div id="sidebar">
+  <div class="sb-sect" id="sb-pins">
+    <div class="sb-h" title="Note đã ghim từ nút ☆ trên panel đọc — click mở, Ctrl+click mở tab mới">📌 Ghim <span class="c"></span></div>
+    <div class="sb-list"></div>
+  </div>
+  <div class="sb-sect" id="sb-recent">
+    <div class="sb-h" title="Note đọc gần đây (nhớ qua phiên) — click mở lại, Ctrl+click mở tab mới">🕘 Gần đây <span class="c"></span><span class="clr" title="Xoá lịch sử đọc">✕</span></div>
+    <div class="sb-list"></div>
+  </div>
+  <div id="sidebar-head" title="Duyệt cấu trúc folder vault — click note mở panel đọc, click file đính kèm mở tab mới. Cây độc lập với bộ lọc hiển thị trên graph.">🗂 Cây vault</div>
+  <div id="tree"></div>
+  <div id="sb-resize" role="separator" aria-orientation="vertical" tabindex="0"
+       aria-label="Chỉnh bề rộng cây vault" title="Kéo chỉnh bề rộng · click đúp về mặc định · phím ←/→"></div>
+</div>
+<button id="sidebar-toggle" aria-controls="sidebar" title="Ẩn/hiện cây vault">🗂</button>
+
+<div id="hint"><b>Kéo trái</b> xoay · <b>Lăn chuột</b> zoom · <b>Kéo phải</b> di chuyển · <b>Kéo node</b> sắp xếp (tự ghim) · <b>Click đúp</b> thả ghim · <b>Click</b> xem note · <b>Ctrl+P</b> tìm nhanh</div>
+
+<div id="layout-fab" role="group" aria-label="Bố cục đồ thị">
+  <button class="btn" id="ph-fit" title="Toàn cảnh — thu toàn bộ graph vào khung hình">⌖</button>
+  <button class="btn on" id="ph-bung" title="Bố cục Bung — lực đẩy mạnh, không gian mở rộng">Bung</button>
+  <button class="btn" id="ph-calm" title="Bố cục Calm — lực đẩy nhẹ, không gian gọn">Calm</button>
+</div>
+
+<div id="panel">
+<div id="panel-body">
+  <div class="sect">
+    <div class="stats" title="Đang sáng trên graph / tổng trong vault (khi có lọc — gồm cả lọc nhóm màu)"><span><b id="st-n">0</b> note</span><span><b id="st-l">0</b> liên kết</span><span><b id="st-f">0</b> file</span><span><b id="st-t">0</b> tag</span><span style="margin-left:auto;color:var(--faint);font-size:10.5px" title="Giờ server quét vault lần cuối">🗘 <span id="st-gen">—</span></span></div>
+  </div>
+  <div class="sect" data-sect="search">
+    <h2>Tìm note</h2>
+    <input id="search" list="notes-dl" placeholder="Gõ tên note rồi Enter…">
+    <datalist id="notes-dl"></datalist>
+    <div id="search-miss">Không tìm thấy note nào khớp — thử từ khoá khác (không cần gõ dấu).</div>
+  </div>
+  <div class="sect" data-sect="agent">
+    <h2>Hoạt động Agent <span id="agent-dot"></span></h2>
+    <div id="agent-legend"></div>
+    <div id="feed"><div class="empty">Chưa có hoạt động.<br>Khi agent đọc / tìm / sửa note trong vault,<br>node sẽ phát sáng tại đây.</div></div>
+    <div class="btns" style="margin-top:8px">
+      <button class="btn demo" id="btn-demo">▶ Demo hiệu ứng</button>
+    </div>
+  </div>
+  <div class="sect" data-sect="chains">
+    <h2>⛓ Chuỗi truy xuất <span class="mini"><button id="ch-refresh" title="Làm mới">↻</button></span></h2>
+    <div id="chain-stats"></div>
+    <div id="chain-help">📄 note khác nhau/tổng lượt · ⟳ đọc lặp · ✎ sửa lặp · ▶ phát lại<span id="chain-help-x" title="Ẩn chú giải (nhớ lựa chọn)">✕</span></div>
+    <div id="chains"><div class="empty" style="color:var(--faint);font-size:11.5px;text-align:center;padding:12px 6px">Chưa có chuỗi truy xuất.</div></div>
+  </div>
+  <div class="sect" data-sect="cockpit">
+    <h2>🚀 Cockpit ngày</h2>
+    <div class="row" style="margin-bottom:8px">Ngày trong log <select id="ck-day" title="Các ngày còn event trong log hoạt động (log cuộn)"></select></div>
+    <div class="btns">
+      <button class="btn" id="ck-replay" title="Phát lại hành trình agent trong ngày trên graph — thanh tua hiện ở đáy màn hình">🎬 Phát lại</button>
+      <button class="btn" id="ck-dash" title="Dashboard hiệu quả truy xuất trong ngày: per-agent, theo giờ, top note">📊 Dashboard</button>
+    </div>
+  </div>
+  <div class="sect" data-sect="heat">
+    <h2>🔥 Điểm nóng truy xuất</h2>
+    <div class="row" style="margin-bottom:8px">Tô sáng graph theo tần suất <div class="sw" id="sw-heat"></div></div>
+    <div class="btns" style="margin-bottom:6px">
+      <button class="btn on" id="heat-window" title="Log gần đây — cửa sổ cuộn">Gần đây</button>
+      <button class="btn" id="heat-all" title="Tích luỹ dài hạn — lưu trong vault">Tích luỹ</button>
+    </div>
+    <div id="heat-stats"></div>
+    <div id="heat-top"><div id="heat-empty">Chưa có dữ liệu truy xuất.</div></div>
+  </div>
+  <div class="sect" data-sect="filter">
+    <h2>Lọc hiển thị</h2>
+    <h3 title="Click 1 nhóm để làm nổi bật — note nhóm khác và node tag/file MỜ ĐI (vẫn giữ vị trí trên graph, không gỡ)">🎨 Nhóm màu note (click để lọc)</h3>
+    <div class="chips" id="legend"></div>
+    <h3 title="Bật/tắt node tag (hình kim cương) TRÊN GRAPH — không lọc note theo tag">🏷 Node tag trên graph <span class="mini"><button id="tag-all">Tất cả</button><button id="tag-none">Ẩn hết</button></span></h3>
+    <div class="chips" id="tagchips"></div>
+    <h3 title="Bật/tắt node file đính kèm theo đuôi — mặc định ẩn hết cho gọn graph">📎 Node file theo đuôi <span class="mini"><button id="ext-all">Tất cả</button><button id="ext-none">Ẩn hết</button></span></h3>
+    <div class="chips" id="extchips"></div>
+  </div>
+  <div class="sect" data-sect="fx">
+    <h2>Hiệu ứng</h2>
+    <div class="rows">
+      <div class="row">Độ rực neon <input type="range" id="sl-neon" min="0" max="100" value="32"></div>
+      <div class="row">Tự xoay không gian <div class="sw on" id="sw-rotate"></div></div>
+      <div class="row">Camera bám theo agent <div class="sw on" id="sw-follow"></div></div>
+      <div class="row">Nhãn tên note <div class="sw on" id="sw-labels"></div></div>
+      <div class="row">Hạt chạy trên liên kết <div class="sw on" id="sw-particles"></div></div>
+      <div class="row">Vệt đường đi agent <div class="sw on" id="sw-trails"></div></div>
+      <div class="row">Sao băng nền (khi nhàn rỗi) <div class="sw on" id="sw-ambient"></div></div>
+      <div class="row" title="Kéo note về trọng tâm nhóm màu của nó — nhóm tách thành cụm rõ trên không gian; Index / MOC và Khác thả tự do làm cầu nối giữa các cụm">🧲 Gom cụm nhóm màu <div class="sw" id="sw-cluster"></div></div>
+    </div>
+  </div>
+  <div class="sect" data-sect="layout">
+    <h2>Bố cục</h2>
+    <div class="btns">
+      <button class="btn" id="ph-unpin" title="Thả mọi node đã ghim sau khi kéo tay — layout tự sắp xếp lại">📌 Thả ghim tất cả</button>
+    </div>
+  </div>
+</div>
+</div>
+<button id="panel-toggle" title="Ẩn/hiện bảng điều khiển">☰</button>
+
+<div id="reader">
+  <div class="pane" data-pane="0">
+    <div class="tabbar"><div class="tabs" role="tablist"></div><button class="tb-plus" title="Mở note ở tab mới (tìm nhanh)">＋</button></div>
+    <div class="rd-head">
+      <button class="rd-back" title="Quay lại note trước (tab này)">←</button>
+      <div class="rd-titlebox">
+        <h3 class="rd-title"></h3>
+        <div class="rd-meta"></div>
+      </div>
+      <button class="rd-pin" title="Ghim note (hiện ở sidebar)">☆</button>
+      <button class="rd-split" title="Tách tab sang pane bên cạnh — đọc 2 note song song">⧉</button>
+      <a class="rd-obsidian" title="Mở trong Obsidian" href="#">↗</a>
+      <span class="rd-x" title="Đóng (Esc) — tab giữ nguyên, mở lại còn đủ">✕</span>
+    </div>
+    <div class="rd-body">
+      <div class="tags rd-tags"></div>
+      <div class="rd-content md"></div>
+      <div class="rd-backlinks"></div>
+    </div>
+  </div>
+  <div class="pane" data-pane="1">
+    <div class="tabbar"><div class="tabs" role="tablist"></div><button class="tb-plus" title="Mở note ở tab mới (tìm nhanh)">＋</button></div>
+    <div class="rd-head">
+      <button class="rd-back" title="Quay lại note trước (tab này)">←</button>
+      <div class="rd-titlebox">
+        <h3 class="rd-title"></h3>
+        <div class="rd-meta"></div>
+      </div>
+      <button class="rd-pin" title="Ghim note (hiện ở sidebar)">☆</button>
+      <button class="rd-split" title="Gộp tab về pane chính">⧉</button>
+      <a class="rd-obsidian" title="Mở trong Obsidian" href="#">↗</a>
+      <span class="rd-x" title="Đóng (Esc) — tab giữ nguyên, mở lại còn đủ">✕</span>
+    </div>
+    <div class="rd-body">
+      <div class="tags rd-tags"></div>
+      <div class="rd-content md"></div>
+      <div class="rd-backlinks"></div>
+    </div>
+  </div>
+</div>
+
+<div id="qs">
+  <div id="qs-box" role="dialog" aria-label="Tìm nhanh — mở note trong vault">
+    <input id="qs-input" placeholder="Tìm note… (#tag để duyệt theo tag · từ 2 ký tự tìm cả nội dung)" autocomplete="off" spellcheck="false">
+    <div id="qs-results"></div>
+    <div id="qs-hint">↑↓ chọn · Enter mở · Ctrl+Enter tab mới · Esc đóng · Ctrl+P bật/tắt</div>
+  </div>
+</div>
+
+<div id="timeline" role="region" aria-label="Thanh tua hoạt động agent trong ngày">
+  <div id="tl-head">
+    <button id="tl-play" title="Phát / tạm dừng">▶</button>
+    <button id="tl-speed" title="Tốc độ phát (×1/×2/×4)">×1</button>
+    <span id="tl-now"></span>
+    <span id="tl-info"></span>
+    <span id="tl-x" title="Đóng thanh tua">✕</span>
+  </div>
+  <div id="tl-track" title="Click / kéo để tua"><div id="tl-ticks"></div><div id="tl-dots"></div><div id="tl-cursor"></div></div>
+</div>
+
+<div id="dash">
+  <div id="dash-box" role="dialog" aria-label="Dashboard hiệu quả truy xuất">
+    <div id="dash-head">
+      <h3>📊 Hiệu quả truy xuất</h3><span id="dash-day"></span><span id="dash-x" title="Đóng (Esc)">✕</span>
+    </div>
+    <div id="dash-body"></div>
+  </div>
+</div>
+
+<div id="err"><div><h2>Không tải được graph</h2><p id="err-msg"></p></div></div>
+
+<script src="/vendor/3d-force-graph.min.js"></script>
+<script src="/vendor/markdown-it.min.js"></script>
+<script type="importmap">
+{ "imports": {
+    "three": "/vendor/three/build/three.module.js",
+    "three/addons/": "/vendor/three/examples/jsm/"
+} }
+</script>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
