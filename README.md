@@ -59,6 +59,18 @@ Point it at a folder of markdown notes (an Obsidian-style vault) and it serves a
 
 Requirements: **Python 3.9+** and a modern browser. Primary platform is **Windows** (process management shells out to PowerShell); the server itself is cross-platform and mac/linux support is on the roadmap.
 
+### 🚀 Try it in 60 seconds — no vault needed
+
+```bash
+git clone https://github.com/chuong1224/agents-knowledge-base
+cd agents-knowledge-base
+python try_demo.py
+```
+
+That runs the cockpit on the **bundled 120-note demo vault** — the same one every screenshot and GIF above comes from. Fly around, click nodes to read them, press `Ctrl+P` to search, hit **▶ Demo hiệu ứng** to see the agent effects.
+
+### 📁 Install into your own vault
+
 ```bash
 # clone INTO your vault as a dot-folder (keeps it invisible to your note tools)
 # ⚠ replace "path/to/YourVault" with the real path to YOUR vault — the folder
@@ -69,6 +81,22 @@ python ensure_graph3d.py
 ```
 
 That's it — the app opens at `http://127.0.0.1:8321`. The vault root is simply the parent folder of `.graph3d/`. Re-running `ensure_graph3d.py` is idempotent (reuses a healthy server, replaces a stale one). On Windows you can also double-click `Start-Graph3D.bat`.
+
+### 🌱 No vault yet? Start from zero
+
+Here's the secret: **a vault is just a folder of markdown files.** You don't need Obsidian or any special app to start one — any text editor works, and an AI agent can do the writing for you. ([Obsidian](https://obsidian.md) is a great *editor* to adopt later; it opens the exact same folder.)
+
+This repo ships a [`starter-vault/`](starter-vault/) — 9 short notes that teach notes, `[[wikilinks]]`, tags, and hub notes *by being read inside the app itself* (Vietnamese summary included):
+
+```bash
+# copy the starter vault anywhere you like, then install the app into it
+cp -r starter-vault "path/to/MyVault"
+git clone https://github.com/chuong1224/agents-knowledge-base "path/to/MyVault/.graph3d"
+cd "path/to/MyVault/.graph3d"
+python ensure_graph3d.py
+```
+
+Open **Start Here** in the Reader and follow along — in ten minutes you'll have edited your first note and watched the graph react.
 
 ## Hook up an agent
 
@@ -146,7 +174,9 @@ This is the daily driver for the author's own agent-operated knowledge base: AI 
 
 Trỏ vào một thư mục note markdown (vault kiểu Obsidian), app phục vụ giao diện web local: graph 3D synthwave toàn bộ note/tag/file, kèm panel đọc note, tìm kiếm full-text, workspace đa tab — và lớp đặc sản: **hiển thị realtime + replay + thống kê hoạt động AI agent** (Claude Code dùng ngay; agent khác qua hook JSONL đơn giản).
 
-- **Cài đặt:** chỉ cần Python 3.9+ — clone vào vault thành thư mục `.graph3d` (trong lệnh mẫu, thay `YourVault` bằng **đường dẫn thư mục vault của bạn** — thư mục chứa các note markdown, ví dụ `D:/Notes`), chạy `python ensure_graph3d.py`, app mở tại `http://127.0.0.1:8321`. Không pip, không npm, không build. Windows có thể double-click `Start-Graph3D.bat`.
+- **Chạy thử 60 giây (không cần vault):** clone repo → `python try_demo.py` → mở ngay demo vault 120 note (nguồn của mọi ảnh/GIF phía trên).
+- **Cài đặt vào vault của bạn:** chỉ cần Python 3.9+ — clone vào vault thành thư mục `.graph3d` (trong lệnh mẫu, thay `YourVault` bằng **đường dẫn thư mục vault của bạn** — thư mục chứa các note markdown, ví dụ `D:/Notes`), chạy `python ensure_graph3d.py`, app mở tại `http://127.0.0.1:8321`. Không pip, không npm, không build. Windows có thể double-click `Start-Graph3D.bat`.
+- **Chưa có vault? KHÔNG cần Obsidian trước.** Vault chỉ là một thư mục chứa file `.md` — soạn bằng Notepad cũng được. Copy thư mục [`starter-vault/`](starter-vault/) (9 note dạy note / wikilink / tag / hub ngay trong app, có bản tiếng Việt [[Bắt Đầu — Tiếng Việt]]) làm vault đầu tiên rồi cài app vào đó; Obsidian là editor tuỳ chọn về sau, dùng chung đúng thư mục này.
 - **Graph:** physics co giãn theo degree, 🧲 gom cụm theo nhóm màu, chống chồng node, lọc tag / đuôi file / nhóm màu (spotlight vs declutter), heatmap tần suất truy cập, độ chói neon chỉnh được, hỗ trợ tiếp cận (AA, bàn phím, reduced-motion).
 - **Agent:** hook `PostToolUse` của Claude Code (mẫu ở phần tiếng Anh) ghi mọi thao tác đọc/sửa → hiệu ứng sao chổi, cú nhảy siêu không gian giữa các note, chuỗi truy xuất replay được, thanh tua cả ngày + dashboard per-agent. Agent khác truyền `--agent "Tên"` là có màu riêng.
 - **Đọc & tìm:** click node đọc note ngay (wikilink, ảnh, backlink), cây thư mục kéo-giãn, `Ctrl+P` tìm tên / `#tag` / nội dung không dấu, tab + 2 pane + ghim + lịch sử đọc (persist).

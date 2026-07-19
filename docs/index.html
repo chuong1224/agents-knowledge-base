@@ -151,10 +151,16 @@
         <span class="dot" style="background:#febc2e"></span>
         <span class="dot" style="background:#28c840"></span>
         <span style="margin-left:6px">install — python 3.9+ is all you need</span>
-        <button class="copy" id="copyBtn" aria-label="Copy install commands">copy</button>
+        <button class="copy" id="copyDemo" aria-label="Copy demo commands">copy demo</button>
+        <button class="copy" id="copyInstall" aria-label="Copy install commands">copy install</button>
       </div>
-      <pre id="cli"><span class="cm"># ⚠ replace <span class="v">YourVault</span> below with the path to YOUR vault —</span>
-<span class="cm">#   the folder that holds your markdown notes, e.g. "D:/Notes" or ~/Documents/Vault</span>
+      <pre id="cli"><span class="cm"># just looking? run the built-in 120-note demo — no vault needed:</span>
+<span class="p">$</span> <span class="c">git clone https://github.com/chuong1224/agents-knowledge-base</span>
+<span class="p">$</span> <span class="c">cd agents-knowledge-base</span>
+<span class="p">$</span> <span class="c">python try_demo.py</span>
+
+<span class="cm"># install into YOUR vault — ⚠ replace <span class="v">YourVault</span> with the path to your folder</span>
+<span class="cm">#   of markdown notes (no vault yet? see "start from zero" below)</span>
 <span class="p">$</span> <span class="c">git clone https://github.com/chuong1224/agents-knowledge-base "<span class="v">YourVault</span>/.graph3d"</span>
 <span class="p">$</span> <span class="c">cd "<span class="v">YourVault</span>/.graph3d"</span>
 <span class="p">$</span> <span class="c">python ensure_graph3d.py</span></pre>
@@ -183,6 +189,17 @@
 
     <div class="statement reveal"><span class="tp">Your vault stays plain markdown.</span>
       <small>No database of truth, no lock-in. Obsidian and this cockpit read the same files, forever.</small></div>
+  </section>
+
+  <!-- START FROM ZERO -->
+  <section class="reveal" id="zero">
+    <h2 class="sec">No vault yet? <span class="tg">Start from zero</span></h2>
+    <p class="secsub">The secret: a vault is just a folder of markdown files. No Obsidian required, no account, nothing to import.</p>
+    <div class="grid">
+      <div class="card"><div class="ico">🎮</div><h3>1 · Feel it first</h3><p><code>python try_demo.py</code> opens the 120-note demo galaxy — the one in every shot on this page. Zero setup.</p></div>
+      <div class="card"><div class="ico">🌱</div><h3>2 · Grow your own</h3><p>Copy the repo's <a href="https://github.com/chuong1224/agents-knowledge-base/tree/main/starter-vault" style="color:var(--cyan)">starter-vault</a> — 9 guided notes that teach notes, [[wikilinks]], tags and hubs by being read inside the app. Vietnamese summary included.</p></div>
+      <div class="card"><div class="ico">🧭</div><h3>3 · Obsidian later, if ever</h3><p>Any text editor works — Notepad included, AI agents too. Obsidian is a great editor to adopt when you write daily; it opens the exact same folder.</p></div>
+    </div>
   </section>
 
   <!-- COCKPIT SHOT -->
@@ -232,15 +249,24 @@
 </footer>
 
 <script>
-  // copy CLI
-  const btn = document.getElementById('copyBtn');
-  btn.addEventListener('click', async () => {
-    const cmds = ['git clone https://github.com/chuong1224/agents-knowledge-base "YourVault/.graph3d"',
+  // copy CLI — 2 đường: demo và install
+  const CMDS = {
+    copyDemo: ['git clone https://github.com/chuong1224/agents-knowledge-base',
+               'cd agents-knowledge-base',
+               'python try_demo.py'],
+    copyInstall: ['git clone https://github.com/chuong1224/agents-knowledge-base "YourVault/.graph3d"',
                   'cd "YourVault/.graph3d"',
-                  'python ensure_graph3d.py'].join('\n');
-    try { await navigator.clipboard.writeText(cmds); } catch (e) {}
-    btn.textContent = 'copied ✓'; btn.classList.add('ok');
-    setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('ok'); }, 2200);
+                  'python ensure_graph3d.py'],
+  };
+  Object.entries(CMDS).forEach(([id, cmds]) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    const label = btn.textContent;
+    btn.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(cmds.join('\n')); } catch (e) {}
+      btn.textContent = 'copied ✓'; btn.classList.add('ok');
+      setTimeout(() => { btn.textContent = label; btn.classList.remove('ok'); }, 2200);
+    });
   });
   // slide-in on scroll
   const io = new IntersectionObserver((es) => es.forEach(e => {
