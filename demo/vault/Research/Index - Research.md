@@ -18,3 +18,4 @@ summary: "Navigation hub for Research."
 - [[Fine-Tuning vs RAG]] — Decision notes: when to tune weights vs retrieve context.
 - [[Long-Context Techniques]] — Getting past the O(n²) attention wall.
 - [[Evaluation Harnesses]] — Golden sets, LLM-as-judge, and regression gates for AI features.
+- [[Paper Shelf]] — quick-capture shelf (30 notes)

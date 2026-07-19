@@ -14,3 +14,4 @@ summary: "Navigation hub for Projects."
 - [[Competitor Scan]] — Landscape notes for knowledge tools and agent platforms.
 - [[Launch Checklist]] — Repeatable checklist for shipping a feature.
 - [[Meeting Notes - Roadmap Sync]] — Decisions from the quarterly roadmap sync.
+- [[Sprint Log]] — quick-capture shelf (12 notes)

@@ -13,3 +13,4 @@ summary: "Navigation hub for Personal."
 - [[Travel - Kyoto Plan]] — Five days, autumn leaves, too many temples.
 - [[Recipes - Weeknight Pasta]] — Twenty-minute tomato pasta that always works.
 - [[Running Log]] — Base building toward a autumn half.
+- [[Life Admin]] — quick-capture shelf (12 notes)

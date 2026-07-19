@@ -10,11 +10,15 @@ Point it at a folder of markdown notes (an Obsidian-style vault) and it serves a
 
 ![The vault as a synthwave galaxy — tag groups form colored continents](docs/hero.png)
 
+<p align="center"><em>Two agents tearing through 120 notes at full speed — comet trails, hyperspace hops, impact ripples, live</em></p>
+
+![Two agents jumping across the vault continuously — live capture](docs/agent-storm.gif)
+
 <p align="center"><em>The full cockpit: reader, finder tree, live agent feed and retrieval chains around the graph</em></p>
 
 ![Full cockpit UI with reader, agent feed and retrieval chains](docs/cockpit-ui.png)
 
-<p align="center"><em>Two agents at work — Claude sweeps the Research cluster (green trail), Nova runs ops (yellow)</em></p>
+<p align="center"><em>The aftermath — Claude's blue and Nova's yellow trails woven across every continent</em></p>
 
 ![Agent activity lighting up the graph](docs/agent-activity.png)
 
@@ -124,7 +128,6 @@ The suite is designed to run with the app installed inside a real vault.
 - Standalone mode (`--vault path`) without installing into the vault
 - English UI / i18n
 - Cross-platform process management (mac/linux)
-- Animated GIF / video walkthrough
 - Semantic search for vaults that outgrow full-text
 
 ## Origin

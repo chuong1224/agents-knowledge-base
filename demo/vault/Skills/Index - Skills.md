@@ -14,3 +14,4 @@ summary: "Navigation hub for Skills."
 - [[Regex Cookbook]] — Patterns I keep re-deriving, written down once.
 - [[Docker Basics]] — Images, layers, volumes — enough to be dangerous.
 - [[Keyboard-Driven Workflows]] — Living in the quick switcher.
+- [[Snippet Shelf]] — quick-capture shelf (15 notes)
