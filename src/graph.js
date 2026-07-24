@@ -111,6 +111,7 @@ export function visibleData() {
 export function applyFilters() {
   S.data = visibleData();
   indexData();
+  if (S.mode === 'uni') uniRefresh(); // U2: cây/target theo data mới + node mới sinh tại target
   softDecay();                        // V4a: reheat do lọc phải ÊM — node cũ đứng yên
   S.Graph.graphData(S.data);
   updateStats();
@@ -155,10 +156,13 @@ const nodeKind = x => (x && x.kind) || (byId.get(x) || {}).kind || 'note';
 const nodeDeg = x => ((x && typeof x === 'object') ? x : (byId.get(x) || {})).degree || 0;
 export function physics(mode, first) {
   const bung = mode === 'bung';
+  const uni = mode === 'uni';
+  S.mode = mode;
   _bung = bung;
   // File node gần như không đẩy — kẻo 100+ ảnh nổ tung layout và văng ra xa
   // Note co giãn theo degree (V2): hệ số TÁI ĐỊNH TÂM quanh 1 (lá ~0.5, hub trần ×3) —
   // nếu mọi note cùng ≥1 (bản nháp 1+0.35√deg) là bơm phồng toàn cục, graph nổ ×2.4
+  // U2: 🪐 dùng bộ lực nhẹ của Calm (charge −45 / base 42) — orbitPull mới là chủ lực
   S.Graph.d3Force('charge').strength(n =>
     n.kind === 'file' ? -10
       : n.kind === 'tag' ? (bung ? -150 : -45)
@@ -172,10 +176,44 @@ export function physics(mode, first) {
     const k = 0.45 + 0.28 * Math.sqrt(Math.min(nodeDeg(l.source), nodeDeg(l.target)));
     return base * Math.min(Math.max(k, 0.7), 2.4);
   });
-  restoreDecay();                     // V4b: Calm đặc (velocityDecay 0.55) / Bung 0.4; huỷ soft window nếu đang treo
+  // U2: 🪐 phải ÁP ĐẢO link force — link và orbitPull cùng nhân alpha nên tỷ lệ lực
+  // không teo theo thời gian, để nguyên strength là node treo giữa đường (đo: sau 500
+  // tick còn cách target TB 595, tag bị note của nó ghì lại cách 1600). Khi 🪐: link
+  // note-note/tag chỉ còn trang trí — SCALE default ×0.05 chứ KHÔNG đặt phẳng 0.05
+  // (default d3 = 1/min(degree) tự chia đầu nhiều link; đặt phẳng thì node 36 link chịu
+  // lực CỘNG DỒN 1.8 — đo: tag #vault-operation bị ghì thành cân bằng bền cách target
+  // 1252, reheat bao nhiêu lần cũng về đúng chỗ đó). Link FILE giữ nguyên default
+  // (mây file phải bám note — chuẩn #11); rời 🪐 trả lại default đã lưu.
+  const linkF = S.Graph.d3Force('link');
+  if (_linkStrength0 === null) _linkStrength0 = linkF.strength();
+  if (_centerF0 === undefined) _centerF0 = S.Graph.d3Force('center');
+  if (uni) {                          // U2: 🪐 — orbitPull thế chỗ groupPull (tranh tâm)
+    uniRefresh();
+    linkF.strength(l => {
+      const sk = nodeKind(l.source), tk = nodeKind(l.target);
+      if (sk === 'file' || tk === 'file') return _linkStrength0(l);  // mây file bám note — chuẩn #11
+      // U3 (chốt 19/07): tag TỰ DO tuyệt đối khi 🪐 — 0.05·default vẫn đủ
+      // ghì tag 36 link lơ lửng cách vành 236; cắt hẳn → tag nằm đúng vành (lệch 3.9)
+      // và note cũng bám target tốt hơn (59.7 → 34) vì hết bị tag kéo ngược
+      if (sk === 'tag' || tk === 'tag') return 0;
+      return 0.05 * _linkStrength0(l);
+    });
+    S.Graph.d3Force('groupPull', null);
+    S.Graph.d3Force('center', null);  // xem chú thích _centerF0 — center kéo cả hệ lệch target
+    S.Graph.d3Force('orbitPull', orbitPull);
+  } else {
+    uniTargets = null; S.universe = null;
+    linkF.strength(_linkStrength0);
+    S.Graph.d3Force('orbitPull', null);
+    if (_centerF0) S.Graph.d3Force('center', _centerF0);
+    S.Graph.d3Force('groupPull', S.clusterOn ? groupPull : null);   // trả 🧲 đúng trạng thái user
+  }
+  restoreDecay();                     // V4b: Calm/🪐 đặc (velocityDecay 0.55) / Bung 0.4; huỷ soft window nếu đang treo
   if (!first) S.Graph.d3ReheatSimulation();
+  if (uni && !first) uniTransition(); // U2: cú bay vào vũ trụ cần cửa sổ alpha DÀI hơn reheat thường
   $('ph-bung').classList.toggle('on', bung);
-  $('ph-calm').classList.toggle('on', !bung);
+  $('ph-calm').classList.toggle('on', mode === 'calm');
+  $('ph-uni').classList.toggle('on', uni);
 }
 
 /* ---------- V4a: reheat-êm khi LỌC ----------
@@ -312,6 +350,7 @@ const groupPull = (() => {
 export function setCluster(on) {
   S.clusterOn = on;
   if (!S.Graph) return;
+  if (S.mode === 'uni') return;       // U2: 🪐 đang quy định tâm — chỉ ghi cờ, lực gắn lại khi rời 🪐
   S.Graph.d3Force('groupPull', on ? groupPull : null);   // null = gỡ force khỏi simulation
   restoreDecay();                     // V4: toggle 🧲 đổi cả bố cục = reheat ĐẦY có chủ đích
   S.Graph.d3ReheatSimulation();
@@ -366,6 +405,195 @@ export const collide = (() => {
   f.initialize = arr => ns = arr;
   return f;
 })();
+
+/* ---------- U1: Bố Cục Vũ Trụ — cây index → toạ độ mục tiêu ----------
+   (đợt Bố Cục Vũ Trụ, thuần tính toán — U2 mới nối lực/preset/UI.)
+   Xếp note theo CÂY INDEX: root index = tâm vũ trụ (0,0,0), mỗi index là tâm cụm
+   của các note nó quản, lá chia gần-đều quanh index bằng Fibonacci sphere.
+   Quyết định đã chốt (hồ sơ "Bố Cục Vũ Trụ — KB Graph 3D") + hiện thực theo data thật:
+   - Cây index thật là DAG 2 CHIỀU (index con backlink "←" lên cha → MỌI index đều bị
+     trỏ, tiêu chí root "không bị trỏ" phá sản khi probe) → root = index có folder
+     NÔNG nhất ('/'); tie: degree lớn hơn, rồi id.
+   - FOLDER làm trọng tài cha chính: index nằm TRONG folder nó quản, note folder-per-note
+     nằm dưới đó → cha của note = index có link tới nó + folder prefix DÀI nhất của
+     folder note; không index nào link → index folder-prefix dài nhất (mồ côi dạt về
+     nhà theo folder, "vành đai root" degenerate thành lá của root). Cha của INDEX
+     bắt buộc folder NGẮN HƠN HẲN → chuỗi cha folder giảm dần = CẤU TRÚC TỰ DIỆT CYCLE.
+   - Mass đệ quy (lá=1), bán kính vỏ ∝ √n; index có cả lá lẫn index con → 2 vỏ:
+     lá vỏ trong, cụm con vỏ ngoài — bán kính vỏ con PAIRWISE-EXACT theo chord thật
+     giữa các điểm Fibonacci (R nhỏ nhất để MỌI cặp cụm anh em không chạm).
+   - DETERMINISTIC là mục tiêu số 1: con sort theo id trước khi gán, không Math.random.
+   - Trục cụm con kế thừa hướng cha→con (quaternion y→u) — pattern xoay khác nhau
+     giữa anh em, deterministic. Tag: vành ngoài cùng quanh root. File: KHÔNG target
+     (bám note qua link ×0.28, chuẩn #11). Hệ số UNI_* là điểm xuất phát — tune ở U3. */
+const UNI_R0 = 16;                     // thang bán kính vỏ lá theo √(số lá)
+const UNI_RL_MIN = 30;                 // vỏ lá tối thiểu — 1-2 lá vẫn đứng thoáng
+const UNI_PAD = 24;                    // đệm giữa vỏ lá và cụm con / giữa các tầng
+const UNI_SPACE = 1.15;                // hệ số giãn vỏ cụm con chống chạm anh em
+const UNI_NODE_R = 4;                  // bán kính chiếm chỗ của một node trơ
+const UNI_TAG_PAD = 60;                // vành tag cách mép vũ trụ
+export function buildUniverse(data) {
+  data = data || S.data;
+  const id2n = new Map(data.nodes.map(n => [n.id, n]));
+  const res = x => (typeof x === 'object' && x !== null) ? x : id2n.get(x);
+  const notes = data.nodes.filter(n => n.kind === 'note');
+  const isIdx = n => n.group === 'Index / MOC';
+  const idxs = notes.filter(isIdx);
+  if (!idxs.length) return null;
+  const segs = f => (!f || f === '/') ? [] : String(f).split('/');
+  const byIdStr = (a, b) => String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0;
+
+  const linkedIdx = new Map();         // note → Set(index có link trực tiếp tới nó)
+  for (const l of data.links) {
+    const s = res(l.source), t = res(l.target);
+    if (!s || !t || s === t || s.kind !== 'note' || t.kind !== 'note') continue;
+    if (isIdx(s)) { let a = linkedIdx.get(t); if (!a) linkedIdx.set(t, a = new Set()); a.add(s); }
+    if (isIdx(t)) { let a = linkedIdx.get(s); if (!a) linkedIdx.set(s, a = new Set()); a.add(t); }
+  }
+  const root = [...idxs].sort((a, b) =>
+    segs(a.folder).length - segs(b.folder).length ||
+    (b.degree || 0) - (a.degree || 0) || byIdStr(a, b))[0];
+
+  const isPrefix = (p, f) => p.length <= f.length && p.every((x, i) => x === f[i]);
+  const pickParent = n => {            // cha chính của n (note hoặc index ≠ root)
+    const f = segs(n.folder);
+    const need = isIdx(n) ? p => p.length < f.length : p => p.length <= f.length;
+    const best = pool => {
+      let out = null, bl = -1;
+      for (const c of pool) {
+        if (c === n || !isIdx(c)) continue;
+        const p = segs(c.folder);
+        if (!need(p) || !isPrefix(p, f)) continue;
+        if (p.length > bl || (p.length === bl && out &&
+            ((c.degree || 0) > (out.degree || 0) || ((c.degree || 0) === (out.degree || 0) && byIdStr(c, out) < 0))))
+          { out = c; bl = p.length; }
+      }
+      return out;
+    };
+    return best(linkedIdx.get(n) || []) || best(idxs) || root;
+  };
+  const parentOf = new Map();          // node → index cha
+  const kids = new Map();              // index → { leaves: [], subs: [] }
+  idxs.forEach(i => kids.set(i, { leaves: [], subs: [] }));
+  for (const n of notes) {
+    if (n === root) continue;
+    const p = pickParent(n);
+    parentOf.set(n, p);
+    kids.get(p)[isIdx(n) ? 'subs' : 'leaves'].push(n);
+  }
+  // sort MỘT lần — calc (chord theo thứ tự) và place phải nhìn cùng một thứ tự
+  for (const k of kids.values()) { k.leaves.sort(byIdStr); k.subs.sort(byIdStr); }
+
+  const GA = Math.PI * (3 - Math.sqrt(5));      // góc vàng
+  const fibUnit = n => {               // n điểm Fibonacci trên mặt cầu ĐƠN VỊ (chưa xoay)
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const y = 1 - 2 * (i + 0.5) / n;
+      const r = Math.sqrt(Math.max(0, 1 - y * y)), a = GA * i;
+      out.push(new THREE.Vector3(r * Math.cos(a), y, r * Math.sin(a)));
+    }
+    return out;
+  };
+
+  const outerR = new Map(), rLeaf = new Map(), rSub = new Map();
+  const calc = i => {                  // postorder — bán kính vỏ đệ quy bottom-up
+    const k = kids.get(i);
+    k.subs.forEach(calc);
+    const nL = k.leaves.length, nS = k.subs.length;
+    const rl = nL ? Math.max(UNI_RL_MIN, UNI_R0 * Math.sqrt(nL)) : 0;
+    const mx = nS ? Math.max(...k.subs.map(s => outerR.get(s))) : 0;
+    let rs = 0;
+    if (nS) {
+      // PAIRWISE-EXACT: chord trên mặt cầu đơn vị bất biến qua xoay → R tối thiểu để
+      // MỌI cặp cụm anh em không chạm = max (outer_i+outer_j+PAD)/chord_ij. Bản ước
+      // lượng "2 cụm to nhất kề nhau" (2·mx·√n/3.54) phình luỹ tiến theo tầng —
+      // probe data thật cho vũ trụ 6325 đơn vị, gap anh em thừa tới +115.
+      const u = fibUnit(nS);
+      let need = 0;
+      for (let a = 0; a < nS; a++) for (let b = a + 1; b < nS; b++) {
+        const chord = u[a].distanceTo(u[b]);
+        if (chord > 1e-9)
+          need = Math.max(need, (outerR.get(k.subs[a]) + outerR.get(k.subs[b]) + UNI_PAD) / chord);
+      }
+      rs = Math.max(UNI_SPACE * need, rl + UNI_NODE_R + mx + UNI_PAD, UNI_RL_MIN);
+    }
+    rLeaf.set(i, rl); rSub.set(i, rs);
+    outerR.set(i, Math.max(nL ? rl + UNI_NODE_R : 0, nS ? rs + mx : 0, UNI_NODE_R));
+  };
+  calc(root);
+
+  const _Y = new THREE.Vector3(0, 1, 0);
+  const fib = (arr, R, center, axis, out) => {  // Fibonacci sphere quanh center, trục y→axis
+    const q = new THREE.Quaternion().setFromUnitVectors(_Y, axis);
+    fibUnit(arr.length).forEach((v0, i) => {
+      const v = v0.clone().applyQuaternion(q);
+      out.set(arr[i], { x: center.x + v.x * R, y: center.y + v.y * R, z: center.z + v.z * R });
+    });
+  };
+  const targets = new Map();
+  targets.set(root, { x: 0, y: 0, z: 0 });
+  const place = (i, axis) => {
+    const k = kids.get(i), P = targets.get(i);
+    fib(k.leaves, rLeaf.get(i), P, axis, targets);
+    fib(k.subs, rSub.get(i), P, axis, targets);
+    for (const s of k.subs) {
+      const sp = targets.get(s);
+      const u = new THREE.Vector3(sp.x - P.x, sp.y - P.y, sp.z - P.z);
+      place(s, u.lengthSq() ? u.normalize() : _Y.clone());   // trục kế thừa hướng cha→con
+    }
+  };
+  place(root, _Y.clone());
+  const tags = data.nodes.filter(n => n.kind === 'tag').sort(byIdStr);
+  fib(tags, outerR.get(root) + UNI_TAG_PAD, { x: 0, y: 0, z: 0 }, _Y.clone(), targets);
+
+  return { targets, root, parentOf, kids, outerR, rLeaf, rSub };
+}
+
+/* ---------- U2: preset 🪐 Vũ Trụ — lực orbitPull kéo node về toạ độ mục tiêu ----------
+   LAI chứ không layout chết: không gán fx/fy/fz — orbitPull kéo về target trong khi
+   charge/link/collide vẫn chạy → node "thở" quanh quỹ đạo, kéo-ghim vẫn tương tác.
+   🧲 groupPull tranh tâm với orbitPull nên tạm gỡ khi 🪐 bật — S.clusterOn GIỮ nguyên,
+   rời 🪐 là gắn lại đúng trạng thái user (switch bị khoá ở ui.js trong lúc đó). */
+const K_ORBIT = 0.25;                  // mạnh hơn CLUSTER_K 0.14 — vị trí quy định, không phải gợi ý
+const UNI_TRANS_DECAY = 0.006;         // alphaDecay lúc CHUYỂN CẢNH vào 🪐 — hành trình 800–1200 đơn vị
+const UNI_TRANS_TICKS = 600;           // cần Σalpha ≈ 167 (mặc định 0.0228 chỉ cấp ≈ 44, node kẹt giữa đường)
+let uniTargets = null;                 // Map node → {x,y,z}; null = preset khác đang chạy
+let _linkStrength0 = null;             // strength default của d3 link force — lưu 1 lần để trả lại khi rời 🪐
+let _centerF0;                         // force 'center' mặc định của lib (undefined = chưa lưu) — 🪐 phải TẮT:
+                                       // forceCenter dịch CẢ HỆ về trọng tâm mỗi tick (không nhân alpha) mà
+                                       // trọng tâm targets vũ trụ lệch gốc (cụm không đối xứng khối lượng) →
+                                       // đo: MỌI node lệch target đúng một vector chung 312 = −centroid targets
+function uniTransition() {
+  // Nới cửa sổ nóng cho cú bay vào vũ trụ — dùng CHUNG máy đếm softTick của V4:
+  // hết UNI_TRANS_TICKS tick engine thì restoreDecay() tự trả 0.0228/0.55 (alpha lúc đó
+  // ≈ 0.994^600 ≈ 0.03 — tự tắt êm). Đo trước khi thêm: 1 lần reheat mặc định node còn
+  // cách target TB 322 vì alpha chết giữa đường, reheat thêm cũng chỉ nhích từng khúc.
+  S.Graph.d3AlphaDecay(UNI_TRANS_DECAY);
+  _softLeft = UNI_TRANS_TICKS;
+}
+const orbitPull = (() => {
+  const f = alpha => {
+    if (!uniTargets) return;
+    const K = K_ORBIT * alpha;
+    for (const [n, t] of uniTargets) {
+      if (n.x === undefined) continue;
+      n.vx -= (n.x - t.x) * K; n.vy -= (n.y - t.y) * K; n.vz -= (n.z - t.z) * K;
+    }
+  };
+  f.initialize = () => {};             // target tự quản theo node object — không cần danh sách ns
+  return f;
+})();
+export function uniRefresh() {
+  // Gọi khi 🪐 bật và mỗi lần data đổi (applyFilters là choke point — phủ luôn refreshData):
+  // dựng lại cây + target; node MỚI chưa có vị trí sinh NGAY TẠI target — thay hẳn
+  // heuristic V5 trọng-tâm-hàng-xóm (refreshData bỏ qua V5 khi 🪐 bật).
+  const u = buildUniverse(S.data);
+  S.universe = u;
+  uniTargets = u && u.targets;
+  if (!u) return;
+  for (const [n, t] of u.targets)
+    if (n.x === undefined) { n.x = t.x; n.y = t.y; n.z = t.z; }
+}
 
 /* ---------- camera ---------- */
 export function flyTo(node, ms) {

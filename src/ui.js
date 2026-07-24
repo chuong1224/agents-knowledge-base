@@ -1,6 +1,6 @@
 /* ui.js — panel điều khiển: chip/lọc, section gập/mở + persist, demo hiệu ứng,
    refreshData khi vault đổi. (Card thông tin cũ đã thay bằng reader.js — giai đoạn 1.) */
-import { S, byId, adjacency, tagOn, extOn, $, esc, deAccent, GROUP_ORDER } from './state.js';
+import { S, byId, adjacency, tagOn, tagOff, extOn, $, esc, deAccent, GROUP_ORDER } from './state.js';
 import { applyFilters, refreshAllNodes, updateStats, applyNodeState, physics, pauseRotate, setNeon, linkAux, setCluster } from './graph.js';
 import { pulses, agentFlow, endAgentFlow } from './effects.js';
 import { pollChains, addFeedEvent } from './activity.js';
@@ -9,6 +9,8 @@ import { openReader } from './reader.js';
 import { buildTree } from './finder.js';
 
 const EXT_ON_STORAGE_KEY = 'kbgraph3d.extOn.v1';
+const TAG_OFF_STORAGE_KEY = 'kbgraph3d.tagOff.v1';      // 🏷 tag ĐÃ TẮT (lưu phía tắt — xem ghi chú dưới)
+const GROUP_STORAGE_KEY = 'kbgraph3d.group.v1';         // nhóm màu đang spotlight (legend)
 const CLUSTER_STORAGE_KEY = 'kbgraph3d.clusterOn.v1';   // V1: 🧲 gom cụm nhóm màu
 
 export function restoreClusterFromStorage() {
@@ -32,6 +34,43 @@ export function restoreExtOnFromStorage() {
     const known = new Set(S.all.nodes.filter(n => n.kind === 'file').map(n => n.ext));
     extOn.clear();
     arr.forEach(ext => { if (typeof ext === 'string' && known.has(ext)) extOn.add(ext); });
+  } catch (e) {}
+}
+
+/* ---------- 🏷 tag hiển thị: nhớ lựa chọn qua phiên ----------
+   Mặc định tag là HIỆN HẾT (ngược với đuôi file), nên KHÔNG lưu tagOn mà lưu phía
+   TẮT (`tagOff`): tag mới sinh trong vault vẫn hiện như cũ, tag user đã tắt thì ở yên
+   trạng thái tắt. Không prune theo node hiện có — tag biến mất tạm (đang sửa note)
+   quay lại vẫn giữ đúng trạng thái. Reset tay: localStorage.removeItem('kbgraph3d.tagOff.v1'). */
+export function saveTagOffToStorage() {
+  try { localStorage.setItem(TAG_OFF_STORAGE_KEY, JSON.stringify([...tagOff])); } catch (e) {}
+}
+export function restoreTagOffFromStorage() {
+  try {
+    const raw = localStorage.getItem(TAG_OFF_STORAGE_KEY);
+    if (!raw) return;
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return;
+    tagOff.clear();
+    arr.forEach(id => { if (typeof id === 'string') { tagOff.add(id); tagOn.delete(id); } });
+  } catch (e) {}
+}
+function setTagOn(id, on) {
+  if (on) { tagOn.add(id); tagOff.delete(id); } else { tagOn.delete(id); tagOff.add(id); }
+}
+
+/* Lọc nhóm màu (legend) cũng nhớ — validate ngay lúc restore để không dim cả graph
+   vì một nhóm đã biến mất khỏi vault (buildUI chỉ dọn cờ, không vẽ lại node). */
+function saveGroupToStorage() {
+  try {
+    if (S.selectedGroup) localStorage.setItem(GROUP_STORAGE_KEY, S.selectedGroup);
+    else localStorage.removeItem(GROUP_STORAGE_KEY);
+  } catch (e) {}
+}
+export function restoreGroupFromStorage() {
+  try {
+    const g = localStorage.getItem(GROUP_STORAGE_KEY);
+    if (g && S.all.nodes.some(n => n.kind === 'note' && n.group === g)) S.selectedGroup = g;
   } catch (e) {}
 }
 
@@ -126,8 +165,9 @@ function buildTagChips() {
     .sort((a, b) => b.degree - a.degree)
     .forEach(t => {
       const el = chip(`${t.name} · ${t.degree}`, t.color, tagOn.has(t.id), () => {
-        tagOn.has(t.id) ? tagOn.delete(t.id) : tagOn.add(t.id);
+        setTagOn(t.id, !tagOn.has(t.id));
         el.classList.toggle('on'); el.classList.toggle('off');
+        saveTagOffToStorage();
         applyFilters();
       });
       wrap.appendChild(el);
@@ -152,7 +192,7 @@ export function buildUI() {
   const groups = new Map();
   S.all.nodes.filter(n => n.kind === 'note').forEach(n => groups.set(n.group, (groups.get(n.group) || 0) + 1));
   const legend = $('legend'); legend.innerHTML = '';
-  if (S.selectedGroup && !groups.has(S.selectedGroup)) S.selectedGroup = null;   // nhóm đang lọc biến mất khỏi vault → bỏ lọc
+  if (S.selectedGroup && !groups.has(S.selectedGroup)) { S.selectedGroup = null; saveGroupToStorage(); }   // nhóm đang lọc biến mất khỏi vault → bỏ lọc
   // Ư4.2 + Ư4.3: MỘT nguồn sự thật cho trạng thái chip — on/off theo selectedGroup,
   // chạy cả lúc BUILD (refreshData 45s hết desync "UI nói một đằng graph làm một nẻo")
   // lẫn lúc click; chip bị loại mang cặp on/off mờ 45% y hệt chip tag/đuôi.
@@ -165,6 +205,7 @@ export function buildUI() {
     const color = S.all.nodes.find(n => n.group === g).color;
     const el = chip(`${g} · ${groups.get(g)}`, color, true, () => {
       S.selectedGroup = S.selectedGroup === g ? null : g;
+      saveGroupToStorage();
       syncLegend();
       refreshAllNodes();
       updateStats();       // lọc nhóm màu cũng phải nhảy số "hiện/tổng" như lọc tag/đuôi
@@ -177,8 +218,15 @@ export function buildUI() {
   buildTagChips();
   buildExtChips();
   buildTree();     // cây vault (Finder) — rebuild cùng nhịp refreshData khi vault đổi
-  $('tag-all').onclick = () => { S.all.nodes.filter(n => n.kind === 'tag').forEach(n => tagOn.add(n.id)); buildTagChips(); applyFilters(); };
-  $('tag-none').onclick = () => { tagOn.clear(); buildTagChips(); applyFilters(); };
+  $('tag-all').onclick = () => {
+    S.all.nodes.filter(n => n.kind === 'tag').forEach(n => setTagOn(n.id, true));
+    tagOff.clear();                    // "Tất cả" = xoá sạch ký ức tắt, kể cả tag không còn trong vault
+    saveTagOffToStorage(); buildTagChips(); applyFilters();
+  };
+  $('tag-none').onclick = () => {
+    S.all.nodes.filter(n => n.kind === 'tag').forEach(n => setTagOn(n.id, false));
+    saveTagOffToStorage(); buildTagChips(); applyFilters();
+  };
   $('ext-all').onclick = () => { S.all.nodes.filter(n => n.kind === 'file').forEach(n => extOn.add(n.ext)); saveExtOnToStorage(); buildExtChips(); applyFilters(); };
   $('ext-none').onclick = () => { extOn.clear(); saveExtOnToStorage(); buildExtChips(); applyFilters(); };
 
@@ -217,20 +265,28 @@ export function buildUI() {
     setCluster(on);
     try { localStorage.setItem(CLUSTER_STORAGE_KEY, on ? 'on' : 'off'); } catch (e) {}
   });
+  // U2: 🪐 khoá 🧲 — chặn cả chuột lẫn Enter/Space (keydown gọi el.click() nên
+  // pointer-events:none trong CSS không đủ); bọc NGOÀI handler sw() để chặn TRƯỚC toggle class
+  const swClusterRaw = $('sw-cluster').onclick;
+  $('sw-cluster').onclick = () => { if (S.mode !== 'uni') swClusterRaw(); };
   sw('sw-ambient', on => { S.ambientOn = on; });
   sw('sw-heat', on => { S.heatMode = on; if (on) pollHeat(); refreshAllNodes(); });
   $('heat-window').onclick = () => setHeatScope('window');
   $('heat-all').onclick = () => setHeatScope('all');
   $('sl-neon').oninput = e => setNeon(e.target.value / 100);
 
-  $('ph-bung').onclick = () => {
-    physics('bung');
-    $('ph-bung').classList.add('on'); $('ph-calm').classList.remove('on');
+  // U2: physics() tự toggle class .on cho CẢ 3 nút (một nguồn sự thật); 🪐 khoá switch 🧲
+  // trong lúc bật (orbitPull với groupPull tranh tâm cụm) — cờ clusterOn user giữ nguyên
+  const syncClusterLock = () => {
+    const el = $('sw-cluster'), lock = S.mode === 'uni';
+    el.classList.toggle('disabled', lock);
+    el.setAttribute('aria-disabled', lock);
+    el.title = lock ? '🪐 đang quy định tâm cụm — 🧲 mở lại khi rời Vũ Trụ' : '';
   };
-  $('ph-calm').onclick = () => {
-    physics('calm');
-    $('ph-calm').classList.add('on'); $('ph-bung').classList.remove('on');
-  };
+  const preset = mode => { physics(mode); syncClusterLock(); };
+  $('ph-bung').onclick = () => preset('bung');
+  $('ph-calm').onclick = () => preset('calm');
+  $('ph-uni').onclick = () => preset('uni');
   $('ph-fit').onclick = () => {
     S.Graph.zoomToFit(1000, 70); pauseRotate();
   };
@@ -257,35 +313,43 @@ export async function refreshData() {
       return;
     }
     const pos = new Map(S.all.nodes.map(n => [n.id, n]));
+    // Tag MỚI mặc định hiện — TRỪ khi user đã tắt riêng nó trước đây (tagOff) hoặc đang
+    // "Ẩn hết" (không tag nào bật): bung tag mới lúc đó là phá đúng lựa chọn vừa lưu.
+    const hideNewTag = tagOn.size === 0 && tagOff.size > 0;
     fresh.nodes.forEach(n => {
       const old = pos.get(n.id);
       if (old) Object.assign(n, { x: old.x, y: old.y, z: old.z, vx: old.vx, vy: old.vy, vz: old.vz, fx: old.fx, fy: old.fy, fz: old.fz });
-      if (n.kind === 'tag' && !pos.has(n.id)) tagOn.add(n.id); // tag mới: mặc định hiện
+      if (n.kind === 'tag' && !pos.has(n.id)) setTagOn(n.id, !(hideNewTag || tagOff.has(n.id)));
     });
+    saveTagOffToStorage();
     // V5: node MỚI (chưa có trong S.all cũ) không có x/y/z → thư viện khởi tạo gần gốc
     // toạ độ rồi bay xuyên không gian tìm chỗ (giật mắt khi agent đang tạo nhiều note).
     // Có ≥1 hàng xóm CŨ đã có vị trí → sinh ngay tại trọng tâm hàng xóm + jitter ±8
     // (phá đối xứng kẻo nhiều node mới chồng đúng một điểm); link ở đây là id chuỗi thô
     // từ server (chưa qua graphData nên chưa thành object). Không hàng xóm cũ → để
     // thư viện tự lo như trước. Đường êm V4a tự áp vì applyFilters() bên dưới.
-    const fid = new Map(fresh.nodes.map(n => [n.id, n]));
-    const spawn = new Map();               // node mới → tổng toạ độ hàng xóm cũ có vị trí
-    const acc = (novo, o) => {
-      if (o.x === undefined) return;       // hàng xóm cũ nhưng chưa từng hiện (file đang ẩn)
-      let c = spawn.get(novo);
-      if (!c) spawn.set(novo, c = { x: 0, y: 0, z: 0, k: 0 });
-      c.x += o.x; c.y += o.y; c.z += o.z; c.k++;
-    };
-    for (const l of fresh.links) {
-      const s = fid.get(l.source), t = fid.get(l.target);
-      if (!s || !t) continue;
-      if (!pos.has(s.id) && pos.has(t.id)) acc(s, t);
-      if (!pos.has(t.id) && pos.has(s.id)) acc(t, s);
-    }
-    for (const [n, c] of spawn) {
-      n.x = c.x / c.k + (Math.random() * 16 - 8);
-      n.y = c.y / c.k + (Math.random() * 16 - 8);
-      n.z = c.z / c.k + (Math.random() * 16 - 8);
+    // U2: 🪐 bật thì BỎ QUA heuristic này — uniRefresh trong applyFilters gán node mới
+    // sinh NGAY TẠI toạ độ mục tiêu tính từ cây (mạnh hơn: phủ cả node không hàng xóm).
+    if (S.mode !== 'uni') {
+      const fid = new Map(fresh.nodes.map(n => [n.id, n]));
+      const spawn = new Map();             // node mới → tổng toạ độ hàng xóm cũ có vị trí
+      const acc = (novo, o) => {
+        if (o.x === undefined) return;     // hàng xóm cũ nhưng chưa từng hiện (file đang ẩn)
+        let c = spawn.get(novo);
+        if (!c) spawn.set(novo, c = { x: 0, y: 0, z: 0, k: 0 });
+        c.x += o.x; c.y += o.y; c.z += o.z; c.k++;
+      };
+      for (const l of fresh.links) {
+        const s = fid.get(l.source), t = fid.get(l.target);
+        if (!s || !t) continue;
+        if (!pos.has(s.id) && pos.has(t.id)) acc(s, t);
+        if (!pos.has(t.id) && pos.has(s.id)) acc(t, s);
+      }
+      for (const [n, c] of spawn) {
+        n.x = c.x / c.k + (Math.random() * 16 - 8);
+        n.y = c.y / c.k + (Math.random() * 16 - 8);
+        n.z = c.z / c.k + (Math.random() * 16 - 8);
+      }
     }
     S.all = fresh;
     buildUI();

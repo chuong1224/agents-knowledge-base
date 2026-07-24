@@ -22,10 +22,13 @@ export const S = {
   ambientOn: true,             // Ư6.2: sao băng nền khi nhàn rỗi
   heatMode: false,             // heatmap tần suất đang bật
   clusterOn: false,            // V1: 🧲 gom cụm theo nhóm màu (lực groupPull, mặc định TẮT)
+  mode: 'bung',                // preset bố cục đang chạy: 'bung' | 'calm' | 'uni' (U2 — 🪐 Vũ Trụ)
+  universe: null,              // kết quả buildUniverse khi 🪐 bật (targets/cây/bán kính — probe U3 dùng)
 };
 
 export const byId = new Map(), adjacency = new Map();
 export const tagOn = new Set();          // tag đang hiển thị (mặc định: tất cả)
+export const tagOff = new Set();         // tag người dùng đã TẮT — persist (mặc định tag MỚI vẫn hiện)
 export const extOn = new Set();          // đuôi file đang hiển thị (mặc định: ẨN hết, như graph 2D)
 
 export const $ = id => document.getElementById(id);

@@ -103,6 +103,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   border-radius: 50%; background: var(--faint); transition: all .18s; }
 .sw.on { background: rgba(4,217,255,.18); border-color: var(--cyan); }
 .sw.on::after { left: 18px; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+/* U2: switch bị khoá tạm (🧲 trong lúc 🪐 bật) — mờ như chip off, handler chặn cả phím */
+.sw.disabled { opacity: .35; pointer-events: none; cursor: default; }
 /* Ư5.2: mọi control tự chế (switch/chip/header gập) phải thấy được focus khi Tab tới */
 .sw:focus-visible, .chip:focus-visible, .sect > h2:focus-visible {
   outline: 1px solid var(--cyan); outline-offset: 2px; }

@@ -7,7 +7,8 @@ import { fxLoop, scheduleAmbient, agentTrails, agentFlow, replayFlow,
          updateTrails, updateWarps, spawnWarp, warps } from './effects.js';
 import { pollActivity, pollChains } from './activity.js';
 import { pollHeat } from './heat.js';
-import { buildUI, initSections, initDemo, restoreExtOnFromStorage, restoreClusterFromStorage, sectOpen, refreshData } from './ui.js';
+import { buildUI, initSections, initDemo, restoreExtOnFromStorage, restoreTagOffFromStorage,
+         restoreGroupFromStorage, restoreClusterFromStorage, sectOpen, refreshData } from './ui.js';
 import { initReader, openReader, closeReader } from './reader.js';
 import { initFinder, openSwitcher, closeSwitcher, buildTree } from './finder.js';
 import { initCockpit, openTimeline, closeTimeline, openDashboard, closeDashboard } from './cockpit.js';
@@ -24,6 +25,8 @@ async function boot() {
   S.all = await res.json();
   S.vaultName = S.all.meta.vaultName || S.vaultName;
   S.all.nodes.filter(n => n.kind === 'tag').forEach(n => tagOn.add(n.id)); // tag: mặc định hiện
+  restoreTagOffFromStorage();            // …rồi tắt lại đúng tag user đã tắt phiên trước
+  restoreGroupFromStorage();             // lọc nhóm màu (legend) — trước visibleData/initGraph
   restoreExtOnFromStorage();             // đuôi file: nhớ lần bật cuối (localStorage)
   S.data = visibleData();
   indexData();
