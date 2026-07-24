@@ -35,7 +35,8 @@ Point it at a folder of markdown notes (an Obsidian-style vault) and it serves a
 ### 🌌 The graph
 - Force-directed 3D graph of notes, tags and attachments, colored by tag groups, with a bloom "neon" glow and adjustable intensity
 - Degree-aware physics (hubs get room, leaves hug their hub), optional 🧲 cluster-magnet mode per color group, collision guard, smooth settling when filtering
-- Two deliberate filter semantics: color groups *spotlight* (dim but keep context), tag/extension filters *declutter* (remove entirely)
+- Layout presets — Expand, Calm, and 🪐 Universe (arranges notes by the index tree: root at the center, each index a hub, leaves on a Fibonacci sphere around it), deterministic across reloads
+- Two deliberate filter semantics: color groups *spotlight* (dim but keep context), tag/extension filters *declutter* (remove entirely); your tag and color-group choices persist across sessions
 - Accessibility: AA-contrast panel palette, keyboard-operable controls, respects `prefers-reduced-motion`
 
 ### 🤖 Agent activity, live on the graph
@@ -177,7 +178,7 @@ Trỏ vào một thư mục note markdown (vault kiểu Obsidian), app phục v�
 - **Chạy thử 60 giây (không cần vault):** clone repo → `python try_demo.py` → mở ngay demo vault 120 note (nguồn của mọi ảnh/GIF phía trên).
 - **Cài đặt vào vault của bạn:** chỉ cần Python 3.9+ — clone vào vault thành thư mục `.graph3d` (trong lệnh mẫu, thay `YourVault` bằng **đường dẫn thư mục vault của bạn** — thư mục chứa các note markdown, ví dụ `D:/Notes`), chạy `python ensure_graph3d.py`, app mở tại `http://127.0.0.1:8321`. Không pip, không npm, không build. Windows có thể double-click `Start-Graph3D.bat`.
 - **Chưa có vault? KHÔNG cần Obsidian trước.** Vault chỉ là một thư mục chứa file `.md` — soạn bằng Notepad cũng được. Copy thư mục [`starter-vault/`](starter-vault/) (9 note dạy note / wikilink / tag / hub ngay trong app, có bản tiếng Việt [[Bắt Đầu — Tiếng Việt]]) làm vault đầu tiên rồi cài app vào đó; Obsidian là editor tuỳ chọn về sau, dùng chung đúng thư mục này.
-- **Graph:** physics co giãn theo degree, 🧲 gom cụm theo nhóm màu, chống chồng node, lọc tag / đuôi file / nhóm màu (spotlight vs declutter), heatmap tần suất truy cập, độ chói neon chỉnh được, hỗ trợ tiếp cận (AA, bàn phím, reduced-motion).
+- **Graph:** physics co giãn theo degree, 🧲 gom cụm theo nhóm màu, chống chồng node, preset bố cục 🪐 Vũ Trụ (xếp note theo cây index: root làm tâm, lá quây quanh index, deterministic qua reload), lọc tag / đuôi file / nhóm màu (spotlight vs declutter, **nhớ qua phiên**), heatmap tần suất truy cập, độ chói neon chỉnh được, hỗ trợ tiếp cận (AA, bàn phím, reduced-motion).
 - **Agent:** hook `PostToolUse` của Claude Code (mẫu ở phần tiếng Anh) ghi mọi thao tác đọc/sửa → hiệu ứng sao chổi, cú nhảy siêu không gian giữa các note, chuỗi truy xuất replay được, thanh tua cả ngày + dashboard per-agent. Agent khác truyền `--agent "Tên"` là có màu riêng.
 - **Đọc & tìm:** click node đọc note ngay (wikilink, ảnh, backlink), cây thư mục kéo-giãn, `Ctrl+P` tìm tên / `#tag` / nội dung không dấu, tab + 2 pane + ghim + lịch sử đọc (persist).
 - **2 máy:** journal per-máy nằm trong vault — 2 máy sync chung vault (OneDrive/Drive/Syncthing) tự thấy lịch sử của nhau, máy thứ hai không cần chạy server.
