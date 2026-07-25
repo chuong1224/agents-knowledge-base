@@ -51,6 +51,11 @@ Point it at a folder of markdown notes (an Obsidian-style vault) and it serves a
 - Folder-tree sidebar (drag to resize) + quick switcher `Ctrl+P`: file names, `#tags`, and diacritic-insensitive full-text search
 - Workspace: multi-tab reading, ⧉ two-pane split, ☆ pinned notes, 🕘 reading history — all persisted across sessions
 
+### 🌳 Debt ledger (optional)
+- If your vault keeps a machine-readable ledger of unfinished work, the app renders it as a **branching tree**: one band per area, columns by dependency depth (leaves on the left), arrows meaning *must be done first*
+- Click any item to open the note where that debt was declared; the "ready only" filter shows just what is actionable **on the machine you are sitting at**
+- The server imports the ledger's own script and caches by mtime — classification rules live in the vault, never duplicated in the app. Point `GRAPH3D_DEBTS_DIR` at your ledger folder (it must expose `debts.py` with `load()`/`export_data()` plus `debts.json`). No ledger → the endpoint returns 404 and the panel says so
+
 ### 🖥 Multi-machine, self-healing
 - Per-host activity journals live inside the vault → two machines syncing the same vault (OneDrive, Drive, Syncthing…) merge their histories automatically; no server needed on the second machine
 - Single-instance server keyed by port: verifies health by boot id, auto-restarts when source changes, cleans up stale processes — and refuses to kill anything it cannot verify as its own
@@ -181,6 +186,7 @@ Trỏ vào một thư mục note markdown (vault kiểu Obsidian), app phục v�
 - **Graph:** physics co giãn theo degree, 🧲 gom cụm theo nhóm màu, chống chồng node, preset bố cục 🪐 Vũ Trụ (xếp note theo cây index: root làm tâm, lá quây quanh index, deterministic qua reload), lọc tag / đuôi file / nhóm màu (spotlight vs declutter, **nhớ qua phiên**), heatmap tần suất truy cập, độ chói neon chỉnh được, hỗ trợ tiếp cận (AA, bàn phím, reduced-motion).
 - **Agent:** hook `PostToolUse` của Claude Code (mẫu ở phần tiếng Anh) ghi mọi thao tác đọc/sửa → hiệu ứng sao chổi, cú nhảy siêu không gian giữa các note, chuỗi truy xuất replay được, thanh tua cả ngày + dashboard per-agent. Agent khác truyền `--agent "Tên"` là có màu riêng.
 - **Đọc & tìm:** click node đọc note ngay (wikilink, ảnh, backlink), cây thư mục kéo-giãn, `Ctrl+P` tìm tên / `#tag` / nội dung không dấu, tab + 2 pane + ghim + lịch sử đọc (persist).
+- **Sổ nợ (tuỳ chọn):** vault nào giữ sổ việc-còn-treo dạng máy đọc thì app vẽ luôn thành **cây rẽ nhánh** — băng ngang là nhóm, cột là độ sâu phụ thuộc (lá bên trái), mũi tên nghĩa là *phải xong trước*; click một món mở note đã khai nó; lọc "chỉ việc làm được" theo đúng máy đang ngồi. Server import chính script của sổ (cache theo mtime) nên luật phân loại chỉ có một bản trong vault; trỏ `GRAPH3D_DEBTS_DIR` tới thư mục sổ, không có sổ thì panel nói rõ.
 - **2 máy:** journal per-máy nằm trong vault — 2 máy sync chung vault (OneDrive/Drive/Syncthing) tự thấy lịch sử của nhau, máy thứ hai không cần chạy server.
 - **Cấu hình:** nhóm màu tag ở `TAG_COLORS` (`build_graph_data.py`) + `GROUP_ORDER` (`src/state.js`); loại folder ở `EXCLUDED_DIRS`; đổi port bằng `--port`. Taxonomy mặc định đang theo vault của tác giả — tách ra file config là mục roadmap số một.
 - **Test:** `python tests/selfcheck.py` (~3s; thêm `--slow` cho test port/kill ~16s).
