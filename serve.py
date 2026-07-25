@@ -21,11 +21,11 @@ Endpoint:
                      giờ + top note (metric chuỗi tính bằng build_chains)
   /activity?cursor=N -> event mới trong activity.jsonl từ byte-offset N
                         (hook log_activity.py của Claude Code ghi file này)
-  /debts         -> sổ nợ vault đã phân loại (làm ngay được / chờ việc / chờ điều kiện)
-                    — logic thuộc `Vault Operation/Sổ Nợ Vault/attachments/debts.py`,
+  /work          -> bản đồ việc đang mở của vault, đã phân loại (làm ngay được / chờ việc / chờ điều kiện)
+                    — logic thuộc `Vault Operation/Work Map/attachments/work.py`,
                     server chỉ import + cache theo mtime, KHÔNG chép lại luật phân loại.
-                    Vault khác đặt sổ chỗ khác: biến môi trường GRAPH3D_DEBTS_DIR;
-                    không có sổ thì endpoint trả 404 và UI hiện đúng như vậy.
+                    Vault khác đặt bản đồ chỗ khác: biến môi trường GRAPH3D_WORKMAP_DIR;
+                    không có bản đồ thì endpoint trả 404 và UI hiện đúng như vậy.
 """
 import argparse
 import glob
@@ -63,31 +63,31 @@ _cache = {"ts": 0.0, "data": None}
 _cache_lock = threading.Lock()
 CACHE_SECONDS = 3.0
 
-# Sổ nợ vault: registry + logic phân loại nằm TRONG vault (note "Sổ Nợ Vault").
-# Server chỉ là cửa đọc — vault không có sổ thì endpoint trả 404, app vẫn chạy.
-DEBTS_DIR = os.environ.get("GRAPH3D_DEBTS_DIR") or os.path.join(
-    VAULT, "Vault Operation", "Sổ Nợ Vault", "attachments")
-_debts_cache = {"key": None, "data": None}
+# Work Map: registry + logic phân loại nằm TRONG vault (note "Work Map").
+# Server chỉ là cửa đọc — vault không có bản đồ thì endpoint trả 404, app vẫn chạy.
+WORKMAP_DIR = os.environ.get("GRAPH3D_WORKMAP_DIR") or os.path.join(
+    VAULT, "Vault Operation", "Work Map", "attachments")
+_workmap_cache = {"key": None, "data": None}
 
 
-def debts_export():
-    """Sổ nợ đã phân loại, hoặc None nếu vault này không có sổ.
+def workmap_export():
+    """Bản đồ việc đã phân loại, hoặc None nếu vault này không có Work Map.
 
-    Cache theo mtime của cả script lẫn registry — sửa debts.json là F5 thấy ngay,
+    Cache theo mtime của cả script lẫn registry — sửa work.json là F5 thấy ngay,
     không phải restart server (cùng tinh thần /src/* đọc thẳng đĩa).
     """
-    script = os.path.join(DEBTS_DIR, "debts.py")
-    registry = os.path.join(DEBTS_DIR, "debts.json")
+    script = os.path.join(WORKMAP_DIR, "work.py")
+    registry = os.path.join(WORKMAP_DIR, "work.json")
     if not (os.path.isfile(script) and os.path.isfile(registry)):
         return None
     key = (os.path.getmtime(script), os.path.getmtime(registry))
-    if _debts_cache["key"] == key:
-        return _debts_cache["data"]
-    spec = importlib.util.spec_from_file_location("kb_debts", script)
+    if _workmap_cache["key"] == key:
+        return _workmap_cache["data"]
+    spec = importlib.util.spec_from_file_location("kb_workmap", script)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     data = mod.export_data(mod.load())
-    _debts_cache.update(key=key, data=data)
+    _workmap_cache.update(key=key, data=data)
     return data
 
 MIME = {".html": "text/html; charset=utf-8",
@@ -745,17 +745,17 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, body)
             return
 
-        if path == "/debts":
-            # Sổ nợ vault — xem debts_export(). Lỗi đọc registry (JSON hỏng, script
+        if path == "/work":
+            # Work Map — xem workmap_export(). Lỗi đọc registry (JSON hỏng, script
             # lỗi) trả 500 kèm thông điệp để UI hiện thẳng, đừng nuốt im.
             try:
-                data = debts_export()
+                data = workmap_export()
             except Exception as exc:                              # noqa: BLE001
                 self._send(500, json.dumps({"error": str(exc)},
                                            ensure_ascii=False).encode("utf-8"))
                 return
             if data is None:
-                self._send(404, b'{"error":"vault nay khong co so no"}')
+                self._send(404, b'{"error":"vault nay khong co work map"}')
                 return
             self._send(200, json.dumps(data, ensure_ascii=False).encode("utf-8"))
             return

@@ -80,11 +80,11 @@ export function restoreGroupFromStorage() {
    (cùng pattern extOn). Header gắn handler 1 LẦN trong boot — không đi qua buildUI()
    nên không dính gotcha chồng listener P0.3. */
 const SECT_OPEN_STORAGE_KEY = 'kbgraph3d.sectOpen.v1';
-const SECT_DEFAULT_OPEN = ['search', 'chains', 'agent', 'cockpit', 'debts'];
+const SECT_DEFAULT_OPEN = ['search', 'chains', 'agent', 'cockpit', 'work'];
 // Section sinh sau khi người dùng đã có sectOpen trong localStorage sẽ bị gập oan
 // (bản lưu cũ không biết nó). Mở đúng MỘT lần rồi đánh dấu đã giới thiệu — sau đó
 // tôn trọng lựa chọn của người dùng, kể cả khi họ gập lại.
-const SECT_INTRO = ['debts'];
+const SECT_INTRO = ['work'];
 const SECT_INTRO_KEY = 'kbgraph3d.sectIntro.v1';
 let sectOpenSet = new Set(SECT_DEFAULT_OPEN);
 export function sectOpen(id) { return sectOpenSet.has(id); }

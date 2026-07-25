@@ -12,7 +12,7 @@ import { buildUI, initSections, initDemo, restoreExtOnFromStorage, restoreTagOff
 import { initReader, openReader, closeReader } from './reader.js';
 import { initFinder, openSwitcher, closeSwitcher, buildTree } from './finder.js';
 import { initCockpit, openTimeline, closeTimeline, openDashboard, closeDashboard } from './cockpit.js';
-import { initDebts, openDebts, closeDebts, pollDebtCount } from './debts.js';
+import { initWorkMap, openWorkMap, closeWorkMap, pollWorkCount } from './work.js';
 import { initWorkspace, WS, wsOpen, wsSwitch, wsCloseTab, wsSplit, wsBack,
          togglePin, pushRecent, renderSbSections } from './workspace.js';
 
@@ -34,7 +34,7 @@ async function boot() {
 
   initGraph();                           // ForceGraph3D + orphanPull + controls + trailGroup
   window.__G = S.Graph; // debug hook: truy cập Graph từ DevTools console
-  window.__fx = { nodeOnScreen, followFlyTo, agentTrails, agentFlow, replayFlow, buildUI, updateTrails, updateWarps, spawnWarp, warps, openReader, closeReader, openSwitcher, closeSwitcher, buildTree, openTimeline, closeTimeline, openDashboard, closeDashboard, openDebts, closeDebts, WS, wsOpen, wsSwitch, wsCloseTab, wsSplit, wsBack, togglePin, pushRecent, renderSbSections }; // debug hook nghiệm thu (Ư1/Ư4/Ư6/Reader/Finder/Cockpit/Workspace — tab ẩn không có rAF, phải gọi tay)
+  window.__fx = { nodeOnScreen, followFlyTo, agentTrails, agentFlow, replayFlow, buildUI, updateTrails, updateWarps, spawnWarp, warps, openReader, closeReader, openSwitcher, closeSwitcher, buildTree, openTimeline, closeTimeline, openDashboard, closeDashboard, openWorkMap, closeWorkMap, WS, wsOpen, wsSwitch, wsCloseTab, wsSplit, wsBack, togglePin, pushRecent, renderSbSections }; // debug hook nghiệm thu (Ư1/Ư4/Ư6/Reader/Finder/Cockpit/Workspace — tab ẩn không có rAF, phải gọi tay)
 
   physics('bung', true);
   addStars();
@@ -46,8 +46,8 @@ async function boot() {
   initReader();                   // giai đoạn 1 Vault Cockpit: panel đọc note
   initFinder();                   // giai đoạn 2 Vault Cockpit: cây vault + quick switcher Ctrl+P
   initCockpit();                  // giai đoạn 3 Vault Cockpit: thanh tua ngày + dashboard hiệu quả
-  initDebts();                    // Sổ nợ vault: cây việc còn treo (/debts — registry sống trong vault)
-  pollDebtCount();                // số tóm tắt cho section panel (không mở overlay)
+  initWorkMap();                    // Work Map: cây việc đang mở (/work — registry sống trong vault)
+  pollWorkCount();                // số tóm tắt cho section panel (không mở overlay)
   initSections();                 // Ư2.1: gập/mở section + nhớ trạng thái localStorage
   // Ư3.3: chú giải ký hiệu chuỗi — đóng 1 lần là nhớ vĩnh viễn
   try { if (localStorage.getItem('kbgraph3d.chainHelp.v1') === 'off') $('chain-help').style.display = 'none'; } catch (e) {}

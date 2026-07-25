@@ -562,57 +562,57 @@ select#ck-day:focus { border-color: var(--cyan); }
 #dash-top .heatrow .hbar { width: 110px; }
 .dash-empty { color: var(--faint); font-size: 11.5px; padding: 8px 2px; }
 
-/* ---------- Sổ nợ vault: cây việc còn treo (overlay rộng, cùng khuôn #dash) ---------- */
-#dbt-mini { color: var(--muted); font-size: 11.5px; }
-#dbt-mini b { color: var(--cyan); }
-#debts { position: absolute; inset: 0; z-index: 41; display: none; background: rgba(8,6,16,.62); }
-#debts.show { display: block; }
-#dbt-box { position: absolute; top: 5vh; left: 50%; transform: translateX(-50%);
+/* ---------- Work Map: cây việc đang mở (overlay rộng, cùng khuôn #dash) ---------- */
+#wm-mini { color: var(--muted); font-size: 11.5px; }
+#wm-mini b { color: var(--cyan); }
+#workmap { position: absolute; inset: 0; z-index: 41; display: none; background: rgba(8,6,16,.62); }
+#workmap.show { display: block; }
+#wm-box { position: absolute; top: 5vh; left: 50%; transform: translateX(-50%);
   width: min(1180px, 96vw); max-height: 88vh; background: var(--panel);
   border: 1px solid var(--border); border-radius: 14px; backdrop-filter: blur(12px);
   overflow: hidden; display: flex; flex-direction: column;
   box-shadow: 0 0 34px rgba(255,46,151,.14), inset 0 0 40px rgba(4,217,255,.04); }
-#dbt-head { display: flex; align-items: center; gap: 12px; padding: 12px 15px 10px;
+#wm-head { display: flex; align-items: center; gap: 12px; padding: 12px 15px 10px;
   border-bottom: 1px solid var(--border); flex: none; }
-#dbt-head h3 { margin: 0; font-size: 12px; letter-spacing: 1.8px; text-transform: uppercase;
+#wm-head h3 { margin: 0; font-size: 12px; letter-spacing: 1.8px; text-transform: uppercase;
   color: var(--cyan); flex: none; }
-#dbt-sum { color: var(--faint); font-size: 11px; }
-#dbt-sum b { color: var(--muted); }
-#dbt-ready { margin-left: auto; flex: none; }
-#dbt-x { cursor: pointer; color: var(--faint); font-size: 15px; flex: none; }
-#dbt-x:hover { color: var(--magenta); }
-#dbt-graph { position: relative; overflow: auto; padding: 10px 15px 16px; }
-#dbt-graph::-webkit-scrollbar { width: 7px; height: 7px; }
-#dbt-graph::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-#dbt-edges { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
-#dbt-edges path { fill: none; stroke: var(--cyan); stroke-width: 1.4; opacity: .5;
-  marker-end: url(#dbt-ar); }
-#dbt-foot { flex: none; padding: 8px 15px 11px; border-top: 1px solid var(--border);
+#wm-sum { color: var(--faint); font-size: 11px; }
+#wm-sum b { color: var(--muted); }
+#wm-ready { margin-left: auto; flex: none; }
+#wm-x { cursor: pointer; color: var(--faint); font-size: 15px; flex: none; }
+#wm-x:hover { color: var(--magenta); }
+#wm-graph { position: relative; overflow: auto; padding: 10px 15px 16px; }
+#wm-graph::-webkit-scrollbar { width: 7px; height: 7px; }
+#wm-graph::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+#wm-edges { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+#wm-edges path { fill: none; stroke: var(--cyan); stroke-width: 1.4; opacity: .5;
+  marker-end: url(#wm-ar); }
+#wm-foot { flex: none; padding: 8px 15px 11px; border-top: 1px solid var(--border);
   color: var(--faint); font-size: 10.5px; }
-#dbt-foot b { color: var(--muted); }
-.dbt-band { border-bottom: 1px dashed var(--border); padding: 8px 0; }
-.dbt-band:last-child { border-bottom: none; }
-.dbt-bh { font-size: 9.5px; letter-spacing: 1.8px; text-transform: uppercase; color: var(--faint);
+#wm-foot b { color: var(--muted); }
+.wm-band { border-bottom: 1px dashed var(--border); padding: 8px 0; }
+.wm-band:last-child { border-bottom: none; }
+.wm-bh { font-size: 9.5px; letter-spacing: 1.8px; text-transform: uppercase; color: var(--faint);
   font-weight: 700; margin-bottom: 6px; }
-.dbt-cols { display: flex; gap: 46px; align-items: flex-start; }
-.dbt-col { display: flex; flex-direction: column; gap: 6px; min-width: 250px; }
-.dbt-node { display: flex; align-items: center; gap: 7px; width: 100%; text-align: left;
+.wm-cols { display: flex; gap: 46px; align-items: flex-start; }
+.wm-col { display: flex; flex-direction: column; gap: 6px; min-width: 250px; }
+.wm-node { display: flex; align-items: center; gap: 7px; width: 100%; text-align: left;
   padding: 6px 9px; border-radius: 9px; cursor: pointer; font: inherit; font-size: 11.5px;
   background: rgba(24,20,40,.72); border: 1px solid var(--border); color: var(--muted); }
-.dbt-node:hover { border-color: var(--cyan); color: #fff; }
-.dbt-node .dbt-p { flex: none; font-size: 9.5px; font-weight: 700; letter-spacing: .6px;
+.wm-node:hover { border-color: var(--cyan); color: #fff; }
+.wm-node .wm-p { flex: none; font-size: 9.5px; font-weight: 700; letter-spacing: .6px;
   color: var(--faint); }
-.dbt-node .dbt-t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dbt-node .dbt-u { flex: none; font-size: 9.5px; color: var(--yellow); }
-.dbt-node.b-ready { border-color: rgba(4,217,255,.55); box-shadow: 0 0 10px rgba(4,217,255,.10); }
-.dbt-node.b-ready .dbt-p { color: var(--cyan); }
-.dbt-node.b-waiting_dep { border-color: rgba(245,158,11,.45); }
-.dbt-node.b-waiting_dep .dbt-p { color: var(--yellow); }
-.dbt-node.b-waiting_gate { opacity: .72; }
-#dbt-sum .b-ready { color: var(--cyan); }
-#dbt-sum .b-waiting_dep { color: var(--yellow); }
-#dbt-sum .b-waiting_gate { color: var(--faint); }
-.dbt-empty { color: var(--faint); font-size: 11.5px; padding: 10px 2px; }
+.wm-node .wm-t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wm-node .wm-u { flex: none; font-size: 9.5px; color: var(--yellow); }
+.wm-node.b-ready { border-color: rgba(4,217,255,.55); box-shadow: 0 0 10px rgba(4,217,255,.10); }
+.wm-node.b-ready .wm-p { color: var(--cyan); }
+.wm-node.b-waiting_dep { border-color: rgba(245,158,11,.45); }
+.wm-node.b-waiting_dep .wm-p { color: var(--yellow); }
+.wm-node.b-waiting_gate { opacity: .72; }
+#wm-sum .b-ready { color: var(--cyan); }
+#wm-sum .b-waiting_dep { color: var(--yellow); }
+#wm-sum .b-waiting_gate { color: var(--faint); }
+.wm-empty { color: var(--faint); font-size: 11.5px; padding: 10px 2px; }
 
 #err { position: absolute; inset: 0; display: none; place-items: center; z-index: 50;
   background: var(--bg); color: var(--muted); text-align: center; padding: 30px; }

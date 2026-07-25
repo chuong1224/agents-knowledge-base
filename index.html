@@ -11,7 +11,7 @@
 
 <div id="brand">
   <h1>KB GRAPH 3D</h1>
-  <div class="sub">KNOWLEDGE BASE · SYNTHWAVE · <span style="color:var(--cyan)">v1.39.0</span></div>
+  <div class="sub">KNOWLEDGE BASE · SYNTHWAVE · <span style="color:var(--cyan)">v1.40.0</span></div>
 </div>
 
 <div id="sidebar">
@@ -50,11 +50,11 @@
     <datalist id="notes-dl"></datalist>
     <div id="search-miss">Không tìm thấy note nào khớp — thử từ khoá khác (không cần gõ dấu).</div>
   </div>
-  <div class="sect" data-sect="debts">
-    <h2>🌳 Sổ nợ vault</h2>
-    <div id="dbt-mini">đang đọc…</div>
+  <div class="sect" data-sect="work">
+    <h2>🌳 Work Map</h2>
+    <div id="wm-mini">đang đọc…</div>
     <div class="btns" style="margin-top:8px">
-      <button class="btn" id="dbt-open" title="Cây rẽ nhánh mọi việc còn treo trong vault — lá trái, việc phụ thuộc bên phải">🌳 Mở cây nợ</button>
+      <button class="btn" id="wm-open" title="Bản đồ mọi việc đang mở — lá trái, việc phụ thuộc bên phải">🌳 Mở bản đồ</button>
     </div>
   </div>
   <div class="sect" data-sect="agent">
@@ -190,16 +190,16 @@
   </div>
 </div>
 
-<div id="debts">
-  <div id="dbt-box" role="dialog" aria-label="Sổ nợ vault — cây việc còn treo">
-    <div id="dbt-head">
-      <h3>🌳 Sổ nợ vault</h3>
-      <span id="dbt-sum"></span>
-      <button class="btn" id="dbt-ready" title="Chỉ hiện việc làm ngay được trên máy này">Chỉ việc làm được</button>
-      <span id="dbt-x" title="Đóng (Esc)">✕</span>
+<div id="workmap">
+  <div id="wm-box" role="dialog" aria-label="Work Map — cây việc đang mở">
+    <div id="wm-head">
+      <h3>🌳 Work Map</h3>
+      <span id="wm-sum"></span>
+      <button class="btn" id="wm-ready" title="Chỉ hiện việc làm ngay được trên máy này">Chỉ việc làm được</button>
+      <span id="wm-x" title="Đóng (Esc)">✕</span>
     </div>
-    <div id="dbt-graph"></div>
-    <div id="dbt-foot">Cột trái = lá (không chờ ai) · mũi tên = <b>phải xong trước</b> · click một món để mở note gốc</div>
+    <div id="wm-graph"></div>
+    <div id="wm-foot">Cột trái = lá (không chờ ai) · mũi tên = <b>phải xong trước</b> · click một việc để mở note gốc</div>
   </div>
 </div>
 
