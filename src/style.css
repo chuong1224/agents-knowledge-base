@@ -600,6 +600,9 @@ select#ck-day:focus { border-color: var(--cyan); }
   padding: 6px 9px; border-radius: 9px; cursor: pointer; font: inherit; font-size: 11.5px;
   background: rgba(24,20,40,.72); border: 1px solid var(--border); color: var(--muted); }
 .wm-node:hover { border-color: var(--cyan); color: #fff; }
+/* Mã ngắn (W07) là tên gọi việc khi giao cho agent — phải đọc được ngay, không phải đi tìm */
+.wm-node .wm-code { flex: none; font-size: 10.5px; font-weight: 700; letter-spacing: .4px;
+  color: var(--cyan); min-width: 30px; }
 .wm-node .wm-p { flex: none; font-size: 9.5px; font-weight: 700; letter-spacing: .6px;
   color: var(--faint); }
 .wm-node .wm-t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -37,16 +37,19 @@ function gateText(d) {
 
 function nodeHtml(d) {
   const bits = [];
-  if (d.unblocks) bits.push(`gỡ nút cho ${d.unblocks}`);
-  if (d.bucket === 'waiting_dep') bits.push('cần: ' + d.unmet.join(', '));
+  if (d.unblocks) bits.push(`gỡ nút cho ${d.unblocks} việc`);
+  if (d.bucket === 'waiting_dep') bits.push('cần xong trước: ' + (d.unmet_codes || d.unmet).join(', '));
   if (d.bucket === 'waiting_gate') bits.push(gateText(d));
-  const tip = [d.why || '', bits.join(' · ')].filter(Boolean).join('\n');
+  // Mã ngắn là thứ người dùng gọi tên khi giao việc — cho vào tooltip luôn
+  const tip = [`${d.code || ''} · ${d.priority || 'P?'}`, d.why || '', bits.join(' · ')]
+    .filter(Boolean).join('\n');
   const note = (d.source || {}).note || '';
   return `<button class="wm-node b-${d.bucket}" data-id="${esc(d.id)}" data-note="${esc(note)}"
       title="${esc(tip)}">
+    <span class="wm-code">${esc(d.code || '—')}</span>
     <span class="wm-p">${esc(d.priority || 'P?')}</span>
     <span class="wm-t">${esc(d.title)}</span>
-    ${d.unblocks ? `<span class="wm-u" title="Trả xong món này thì ${d.unblocks} món khác hết chờ">⛓${d.unblocks}</span>` : ''}
+    ${d.unblocks ? `<span class="wm-u" title="Xong việc này thì ${d.unblocks} việc khác hết chờ">⛓${d.unblocks}</span>` : ''}
   </button>`;
 }
 
