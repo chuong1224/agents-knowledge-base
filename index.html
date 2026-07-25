@@ -11,7 +11,7 @@
 
 <div id="brand">
   <h1>KB GRAPH 3D</h1>
-  <div class="sub">KNOWLEDGE BASE · SYNTHWAVE · <span style="color:var(--cyan)">v1.41.0</span></div>
+  <div class="sub">KNOWLEDGE BASE · SYNTHWAVE · <span style="color:var(--cyan)">v1.42.0</span></div>
 </div>
 
 <div id="sidebar">
@@ -77,6 +77,13 @@
     <div class="btns">
       <button class="btn" id="ck-replay" title="Phát lại hành trình agent trong ngày trên graph — thanh tua hiện ở đáy màn hình">🎬 Phát lại</button>
       <button class="btn" id="ck-dash" title="Dashboard hiệu quả truy xuất trong ngày: per-agent, theo giờ, top note">📊 Dashboard</button>
+    </div>
+  </div>
+  <div class="sect" data-sect="insight">
+    <h2>🩺 Sức khoẻ vault <span class="mini"><button id="ins-refresh" title="Đo lại">↻</button></span></h2>
+    <div id="ins-mini">đang đo…</div>
+    <div class="btns" style="margin-top:8px">
+      <button class="btn" id="ins-open" title="Vault đang khoẻ không: note nóng/nguội theo tuần, note chưa vào đường truy xuất, cụm ít kết nối, coverage theo khu vực">🩺 Mở báo cáo</button>
     </div>
   </div>
   <div class="sect" data-sect="heat">
@@ -187,6 +194,18 @@
       <h3>📊 Hiệu quả truy xuất</h3><span id="dash-day"></span><span id="dash-x" title="Đóng (Esc)">✕</span>
     </div>
     <div id="dash-body"></div>
+  </div>
+</div>
+
+<div id="insight">
+  <div id="ins-box" role="dialog" aria-label="Sức khoẻ truy xuất của vault">
+    <div id="ins-head">
+      <h3>🩺 Sức khoẻ vault</h3>
+      <span id="ins-sum"></span>
+      <span id="ins-x" title="Đóng (Esc)">✕</span>
+    </div>
+    <div id="ins-body"></div>
+    <div id="ins-foot"></div>
   </div>
 </div>
 

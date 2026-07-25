@@ -5,6 +5,7 @@ import { applyFilters, refreshAllNodes, updateStats, applyNodeState, physics, pa
 import { pulses, agentFlow, endAgentFlow } from './effects.js';
 import { pollChains, addFeedEvent } from './activity.js';
 import { pollHeat, setHeatScope } from './heat.js';
+import { pollInsight } from './insight.js';
 import { openReader } from './reader.js';
 import { buildTree } from './finder.js';
 
@@ -80,11 +81,11 @@ export function restoreGroupFromStorage() {
    (cùng pattern extOn). Header gắn handler 1 LẦN trong boot — không đi qua buildUI()
    nên không dính gotcha chồng listener P0.3. */
 const SECT_OPEN_STORAGE_KEY = 'kbgraph3d.sectOpen.v1';
-const SECT_DEFAULT_OPEN = ['search', 'chains', 'agent', 'cockpit', 'work'];
+const SECT_DEFAULT_OPEN = ['search', 'chains', 'agent', 'cockpit', 'work', 'insight'];
 // Section sinh sau khi người dùng đã có sectOpen trong localStorage sẽ bị gập oan
 // (bản lưu cũ không biết nó). Mở đúng MỘT lần rồi đánh dấu đã giới thiệu — sau đó
 // tôn trọng lựa chọn của người dùng, kể cả khi họ gập lại.
-const SECT_INTRO = ['work'];
+const SECT_INTRO = ['work', 'insight'];
 const SECT_INTRO_KEY = 'kbgraph3d.sectIntro.v1';
 let sectOpenSet = new Set(SECT_DEFAULT_OPEN);
 export function sectOpen(id) { return sectOpenSet.has(id); }
@@ -122,6 +123,7 @@ export function initSections() {
       saveSectOpen();
       if (open && id === 'chains') pollChains();     // mở lại → dữ liệu tươi ngay (poll nền nghỉ lúc gập)
       if (open && id === 'heat') pollHeat();
+      if (open && id === 'insight') pollInsight();   // 🩺 không poll nền: mở section là đo
     };
     // Ư5.2: header gập/mở dùng được bằng phím như click
     h.setAttribute('role', 'button');

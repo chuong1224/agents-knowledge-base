@@ -13,6 +13,7 @@ import { initReader, openReader, closeReader } from './reader.js';
 import { initFinder, openSwitcher, closeSwitcher, buildTree } from './finder.js';
 import { initCockpit, openTimeline, closeTimeline, openDashboard, closeDashboard } from './cockpit.js';
 import { initWorkMap, openWorkMap, closeWorkMap, pollWorkCount } from './work.js';
+import { initInsight, openInsight, closeInsight, pollInsight } from './insight.js';
 import { initWorkspace, WS, wsOpen, wsSwitch, wsCloseTab, wsSplit, wsBack,
          togglePin, pushRecent, renderSbSections } from './workspace.js';
 
@@ -34,7 +35,7 @@ async function boot() {
 
   initGraph();                           // ForceGraph3D + orphanPull + controls + trailGroup
   window.__G = S.Graph; // debug hook: truy cập Graph từ DevTools console
-  window.__fx = { nodeOnScreen, followFlyTo, agentTrails, agentFlow, replayFlow, buildUI, updateTrails, updateWarps, spawnWarp, warps, openReader, closeReader, openSwitcher, closeSwitcher, buildTree, openTimeline, closeTimeline, openDashboard, closeDashboard, openWorkMap, closeWorkMap, WS, wsOpen, wsSwitch, wsCloseTab, wsSplit, wsBack, togglePin, pushRecent, renderSbSections }; // debug hook nghiệm thu (Ư1/Ư4/Ư6/Reader/Finder/Cockpit/Workspace — tab ẩn không có rAF, phải gọi tay)
+  window.__fx = { nodeOnScreen, followFlyTo, agentTrails, agentFlow, replayFlow, buildUI, updateTrails, updateWarps, spawnWarp, warps, openReader, closeReader, openSwitcher, closeSwitcher, buildTree, openTimeline, closeTimeline, openDashboard, closeDashboard, openWorkMap, closeWorkMap, openInsight, closeInsight, pollInsight, WS, wsOpen, wsSwitch, wsCloseTab, wsSplit, wsBack, togglePin, pushRecent, renderSbSections }; // debug hook nghiệm thu (Ư1/Ư4/Ư6/Reader/Finder/Cockpit/Workspace/Insight — tab ẩn không có rAF, phải gọi tay)
 
   physics('bung', true);
   addStars();
@@ -48,6 +49,7 @@ async function boot() {
   initCockpit();                  // giai đoạn 3 Vault Cockpit: thanh tua ngày + dashboard hiệu quả
   initWorkMap();                    // Work Map: cây việc đang mở (/work — registry sống trong vault)
   pollWorkCount();                // số tóm tắt cho section panel (không mở overlay)
+  initInsight();                  // 🩺 Sức khoẻ vault (/insight — W10)
   initSections();                 // Ư2.1: gập/mở section + nhớ trạng thái localStorage
   // Ư3.3: chú giải ký hiệu chuỗi — đóng 1 lần là nhớ vĩnh viễn
   try { if (localStorage.getItem('kbgraph3d.chainHelp.v1') === 'off') $('chain-help').style.display = 'none'; } catch (e) {}
@@ -69,6 +71,9 @@ async function boot() {
   // heat khi (panel + section heat) mở HOẶC heatMode bật (node highlight cần data kể cả lúc panel ẩn).
   const panelOpen = () => !$('panel').classList.contains('hidden');
   const heatWanted = () => S.heatMode || (panelOpen() && sectOpen('heat'));
+  // 🩺 chỉ số ở thang ngày/tuần: đo MỘT lần lúc boot (nếu section đang mở), sau đó
+  // chỉ khi mở section / mở overlay / bấm ↻ — không có vòng poll nền.
+  if (panelOpen() && sectOpen('insight')) pollInsight();
   pollActivity();
   setInterval(() => { if (!document.hidden) pollActivity(); }, 800);
   setInterval(() => { if (!document.hidden) refreshData(); }, 45000);

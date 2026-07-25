@@ -1,0 +1,607 @@
+# -*- coding: utf-8 -*-
+"""KB Graph 3D — tầng insight "vault đang khoẻ không" (W10 / backlog #13).
+
+`/dashboard` trả lời *"agent đã làm gì hôm nay"*; module này trả lời
+*"vault đang khoẻ không"*: note nóng / đang nguội theo tuần, note nguội theo lần
+đụng cuối, note **chưa bao giờ** agent đụng, cụm ít kết nối, coverage theo khu vực.
+
+Hai bề mặt tiêu thụ CÙNG một hàm `build_insight()` — không có bộ đếm thứ hai:
+  - `serve.py`  → `GET /insight?days=&cold=`   (section 🩺 + overlay trong app)
+  - CLI         → `python .graph3d/insight.py --report`  (note báo cáo trong vault)
+
+Chạy tay:
+  python .graph3d/insight.py                 # in tóm tắt ra console
+  python .graph3d/insight.py --json          # đổ nguyên JSON (debug)
+  python .graph3d/insight.py --days 7 --cold 14
+
+Ba nguồn dữ liệu, mỗi chỉ số đọc nguồn nào ghi rõ trong docstring của nó:
+  J = event log gộp mọi máy (serve.read_all_events) — CUỘN, hiện ~16–18 ngày/máy
+  H = heat tích luỹ (heat_cumulative-<HOST>.json, gộp 2 máy) — có first/last per-note,
+      không mất khi log xoay vòng, nhưng chỉ có từ ngày bật tính năng
+  G = /graph-data (nodes/links) — cấu trúc vault HIỆN TẠI
+
+Mọi con số đi kèm cửa sổ dữ liệu của chính nó (`data.oldest_event`, `data.heat_since`):
+"nguội 14 ngày" trên store mới 3 tuần tuổi KHÔNG cùng nghĩa với "nguội 14 ngày" sau
+nửa năm — caller PHẢI hiện kèm, đừng bày số trần.
+
+Phạm vi CỐ Ý: đợt này chỉ MÔ TẢ hiện trạng. Sinh đề xuất ("thêm link A–B", "gộp 2
+note") là việc của H3/W18 và có ranh giới an toàn riêng (§VII note Harness) — nó sẽ
+TIÊU THỤ build_insight() chứ không đo lại. Module này KHÔNG bao giờ sửa note.
+
+Hồ sơ đợt + định nghĩa chỉ số: note vault "Tầng Insight Sức Khoẻ Vault — KB Graph 3D".
+"""
+import argparse
+import json
+import os
+import sys
+import time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+VAULT = os.path.dirname(HERE)
+sys.path.insert(0, HERE)
+import log_activity  # noqa: E402  (aggregate_by_file = bộ đếm dùng chung với heat)
+
+DAY = 86400.0
+DEFAULT_DAYS = 7          # cửa sổ "tuần" = 7 ngày CUỘN từ lúc chạy (không phải tuần lịch)
+# Ngày không ai đụng thì coi là "nguội". 7 chứ không phải 14: routine daily (audit
+# 08:00, catalog regen) quét gần như cả vault mỗi ngày, nên tuổi last-touch dồn hết
+# về phía trẻ — đo thật 25/07/2026: note già nhất mới 10.5 ngày, ngưỡng 14 trả về 0
+# note. Ngưỡng chỉ là cái ĐUÔI actionable; bức tranh chính là histogram `cold.hist`
+# (không phụ thuộc ngưỡng, đọc được kể cả khi cửa sổ dữ liệu còn ngắn).
+DEFAULT_COLD = 7
+AGE_BUCKETS = ((1, "0-1"), (3, "1-3"), (7, "3-7"), (14, "7-14"), (30, "14-30"))
+COOLING_MIN = 3           # tuần trước ≥ ngần này lượt mà tuần này 0 => "đang nguội đi"
+SMALL_CLUSTER = 3         # thành phần liên thông ≤ ngần này note = "cụm nhỏ"
+HUB_GROUP = "Index / MOC"  # nhóm màu của note index/MOC (build_graph_data.TAG_COLORS)
+TYPES = ("read", "search", "edit")
+
+# Note "sống" do chính module này sinh ra (vế b) — ghi đè mỗi lần chạy, cùng họ với
+# Báo Cáo Audit Vault. Vault khác đặt chỗ khác: env GRAPH3D_INSIGHT_REPORT.
+REPORT_REL = ("Vault Operation/Audit Vault/Báo Cáo Sức Khoẻ Truy Xuất/"
+              "Báo Cáo Sức Khoẻ Truy Xuất.md")
+REPORT_TITLE = "Báo Cáo Sức Khoẻ Truy Xuất"
+
+
+def _ts(ev):
+    """ts của event dạng số, 0.0 nếu thiếu/hỏng — event thiếu ts KHÔNG được rơi vào
+    cửa sổ tuần (bài học day_key: localtime(None) = BÂY GIỜ)."""
+    ts = ev.get("ts")
+    return float(ts) if isinstance(ts, (int, float)) else 0.0
+
+
+def note_graph(graph, exclude=None):
+    """(notes, adj, hubs) của đồ thị **NOTE–NOTE**: bỏ hết cạnh tới node tag/file.
+
+    Nguồn G. Cạnh tag làm mọi note cùng tag trông như liền cụm, nên chỉ số kết nối
+    phải tính trên note–note thuần. `hubs` = note index/MOC (dùng cho "không nằm
+    index nào"). Link ở server luôn là id chuỗi; vẫn nhận dict cho chắc (thư viện
+    force-graph thay id bằng object node sau khi ingest).
+    `exclude` = note bị loại khỏi phép đo (xem self_excludes).
+    """
+    skip = set(exclude or ())
+    notes = {n["id"]: n for n in graph.get("nodes", [])
+             if n.get("kind") == "note" and n["id"] not in skip}
+    adj = {rel: set() for rel in notes}
+    for lk in graph.get("links", []):
+        s, t = lk.get("source"), lk.get("target")
+        if isinstance(s, dict):
+            s = s.get("id")
+        if isinstance(t, dict):
+            t = t.get("id")
+        if s != t and s in adj and t in adj:
+            adj[s].add(t)
+            adj[t].add(s)
+    hubs = {rel for rel, n in notes.items()
+            if n.get("hub") or n.get("group") == HUB_GROUP}
+    return notes, adj, hubs
+
+
+def components(adj):
+    """Thành phần liên thông của đồ thị note–note, lớn nhất trước.
+
+    BFS/DFS LẶP (không đệ quy) — vault phình sâu vẫn không tràn stack. Cụm size 1
+    = note mồ côi; cụm nhỏ = tri thức nằm rời khỏi phần còn lại của vault.
+    """
+    seen, out = set(), []
+    for start in sorted(adj):
+        if start in seen:
+            continue
+        seen.add(start)
+        stack, comp = [start], []
+        while stack:
+            cur = stack.pop()
+            comp.append(cur)
+            for nb in adj[cur]:
+                if nb not in seen:
+                    seen.add(nb)
+                    stack.append(nb)
+        out.append(sorted(comp))
+    out.sort(key=lambda c: (-len(c), c[0]))
+    return out
+
+
+def area_of(rel):
+    """Khu vực = folder cấp 1 (Work / Vault Operation / Personal / Skills…)."""
+    return rel.split("/")[0] if "/" in rel else "(gốc vault)"
+
+
+def age_hist(ages):
+    """Phân bố tuổi last-touch (ngày) theo AGE_BUCKETS — bức tranh chính của mục
+    "nguội", đọc được không cần ngưỡng. Trả dict giữ THỨ TỰ bucket."""
+    out = {label: 0 for _, label in AGE_BUCKETS}
+    out["30+"] = 0
+    for a in ages:
+        for lim, label in AGE_BUCKETS:
+            if a < lim:
+                out[label] += 1
+                break
+        else:
+            out["30+"] += 1
+    return out
+
+
+def self_excludes():
+    """Note do CHÍNH module này sinh ra — phải loại khỏi mọi chỉ số.
+
+    Không loại thì report tự đếm mình vào tổng note VÀ tự nằm trong danh sách "chưa
+    bao giờ agent đụng" của chính nó (đã gặp thật lúc dựng: 144 → 145 note, "chưa
+    đụng" 1 → 2). Công cụ đo không được nằm trong phép đo.
+    """
+    out = {REPORT_REL}
+    p = os.environ.get("GRAPH3D_INSIGHT_REPORT")
+    if p:
+        try:
+            rel = os.path.relpath(os.path.abspath(p), VAULT).replace("\\", "/")
+            if not rel.startswith(".."):
+                out.add(rel)
+        except ValueError:                          # ổ đĩa khác → không thuộc vault
+            pass
+    return out
+
+
+def build_insight(events, graph, heat_notes=None, heat_meta=None, now=None,
+                  days=DEFAULT_DAYS, cold_days=DEFAULT_COLD, top_n=12, list_n=40,
+                  exclude=None):
+    """Ảnh chụp sức khoẻ truy xuất của vault.
+
+    HÀM THUẦN: không đọc đĩa, không lấy giờ ẩn (`now` truyền vào) → test được bằng
+    dữ liệu dựng tay. Caller lo phần I/O:
+      events     — list event đã gộp mọi máy (serve.read_all_events)
+      graph      — dict /graph-data (nodes/links/meta)
+      heat_notes — {rel: {total, read, search, edit, first, last, agents}} đã gộp 2 máy
+      heat_meta  — {since, updated, machines} của store heat (để in cửa sổ dữ liệu)
+      exclude    — note loại khỏi phép đo; mặc định = self_excludes() (note báo cáo
+                   do chính module sinh); truyền set() để đo trọn vault không loại gì
+
+    6 chỉ số (định nghĩa đầy đủ: note "Tầng Insight Sức Khoẻ Vault — KB Graph 3D"):
+      1 nóng tuần này (J)         4 chưa bao giờ agent đụng (G − (H ∪ J))
+      2 đang nguội đi (J)         5 cụm ít kết nối (G)
+      3 nguội ≥ cold_days (H ∩ G) 6 coverage theo khu vực (G + H + J)
+    """
+    now = float(now if now is not None else time.time())
+    days = max(1, int(days))
+    cold_days = max(1, int(cold_days))
+    heat_notes = heat_notes or {}
+    heat_meta = heat_meta or {}
+    skip = self_excludes() if exclude is None else set(exclude)
+    notes, adj, hubs = note_graph(graph, exclude=skip)
+
+    cur_from = now - days * DAY
+    prev_from = now - 2 * days * DAY
+    # MỘT bộ đếm duy nhất (log_activity.aggregate_by_file) cho cả 3 lượt — cùng
+    # luật gom loại/agent với heat, sửa một nơi khỏi lệch nhau. Event của note bị
+    # loại (report tự sinh) rơi ra ngay từ đây, kẻo nó lọt vào bảng "nóng nhất".
+    evs = [e for e in events if e.get("file") not in skip]
+    cur = log_activity.aggregate_by_file([e for e in evs if _ts(e) >= cur_from])
+    prev = log_activity.aggregate_by_file(
+        [e for e in evs if prev_from <= _ts(e) < cur_from])
+    seen_all = log_activity.aggregate_by_file(evs)
+
+    # ---- 1. nóng tuần này (kèm số tuần trước để thấy chiều) ----
+    hot = []
+    for rel, r in sorted(cur.items(), key=lambda kv: (-kv[1]["total"], kv[0]))[:top_n]:
+        p = prev.get(rel, {}).get("total", 0)
+        hot.append({"file": rel, "n": r["total"], "prev": p, "delta": r["total"] - p,
+                    "types": {t: r.get(t, 0) for t in TYPES},
+                    "exists": rel in notes})
+
+    # ---- 2. đang nguội đi: tuần trước sôi, tuần này im ----
+    cooling = []
+    for rel, r in sorted(prev.items(), key=lambda kv: (-kv[1]["total"], kv[0])):
+        if r["total"] >= COOLING_MIN and rel not in cur:
+            cooling.append({"file": rel, "prev": r["total"], "n": 0,
+                            "exists": rel in notes})
+    cooling_total = len(cooling)
+    cooling = cooling[:top_n]
+
+    # ---- lần đụng CUỐI của mỗi note: H (dài hạn) hợp J (cuộn) ----
+    last_touch = {}
+    for src in (seen_all, heat_notes):
+        for rel, r in src.items():
+            lt = (r or {}).get("last") or 0
+            if isinstance(lt, (int, float)) and lt:
+                last_touch[rel] = max(last_touch.get(rel, 0.0), float(lt))
+
+    # ---- 3. nguội: đã từng đụng, nhưng lâu rồi. Chỉ note CÒN TỒN TẠI trong G ----
+    # (heat store giữ cả đường dẫn note đã rename/xoá — báo "nguội" cho note không
+    #  còn tồn tại là tín hiệu rác, nên phải giao với vault hiện hành.)
+    cold_all, ages = [], []
+    for rel in notes:
+        lt = last_touch.get(rel, 0.0)
+        if not lt:
+            continue
+        age = (now - lt) / DAY
+        ages.append(age)
+        if age >= cold_days:
+            total = max(heat_notes.get(rel, {}).get("total", 0),
+                        seen_all.get(rel, {}).get("total", 0))
+            cold_all.append({"file": rel, "last": lt, "days": age, "total": total})
+    cold_all.sort(key=lambda d: d["last"])       # nguội nhất (đụng xa nhất) lên đầu
+
+    # ---- 4. chưa vào đường truy xuất: KHÔNG dấu vết nào, hoặc chỉ khớp tìm kiếm ----
+    # "unread" = có dấu vết nhưng chưa lần nào read/edit (chỉ tình cờ khớp Grep/Glob):
+    # agent chưa THẬT SỰ mở note đó — cùng họ tín hiệu "sót data" với never.
+    touched = [rel for rel in notes if rel in seen_all or rel in heat_notes]
+    never_all = sorted(rel for rel in notes if rel not in seen_all and rel not in heat_notes)
+    unread_all = []
+    for rel in sorted(touched):
+        opened = max(seen_all.get(rel, {}).get("read", 0), heat_notes.get(rel, {}).get("read", 0)) \
+            + max(seen_all.get(rel, {}).get("edit", 0), heat_notes.get(rel, {}).get("edit", 0))
+        if not opened:
+            unread_all.append(rel)
+
+    # ---- 5. cụm ít kết nối (đồ thị note–note) ----
+    comps = components(adj)
+    orphans = sorted(rel for rel in notes if not adj[rel])
+    thin = sorted(rel for rel in notes if len(adj[rel]) == 1)
+    no_index = sorted(rel for rel in notes
+                      if rel not in hubs and not (adj[rel] & hubs))
+    small = [c for c in comps if len(c) <= SMALL_CLUSTER and len(c) > 1]
+
+    # ---- 6. coverage theo khu vực ----
+    never_set, orphan_set = set(never_all), set(orphans)
+    cold_set = {d["file"] for d in cold_all}
+    areas = {}
+    for rel in notes:
+        a = areas.setdefault(area_of(rel), {"area": area_of(rel), "notes": 0,
+                                            "touched": 0, "never": 0,
+                                            "cold": 0, "orphans": 0})
+        a["notes"] += 1
+        a["never" if rel in never_set else "touched"] += 1
+        if rel in cold_set:
+            a["cold"] += 1
+        if rel in orphan_set:
+            a["orphans"] += 1
+    areas = sorted(areas.values(), key=lambda a: (-a["notes"], a["area"]))
+
+    ts_all = [t for t in (_ts(e) for e in events) if t]
+    meta = graph.get("meta", {})
+    n_notes = len(notes)
+    return {
+        "generated": now,
+        "params": {"days": days, "cold_days": cold_days,
+                   "cooling_min": COOLING_MIN, "small_cluster": SMALL_CLUSTER},
+        "vault": {"notes": n_notes, "links": meta.get("links", len(graph.get("links", []))),
+                  "files": meta.get("files", 0), "tags": meta.get("tags", 0),
+                  "note_links": sum(len(v) for v in adj.values()) // 2,
+                  "hubs": len(hubs)},
+        "coverage": {"touched": len(touched), "never": len(never_all),
+                     "notes": n_notes,
+                     "pct": round(100.0 * len(touched) / n_notes, 1) if n_notes else 0.0},
+        "window": {"cur_from": cur_from, "prev_from": prev_from,
+                   "cur_events": sum(r["total"] for r in cur.values()),
+                   "cur_notes": len(cur),
+                   "prev_events": sum(r["total"] for r in prev.values()),
+                   "prev_notes": len(prev),
+                   "cur_by_type": {t: sum(r.get(t, 0) for r in cur.values())
+                                   for t in TYPES}},
+        "hot": hot,
+        "cooling": {"total": cooling_total, "list": cooling},
+        "cold": {"total": len(cold_all), "list": cold_all[:list_n],
+                 "hist": age_hist(ages), "oldest_age": max(ages) if ages else 0.0},
+        "never": {"total": len(never_all),
+                  "list": [{"file": rel, "folder": notes[rel].get("folder", ""),
+                            "degree": len(adj[rel])} for rel in never_all[:list_n]]},
+        "unread": {"total": len(unread_all), "list": unread_all[:list_n]},
+        "weak": {"components": len(comps),
+                 "largest": len(comps[0]) if comps else 0,
+                 "small": [{"size": len(c), "files": c} for c in small[:list_n]],
+                 "orphans": {"total": len(orphans), "list": orphans[:list_n]},
+                 "thin": {"total": len(thin), "list": thin[:list_n]},
+                 "no_index": {"total": len(no_index), "list": no_index[:list_n]}},
+        "areas": areas,
+        "data": {"events": len(events),
+                 "oldest_event": min(ts_all) if ts_all else None,
+                 "newest_event": max(ts_all) if ts_all else None,
+                 "heat_notes": len(heat_notes),
+                 # Đường dẫn còn trong heat store mà vault không còn: note đã
+                 # rename/xoá → lịch sử truy xuất của nó thành mồ côi. Nhiều bất
+                 # thường = vault vừa qua đợt tái cấu trúc lớn.
+                 "heat_stale_paths": sum(1 for rel in heat_notes if rel not in notes),
+                 "heat_since": heat_meta.get("since"),
+                 "heat_updated": heat_meta.get("updated"),
+                 "heat_machines": heat_meta.get("machines") or []},
+    }
+
+
+# ---------------------------------------------------------------- I/O cho CLI
+
+def collect(days=DEFAULT_DAYS, cold_days=DEFAULT_COLD, now=None):
+    """Đọc 3 nguồn rồi gọi build_insight — dùng cho CLI (không cần server chạy).
+
+    Import `serve` MUỘN (trong hàm): module-level `serve` đã `import insight`, nên
+    import ở đầu file sẽ vòng tròn. Ở chế độ CLI, `insight` là `__main__` nên bản
+    `serve` nạp thêm một COPY module `insight` — vô hại, hai bản đều thuần (không
+    có state module-level dùng chung). Đổi lại: chỉ MỘT đường đọc/gộp event (không
+    viết lại read_all_events lần thứ hai trong module này).
+    """
+    import serve  # noqa: PLC0415  (xem docstring — cố ý muộn để tránh vòng tròn)
+    heat_notes, heat_meta = serve.merge_cumulative_stores()
+    return build_insight(serve.read_all_events(), serve.get_graph_data(),
+                         heat_notes=heat_notes, heat_meta=heat_meta,
+                         now=now, days=days, cold_days=cold_days)
+
+
+def _fmt_day(ts):
+    if not isinstance(ts, (int, float)) or not ts:
+        return "—"
+    return time.strftime("%Y-%m-%d", time.localtime(ts))
+
+
+def _fmt_min(ts):
+    if not isinstance(ts, (int, float)) or not ts:
+        return "—"
+    return time.strftime("%Y-%m-%d %H:%M", time.localtime(ts))
+
+
+def print_summary(ins, out=print):
+    """Tóm tắt cho console — đủ để chạy tay xem nhanh, không cần mở app."""
+    p, c, w, d = ins["params"], ins["coverage"], ins["window"], ins["data"]
+    out("== SỨC KHOẺ TRUY XUẤT VAULT — %s ==" % _fmt_min(ins["generated"]))
+    out("Cửa sổ: %d ngày cuộn · nguội ≥ %d ngày · dữ liệu: event từ %s, heat từ %s (%s)"
+        % (p["days"], p["cold_days"], _fmt_day(d["oldest_event"]),
+           _fmt_day(d["heat_since"]), ", ".join(d["heat_machines"]) or "—"))
+    out("Note: %d · coverage %.1f%% (%d đã từng đụng / %d CHƯA BAO GIỜ / %d chỉ khớp tìm kiếm)"
+        % (ins["vault"]["notes"], c["pct"], c["touched"], c["never"],
+           ins["unread"]["total"]))
+    out("Tuần này: %d lượt / %d note   (tuần trước: %d / %d)"
+        % (w["cur_events"], w["cur_notes"], w["prev_events"], w["prev_notes"]))
+    out("Tuổi lần đụng cuối: %s  (già nhất %.1f ngày)"
+        % (" · ".join("%s: %d" % (k, v) for k, v in ins["cold"]["hist"].items()),
+           ins["cold"]["oldest_age"]))
+    out("Nguội ≥%d ngày: %d note · đang nguội đi: %d"
+        % (p["cold_days"], ins["cold"]["total"], ins["cooling"]["total"]))
+    wk = ins["weak"]
+    out("Kết nối: %d thành phần (lớn nhất %d note) · %d mồ côi · %d chỉ-1-dây · %d không nằm index nào"
+        % (wk["components"], wk["largest"], wk["orphans"]["total"],
+           wk["thin"]["total"], wk["no_index"]["total"]))
+    out("")
+    out("Nóng nhất tuần này:")
+    for h in ins["hot"][:8]:
+        out("  %4d (tuần trước %3d)  %s" % (h["n"], h["prev"], h["file"]))
+    if ins["never"]["list"]:
+        out("Chưa bao giờ agent đụng (%d, hiện %d đầu):"
+            % (ins["never"]["total"], min(8, len(ins["never"]["list"]))))
+        for n in ins["never"]["list"][:8]:
+            out("  %s" % n["file"])
+
+
+# ------------------------------------------------- vế (b): note báo cáo trong vault
+
+def report_path():
+    return os.environ.get("GRAPH3D_INSIGHT_REPORT") or os.path.join(
+        VAULT, *REPORT_REL.split("/"))
+
+
+def _existing_date(path):
+    """Giữ nguyên `date:` của bản đã có (ngày TẠO note) — chỉ `updated:` mới nhảy."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f.read().split("\n")[:15]:
+                if line.startswith("date:"):
+                    return line.split(":", 1)[1].strip()
+    except OSError:
+        return None
+    return None
+
+
+def _tbl(header, rows, empty="_— không có._"):
+    if not rows:
+        return empty + "\n"
+    out = ["| " + " | ".join(header) + " |",
+           "|" + "|".join(["---"] * len(header)) + "|"]
+    out += ["| " + " | ".join(str(c) for c in r) + " |" for r in rows]
+    return "\n".join(out) + "\n"
+
+
+def render_report(ins, path=None):
+    """Markdown của note báo cáo — thuần hàm (test được), không ghi đĩa.
+
+    Đường dẫn note in dạng `code` chứ KHÔNG phải wikilink: report này không được tự
+    sinh cạnh mới trong chính đồ thị mà nó đang đo (mồ côi/cụm/kết nối sẽ méo ngay
+    lần chạy sau). Nội dung ổn định giữa 2 lần chạy cùng dữ liệu (idempotent) —
+    chỉ dòng "Lần chạy" và `updated:` đổi.
+    """
+    p, c, w, wk, da = (ins["params"], ins["coverage"], ins["window"],
+                       ins["weak"], ins["data"])
+    today = time.strftime("%Y-%m-%d", time.localtime(ins["generated"]))
+    created = _existing_date(path or report_path()) or today
+
+    fm = ["---", "gate_ignore: true", "title: " + REPORT_TITLE,
+          'aliases: ["Sức khoẻ vault", "Sức khoẻ truy xuất", "Báo cáo insight vault", '
+          '"Note nóng nguội vault", "Vault health report"]',
+          'summary: "Báo cáo SINH TỰ ĐỘNG (python .graph3d/insight.py --report) — sức khoẻ '
+          'TRUY XUẤT của vault, song sinh với Báo Cáo Audit Vault (bản kia bắt vi phạm quy '
+          'tắc): tổng quan coverage, note nóng nhất tuần, phân bố tuổi lần đụng cuối, note '
+          'đang nguội đi, note nguội quá ngưỡng, note chưa vào đường truy xuất (không dấu '
+          'vết / chỉ khớp tìm kiếm), cụm ít kết nối trên đồ thị note–note (mồ côi, chỉ-1-dây, '
+          'ngoài index), và bảng coverage theo khu vực. Kèm cửa sổ dữ liệu của từng nguồn."',
+          "source: Sinh từ `.graph3d/insight.py` (log hoạt động + heat tích luỹ + graph vault)",
+          "date: " + created, "updated: " + today,
+          "type: reference", "tags: [vault-operation]", "---", "", ""]
+
+    L = ["# " + REPORT_TITLE, "",
+         "> [!info] Note SINH TỰ ĐỘNG — `python .graph3d/insight.py --report`",
+         "> Ảnh chụp sức khoẻ **truy xuất** của vault: độ tươi · độ phủ · độ kết nối. "
+         "Song sinh với [[Báo Cáo Audit Vault]] — bản kia bắt **vi phạm quy tắc**, bản này "
+         "đo **vault có đang được dùng đủ khắp không**. Ghi đè mỗi lần chạy: **đừng sửa tay**.",
+         "> - Đường dẫn note để dạng `code` chứ KHÔNG phải wikilink — report không được tự "
+         "tạo cạnh mới trong chính đồ thị nó đang đo.",
+         "> - Xem tương tác (click mở note): section **🩺 Sức khoẻ vault** trong app "
+         "[[KB Graph 3D]] (endpoint `/insight`, cùng một hàm tính).",
+         "> - Đây là **mô tả hiện trạng**, chưa phải worklist đề xuất — sinh đề xuất là "
+         "hạng mục H3 của [[Định Hướng KB Tự Vận Hành — Harness]].", "",
+         "**Lần chạy:** %s · **Cửa sổ:** %d ngày cuộn · nguội ≥ %d ngày · "
+         "**Dữ liệu:** %d event (từ %s) + heat tích luỹ từ %s (máy: %s)"
+         % (_fmt_min(ins["generated"]), p["days"], p["cold_days"], da["events"],
+            _fmt_day(da["oldest_event"]), _fmt_day(da["heat_since"]),
+            ", ".join(da["heat_machines"]) or "—"), "", "---", "",
+         "## Tổng quan", ""]
+
+    L.append(_tbl(["Chỉ số", "Số", "Nghĩa"], [
+        ["Note trong vault", c["notes"],
+         "note `.md` được ĐO — không tính chính note báo cáo này"],
+        ["Coverage", "%.1f%%" % c["pct"],
+         "%d note đã từng có agent đụng" % c["touched"]],
+        ["Chưa bao giờ đụng", c["never"], "không một dấu vết truy xuất nào"],
+        ["Chỉ khớp tìm kiếm", ins["unread"]["total"],
+         "có dấu vết nhưng chưa lần nào được đọc/sửa"],
+        ["Ghé trong %d ngày" % p["days"], "%d note" % w["cur_notes"],
+         "%d lượt (kỳ trước: %d lượt / %d note)"
+         % (w["cur_events"], w["prev_events"], w["prev_notes"])],
+        ["Nguội ≥%d ngày" % p["cold_days"], ins["cold"]["total"],
+         "note già nhất: %.1f ngày" % ins["cold"]["oldest_age"]],
+        ["Đang nguội đi", ins["cooling"]["total"],
+         "kỳ trước ≥%d lượt, kỳ này 0" % p["cooling_min"]],
+        ["Liên kết note–note", ins["vault"]["note_links"],
+         "%d thành phần liên thông, lớn nhất %d note"
+         % (wk["components"], wk["largest"])],
+        ["Mồ côi / chỉ-1-dây", "%d / %d" % (wk["orphans"]["total"], wk["thin"]["total"]),
+         "0 liên kết note / đúng 1 liên kết note"],
+        ["Ngoài index", wk["no_index"]["total"],
+         "không liên kết tới note index/MOC nào"],
+    ]))
+
+    L += ["", "## 🔥 Nóng nhất %d ngày qua" % p["days"], ""]
+    L.append(_tbl(["Note", "Lượt", "Kỳ trước", "Chênh"],
+                  [["`%s`" % h["file"], h["n"], h["prev"],
+                    "%+d" % h["delta"]] for h in ins["hot"]],
+                  "_— chưa có lượt truy xuất nào trong cửa sổ này._"))
+
+    L += ["", "## 🌡 Tuổi lần đụng cuối (toàn vault)", "",
+          "Bức tranh KHÔNG phụ thuộc ngưỡng — routine daily quét gần cả vault mỗi ngày nên "
+          "phân bố dồn về phía trẻ; đọc cột phải để thấy phần vault đang bị bỏ xa.", ""]
+    L.append(_tbl(["Khoảng (ngày)", "Số note"],
+                  [[k, v] for k, v in ins["cold"]["hist"].items()]))
+
+    L += ["", "## 🥶 Đang nguội đi (%d note)" % ins["cooling"]["total"], ""]
+    L.append(_tbl(["Note", "Kỳ trước", "Kỳ này"],
+                  [["`%s`" % x["file"], x["prev"], 0] for x in ins["cooling"]["list"]],
+                  "_— không note nào vừa rời tay._"))
+
+    L += ["", "## 🕸 Nguội ≥%d ngày (%d note — nguội nhất trước)"
+          % (p["cold_days"], ins["cold"]["total"]), ""]
+    L.append(_tbl(["Note", "Lần cuối", "Ngày", "Tổng lượt"],
+                  [["`%s`" % x["file"], _fmt_day(x["last"]), "%.1f" % x["days"],
+                    x["total"]] for x in ins["cold"]["list"]],
+                  "_— không note nào nguội quá ngưỡng._"))
+
+    L += ["", "## 🚫 Chưa vào đường truy xuất", "",
+          "Đây là chỗ dễ **sót data** nhất: tri thức có trong vault nhưng chưa lần nào "
+          "vào đường truy xuất của agent.", "",
+          "**Không một dấu vết nào (%d):**" % ins["never"]["total"], ""]
+    L.append(_tbl(["Note", "Liên kết note"],
+                  [["`%s`" % x["file"], x["degree"]] for x in ins["never"]["list"]],
+                  "_— mọi note đều đã từng được đụng._"))
+    L += ["", "**Chỉ tình cờ khớp tìm kiếm, chưa lần nào được đọc/sửa (%d):**"
+          % ins["unread"]["total"], ""]
+    L.append(_tbl(["Note"], [["`%s`" % f] for f in ins["unread"]["list"]],
+                  "_— không có._"))
+
+    L += ["", "## 🔗 Cụm ít kết nối (đồ thị note–note, bỏ cạnh tag/file)", "",
+          "%d thành phần liên thông · lớn nhất %d note"
+          % (wk["components"], wk["largest"]), ""]
+    if wk["small"]:
+        L += ["**Cụm nhỏ (≤%d note) nằm rời khỏi phần còn lại:**" % p["small_cluster"], ""]
+        L += ["- cụm %d note: %s" % (cl["size"], " · ".join("`%s`" % f for f in cl["files"]))
+              for cl in wk["small"]] + [""]
+    for label, key in (("Mồ côi (0 liên kết note)", "orphans"),
+                       ("Chỉ 1 liên kết note", "thin"),
+                       ("Không nằm index nào", "no_index")):
+        L += ["**%s (%d):**" % (label, wk[key]["total"]), ""]
+        L.append(_tbl(["Note"], [["`%s`" % f] for f in wk[key]["list"]], "_— không có._"))
+        L.append("")
+
+    L += ["", "## 🗺 Theo khu vực", ""]
+    L.append(_tbl(["Khu vực", "Note", "Đã đụng", "Chưa bao giờ", "Nguội", "Mồ côi"],
+                  [[a["area"], a["notes"], a["touched"], a["never"], a["cold"],
+                    a["orphans"]] for a in ins["areas"]]))
+
+    if da["heat_stale_paths"]:
+        L += ["", "> [!note] %d đường dẫn trong heat store không còn trong vault"
+              % da["heat_stale_paths"],
+              "> Note đã rename/xoá — lịch sử truy xuất của chúng thành mồ côi (mọi chỉ số "
+              "ở trên đã giao với vault hiện hành nên không bị nhiễu). Nhiều bất thường = "
+              "vault vừa qua một đợt tái cấu trúc lớn."]
+
+    L += ["", "---", "", "[[Index - Audit Vault]]", ""]
+    return "\n".join(fm) + "\n".join(L)
+
+
+def write_report(ins, path=None, dry_run=False):
+    """Ghi note báo cáo (LF, UTF-8). Trả (path, text, changed).
+
+    CỐ Ý không gọi log_activity: report là công cụ ĐO truy xuất, tự log lần ghi của
+    mình sẽ tự bơm chính nó thành "note nóng" ở lần chạy sau (vòng tự quan sát).
+    """
+    path = path or report_path()
+    text = render_report(ins, path=path)
+    old = None
+    try:
+        with open(path, encoding="utf-8") as f:
+            old = f.read()
+    except OSError:
+        pass
+    changed = old != text
+    if not dry_run:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+    return path, text, changed
+
+
+def main(argv=None):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:                                      # noqa: BLE001
+        pass                       # console cp1252 không in được tiếng Việt
+    ap = argparse.ArgumentParser(description="Insight sức khoẻ truy xuất vault (KB Graph 3D)")
+    ap.add_argument("--days", type=int, default=DEFAULT_DAYS,
+                    help="cửa sổ 'tuần' tính bằng ngày cuộn (mặc định 7)")
+    ap.add_argument("--cold", type=int, default=DEFAULT_COLD,
+                    help="bao nhiêu ngày không ai đụng thì coi là nguội (mặc định 14)")
+    ap.add_argument("--json", action="store_true", help="đổ nguyên JSON thay vì tóm tắt")
+    ap.add_argument("--report", action="store_true",
+                    help="ghi/cập nhật note báo cáo trong vault (%s)" % REPORT_REL)
+    ap.add_argument("--dry-run", action="store_true",
+                    help="với --report: in markdown ra stdout, KHÔNG ghi đĩa")
+    args = ap.parse_args(argv)
+    ins = collect(days=args.days, cold_days=args.cold)
+    if args.report:
+        path, text, changed = write_report(ins, dry_run=args.dry_run)
+        if args.dry_run:
+            print(text)
+            print("-- dry-run: KHÔNG ghi %s (%d ký tự, %s) --"
+                  % (path, len(text), "khác bản trên đĩa" if changed else "y hệt bản trên đĩa"))
+        else:
+            print("Đã ghi %s (%d ký tự)" % (path, len(text)))
+        return 0
+    if args.json:
+        print(json.dumps(ins, ensure_ascii=False, indent=2))
+    else:
+        print_summary(ins)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -10,7 +10,8 @@
   3. Unit — test_p1/p3/p4/p5 + test_reader (guard /note + /asset, giai doan 1 Vault
      Cockpit) + test_finder (/search fold + AND + loai dot-folder, giai doan 2)
      + test_cockpit (/timeline + /dashboard theo ngay local, giai doan 3)
-     + test_journal (journal dong bo log 2 may qua vault, v1.25.0);
+     + test_journal (journal dong bo log 2 may qua vault, v1.25.0)
+     + test_insight (tang insight suc khoe vault /insight + note bao cao, W10);
      test_p2 (~15s, spawn process that + chiem port 8397) chi chay khi --slow.
 
 Chay:  python .graph3d/tests/selfcheck.py [--slow]
@@ -24,7 +25,11 @@ from _scratch import SCRATCH, G3D, VAULT
 
 TESTS = os.path.dirname(os.path.abspath(__file__))
 PY_MAIN = ["activity_paths.py", "backup_graph3d.py", "build_graph_data.py",
-           "ensure_graph3d.py", "log_activity.py", "run_graph3d.py", "serve.py"]
+           "ensure_graph3d.py", "insight.py", "log_activity.py", "run_graph3d.py",
+           "serve.py"]
+# File CHI co trong ban private (backup git nam ngoai OneDrive — khong publish).
+# Thieu file NAY thi bo qua; thieu bat ky file nao KHAC van la FAIL (bug that).
+PRIVATE_ONLY = {"backup_graph3d.py"}
 INDEX = os.path.join(G3D, "index.html")
 SRC = os.path.join(G3D, "src")
 
@@ -50,9 +55,22 @@ def read(path):
         return f.read()
 
 
+def py_main():
+    """[(ten, path)] cac file .py goc CO MAT. File trong PRIVATE_ONLY vang mat thi
+    bo qua (ban public khong co); file khac vang mat -> FAIL ngay."""
+    out = []
+    for name in PY_MAIN:
+        p = os.path.join(G3D, name)
+        if os.path.isfile(p):
+            out.append((name, p))
+        elif name not in PRIVATE_ONLY:
+            check("0 thieu file goc " + name, False, p)
+    return out
+
+
 # ---- Lop 1: compile ----
 def lop1_compile():
-    py_files = [(n, os.path.join(G3D, n)) for n in PY_MAIN]
+    py_files = py_main()
     py_files += [("tests/" + os.path.basename(p), p)
                  for p in sorted(glob.glob(os.path.join(TESTS, "*.py")))]
     for name, p in py_files:
@@ -95,8 +113,14 @@ def lop2_contract():
         tools = set(LA.TYPE_BY_TOOL)
     except Exception as e:
         check("2b import log_activity de doc TYPE_BY_TOOL", False, e)
+    hook_cfg = os.path.join(VAULT, ".claude", "settings.json")
+    if tools is not None and not os.path.isfile(hook_cfg):
+        # Ban public (clone ra ngoai vault) khong co hook settings — kiem nay vo nghia
+        # o do; bo qua co bao, KHONG FAIL (bug that trong vault van bi bat nhu cu).
+        print("SKIP 2b matcher hook — khong tim thay " + hook_cfg + " (khong chay trong vault)")
+        tools = None
     if tools is not None:
-        cfg = json.loads(read(os.path.join(VAULT, ".claude", "settings.json")))
+        cfg = json.loads(read(hook_cfg))
         matched = set()
         for ent in cfg.get("hooks", {}).get("PostToolUse", []):
             cmds = " ".join(h.get("command", "") for h in ent.get("hooks", []))
@@ -126,12 +150,12 @@ def lop2_contract():
           re.search(r"vendor_root\s*=.*os\.sep", sv) is not None)
 
     # 2f — P4.1: parse_jsonl MOT ban duy nhat (3 ban tung phan ky)
-    defs = {n: read(os.path.join(G3D, n)).count("def parse_jsonl") for n in PY_MAIN}
+    defs = {n: read(p).count("def parse_jsonl") for n, p in py_main()}
     check("2f def parse_jsonl duy nhat, nam trong activity_paths.py",
           defs["activity_paths.py"] == 1 and sum(defs.values()) == 1, defs)
 
     # 2g — P4.5: khong hardcode hash package MSIX, phai glob Claude_*
-    hard = [n for n in PY_MAIN if "Claude_pzs8sxrjxfjjc" in read(os.path.join(G3D, n))]
+    hard = [n for n, p in py_main() if "Claude_pzs8sxrjxfjjc" in read(p)]
     check("2g khong hardcode Claude_pzs8sxrjxfjjc + co glob Claude_*",
           not hard and '"Claude_*"' in read(os.path.join(G3D, "activity_paths.py")), hard)
 
@@ -148,7 +172,7 @@ def lop2_contract():
 # ---- Lop 3: unit ----
 def lop3_unit(slow):
     files = ["test_p1.py", "test_p3.py", "test_p4.py", "test_p5.py", "test_reader.py",
-             "test_finder.py", "test_cockpit.py", "test_journal.py"]
+             "test_finder.py", "test_cockpit.py", "test_journal.py", "test_insight.py"]
     if slow:
         files.append("test_p2.py")
     for name in files:

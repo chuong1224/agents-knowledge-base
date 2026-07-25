@@ -1,0 +1,275 @@
+# -*- coding: utf-8 -*-
+"""Test tang insight suc khoe vault (W10) — insight.build_insight + render_report:
+
+  - cua so tuan CUON: nong tuan nay + so voi tuan truoc, event thieu ts khong lot vao
+  - "dang nguoi di" = tuan truoc >= COOLING_MIN ma tuan nay 0
+  - "nguoi" doc last-touch tu heat tich luy VA log, chi tinh note CON TON TAI trong graph
+  - histogram tuoi last-touch khong phu thuoc nguong
+  - "chua vao duong truy xuat": never (0 dau vet) + unread (chi khop tim kiem)
+  - do thi NOTE-NOTE: bo canh tag/file, thanh phan lien thong, mo coi, 1-day, ngoai index
+  - coverage theo khu vuc (folder cap 1)
+  - self_excludes: note bao cao do chinh module sinh KHONG duoc nam trong phep do
+  - render_report: idempotent, KHONG sinh wikilink tro tung note (khong tu tao canh moi)
+  - merge_cumulative_stores cua serve tra first/last (nguon cua chi so "nguoi")
+"""
+import os, sys, time
+sys.dont_write_bytecode = True   # khong sinh __pycache__ trong vault
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # console cp1252
+except Exception:
+    pass
+
+from _scratch import SCRATCH, G3D, VAULT
+os.environ.setdefault("GRAPH3D_ACTIVITY_FILE", os.path.join(SCRATCH, "act_insight.jsonl"))
+sys.path.insert(0, G3D)
+
+import insight as IN
+
+fails = []
+def check(name, cond, info=""):
+    print(("PASS " if cond else "FAIL ") + name + (("  ->  " + repr(info)) if not cond else ""))
+    if not cond:
+        fails.append(name)
+
+NOW = time.mktime((2026, 7, 25, 12, 0, 0, 0, 0, -1))
+D = IN.DAY
+
+def ev(days_ago, f, t="read", ag="Claude"):
+    return {"ts": NOW - days_ago * D, "file": f, "type": t, "agent": ag}
+
+def note(rel, group="Research", hub=False):
+    return {"id": rel, "kind": "note", "name": rel, "stem": rel.split("/")[-1][:-3],
+            "folder": os.path.dirname(rel), "group": group, "hub": hub,
+            "tags": [], "summary": "", "degree": 0}
+
+# --- vault gia: 2 khu vuc, 1 index (hub), 1 cum roi 2 note, 1 mo coi, node tag/file ---
+GRAPH = {
+    "meta": {"notes": 7, "links": 8, "files": 1, "tags": 1},
+    "nodes": [
+        note("Work/Index - Work.md", group="Index / MOC", hub=True),
+        note("Work/A/A.md"), note("Work/B/B.md"), note("Work/C/C.md"),
+        note("Research/D/D.md"), note("Research/E/E.md"),   # cum roi 2 note
+        note("Research/F/F.md"),                            # mo coi
+        {"id": "#research", "kind": "tag", "name": "#research", "stem": "#research",
+         "group": "Tag", "degree": 3, "folder": ""},
+        {"id": "Work/A/attachments/x.png", "kind": "file", "name": "x.png",
+         "stem": "x.png", "group": "File", "degree": 1, "folder": "Work/A/attachments"},
+    ],
+    "links": [
+        {"source": "Work/Index - Work.md", "target": "Work/A/A.md"},
+        {"source": "Work/Index - Work.md", "target": "Work/B/B.md"},
+        {"source": "Work/A/A.md", "target": "Work/B/B.md"},
+        {"source": "Work/B/B.md", "target": "Work/C/C.md"},   # C chi 1 day, khong toi index
+        {"source": "Research/D/D.md", "target": "Research/E/E.md"},
+        # canh tag/file KHONG duoc tinh vao do thi note-note:
+        {"source": "Research/F/F.md", "target": "#research"},
+        {"source": "Research/D/D.md", "target": "#research"},
+        {"source": "Work/A/A.md", "target": "Work/A/attachments/x.png"},
+    ],
+}
+
+EVENTS = [
+    ev(0.5, "Work/A/A.md"), ev(1, "Work/A/A.md"), ev(2, "Work/A/A.md", "edit"),
+    ev(3, "Work/B/B.md"),
+    ev(9, "Work/C/C.md"), ev(9.5, "Work/C/C.md"), ev(10, "Work/C/C.md"),  # tuan TRUOC: 3 luot
+    ev(8, "Research/D/D.md", "search"),                      # chi khop tim kiem
+    ev(20, "Work/da-xoa.md"),                                # note khong con trong vault
+    {"file": "Work/B/B.md", "type": "read", "agent": "Claude"},   # thieu ts
+]
+HEAT = {
+    "Work/A/A.md": {"total": 9, "read": 8, "search": 0, "edit": 1,
+                    "first": NOW - 20 * D, "last": NOW - 0.5 * D, "agents": {"Claude": 9}},
+    "Work/B/B.md": {"total": 2, "read": 2, "search": 0, "edit": 0,
+                    "first": NOW - 5 * D, "last": NOW - 3 * D, "agents": {"Claude": 2}},
+    "Work/C/C.md": {"total": 3, "read": 3, "search": 0, "edit": 0,
+                    "first": NOW - 12 * D, "last": NOW - 9 * D, "agents": {"Claude": 3}},
+    "Research/D/D.md": {"total": 1, "read": 0, "search": 1, "edit": 0,
+                        "first": NOW - 8 * D, "last": NOW - 8 * D, "agents": {"Claude": 1}},
+    "Research/E/E.md": {"total": 4, "read": 4, "search": 0, "edit": 0,
+                        "first": NOW - 40 * D, "last": NOW - 33 * D, "agents": {"Hermes": 4}},
+    "Work/da-xoa.md": {"total": 7, "read": 7, "search": 0, "edit": 0,
+                       "first": NOW - 30 * D, "last": NOW - 20 * D, "agents": {"Claude": 7}},
+}
+META = {"machines": ["HOST-A"], "since": NOW - 40 * D, "updated": NOW}
+
+I = IN.build_insight(EVENTS, GRAPH, heat_notes=HEAT, heat_meta=META, now=NOW,
+                     days=7, cold_days=7, exclude=set())
+
+# ---- do thi note-note: canh tag/file bi bo ----
+notes, adj, hubs = IN.note_graph(GRAPH)
+check("N chi lay node kind=note", len(notes) == 7, sorted(notes))
+check("N bo canh tag/file khoi do thi note-note",
+      I["vault"]["note_links"] == 5, I["vault"]["note_links"])
+check("N hub = nhom Index / MOC", hubs == {"Work/Index - Work.md"}, hubs)
+
+# ---- cua so tuan ----
+check("W tuan nay dem dung", (I["window"]["cur_events"], I["window"]["cur_notes"]) == (4, 2),
+      I["window"])
+# tuan TRUOC = [NOW-14d, NOW-7d): C x3 (9/9.5/10 ngay) + D (8 ngay) = 4 luot / 2 note
+check("W tuan truoc dem dung", (I["window"]["prev_events"], I["window"]["prev_notes"]) == (4, 2),
+      I["window"])
+# 10 event dau vao: 8 nam trong 2 cua so, 1 cach nay 20 ngay, 1 THIEU ts (ts=0 -> ngoai het)
+check("W event thieu ts khong lot vao cua so nao",
+      I["window"]["cur_events"] + I["window"]["prev_events"] == 8,
+      (I["window"]["cur_events"], I["window"]["prev_events"]))
+hot = {h["file"]: h for h in I["hot"]}
+check("W nong nhat = A voi 3 luot", I["hot"][0]["file"] == "Work/A/A.md"
+      and I["hot"][0]["n"] == 3, I["hot"][:2])
+check("W hot mang so tuan truoc + delta", hot["Work/A/A.md"]["prev"] == 0
+      and hot["Work/A/A.md"]["delta"] == 3, hot["Work/A/A.md"])
+check("W hot co co 'exists' de UI biet note con hay khong",
+      all("exists" in h for h in I["hot"]))
+
+# ---- dang nguoi di ----
+cool = {c["file"] for c in I["cooling"]["list"]}
+check("C 'dang nguoi di' = C (tuan truoc 3, tuan nay 0)", cool == {"Work/C/C.md"}, cool)
+check("C khong ke note tuan truoc it luot (< COOLING_MIN)",
+      "Research/D/D.md" not in cool and I["cooling"]["total"] == 1, I["cooling"])
+
+# ---- nguoi + histogram ----
+cold = {c["file"]: c for c in I["cold"]["list"]}
+check("K nguoi >=7 ngay: C, D, E", set(cold) == {"Work/C/C.md", "Research/D/D.md",
+      "Research/E/E.md"}, set(cold))
+check("K note da xoa khoi vault KHONG bao nguoi", "Work/da-xoa.md" not in cold)
+check("K nguoi nhat len dau", I["cold"]["list"][0]["file"] == "Research/E/E.md",
+      I["cold"]["list"][0])
+check("K so ngay tinh dung", abs(cold["Work/C/C.md"]["days"] - 9) < 0.01,
+      cold["Work/C/C.md"])
+check("K histogram phu du bucket + tong = note co last",
+      sum(I["cold"]["hist"].values()) == 5
+      and I["cold"]["hist"]["30+"] == 1 and I["cold"]["hist"]["7-14"] == 2,
+      I["cold"]["hist"])
+check("K oldest_age = note nguoi nhat", abs(I["cold"]["oldest_age"] - 33) < 0.01,
+      I["cold"]["oldest_age"])
+
+# ---- chua vao duong truy xuat ----
+# khong dau vet nao: F (chi co canh tag) va chinh note index (fixture khong ai doc)
+check("U never = F + note index (0 dau vet)",
+      [x["file"] for x in I["never"]["list"]] == ["Research/F/F.md", "Work/Index - Work.md"],
+      I["never"])
+check("U unread = D (chi khop tim kiem, chua doc/sua)",
+      I["unread"]["list"] == ["Research/D/D.md"], I["unread"])
+check("U coverage dung (5 note co dau vet / 7)",
+      (I["coverage"]["touched"], I["coverage"]["never"], I["coverage"]["notes"],
+       I["coverage"]["pct"]) == (5, 2, 7, 71.4), I["coverage"])
+
+# ---- cum it ket noi ----
+wk = I["weak"]
+check("G 3 thanh phan lien thong (4 + 2 + 1)", wk["components"] == 3, wk["components"])
+check("G thanh phan lon nhat 4 note", wk["largest"] == 4, wk["largest"])
+check("G cum nho (2 note D-E) duoc liet ke",
+      [c["size"] for c in wk["small"]] == [2]
+      and set(wk["small"][0]["files"]) == {"Research/D/D.md", "Research/E/E.md"}, wk["small"])
+check("G mo coi = F", wk["orphans"]["list"] == ["Research/F/F.md"], wk["orphans"])
+check("G chi-1-day = C, D, E", set(wk["thin"]["list"]) == {"Work/C/C.md",
+      "Research/D/D.md", "Research/E/E.md"}, wk["thin"])
+check("G ngoai index = moi note tru A, B (hub khong tu tinh)",
+      set(wk["no_index"]["list"]) == {"Work/C/C.md", "Research/D/D.md",
+                                      "Research/E/E.md", "Research/F/F.md"},
+      wk["no_index"])
+
+# ---- khu vuc ----
+ar = {a["area"]: a for a in I["areas"]}
+check("A khu vuc = folder cap 1", set(ar) == {"Work", "Research"}, set(ar))
+check("A Work: 4 note / 3 da dung / 1 chua / 1 nguoi / 0 mo coi",
+      (ar["Work"]["notes"], ar["Work"]["touched"], ar["Work"]["never"],
+       ar["Work"]["cold"], ar["Work"]["orphans"]) == (4, 3, 1, 1, 0), ar["Work"])
+check("A Research: 3 note / 2 da dung / 1 chua / 1 mo coi / 2 nguoi",
+      (ar["Research"]["notes"], ar["Research"]["touched"], ar["Research"]["never"],
+       ar["Research"]["orphans"], ar["Research"]["cold"]) == (3, 2, 1, 1, 2), ar["Research"])
+
+# ---- cua so du lieu phai di kem so ----
+check("D data mang cua so cua tung nguon",
+      I["data"]["heat_since"] == META["since"]
+      and I["data"]["heat_machines"] == ["HOST-A"]
+      and I["data"]["oldest_event"] == NOW - 20 * D, I["data"])
+check("D dem duong dan heat khong con trong vault", I["data"]["heat_stale_paths"] == 1,
+      I["data"]["heat_stale_paths"])
+
+# ---- tham so + bien ----
+I90 = IN.build_insight(EVENTS, GRAPH, heat_notes=HEAT, now=NOW, days=7, cold_days=90,
+                       exclude=set())
+check("P cold_days=90 -> khong note nao nguoi", I90["cold"]["total"] == 0)
+check("P days/cold_days xau bi ep >= 1",
+      IN.build_insight([], GRAPH, now=NOW, days=0, cold_days=-5,
+                       exclude=set())["params"] == {"days": 1, "cold_days": 1,
+                                                    "cooling_min": IN.COOLING_MIN,
+                                                    "small_cluster": IN.SMALL_CLUSTER})
+IE = IN.build_insight([], {"nodes": [], "links": [], "meta": {}}, now=NOW, exclude=set())
+check("P vault rong khong loi", IE["coverage"]["pct"] == 0.0 and IE["hot"] == []
+      and IE["weak"]["components"] == 0, IE["coverage"])
+check("P khong mutate list event dau vao", all("dwell" not in e for e in EVENTS)
+      and len(EVENTS) == 10)
+
+# ---- self_excludes: cong cu do khong nam trong phep do ----
+G2 = {"meta": {}, "nodes": GRAPH["nodes"] + [note(IN.REPORT_REL)], "links": GRAPH["links"]}
+E2 = EVENTS + [ev(0.2, IN.REPORT_REL, "edit")]
+ISELF = IN.build_insight(E2, G2, heat_notes=HEAT, now=NOW, days=7, cold_days=7)
+check("S note bao cao bi loai khoi tong note", ISELF["coverage"]["notes"] == 7,
+      ISELF["coverage"])
+check("S note bao cao khong nam trong 'chua bao gio dung'",
+      all(x["file"] != IN.REPORT_REL for x in ISELF["never"]["list"]), ISELF["never"])
+check("S event cua note bao cao khong lot vao bang nong",
+      all(h["file"] != IN.REPORT_REL for h in ISELF["hot"]), ISELF["hot"])
+check("S self_excludes chua duong dan mac dinh", IN.REPORT_REL in IN.self_excludes())
+
+# ---- render_report ----
+RP = os.path.join(SCRATCH, "insight_report.md")
+txt = IN.render_report(I, path=RP)
+check("R render 2 lan cung data = y het", txt == IN.render_report(I, path=RP))
+check("R co frontmatter gate_ignore + tag vault-operation",
+      txt.startswith("---\ngate_ignore: true\n") and "tags: [vault-operation]" in txt)
+check("R title/H1 khop nhau", ("title: " + IN.REPORT_TITLE) in txt
+      and ("# " + IN.REPORT_TITLE) in txt)
+# Bao cao KHONG duoc wikilink tung note: no dang do chinh do thi do, tu them canh
+# la lan sau so mo coi/cum/ket noi bi meo.
+import re
+links = set(re.findall(r"\[\[([^\]]+)\]\]", txt))
+check("R khong wikilink tro tung note duoc do",
+      not any(l.endswith(".md") or "/" in l for l in links), sorted(links))
+for f in ("Work/A/A.md", "Research/F/F.md"):
+    check("R duong dan '%s' in dang code" % f, ("`%s`" % f) in txt)
+check("R co du 7 muc noi dung",
+      all(h in txt for h in ("## Tổng quan", "## 🔥 Nóng nhất", "## 🌡 Tuổi lần đụng cuối",
+                             "## 🥶 Đang nguội đi", "## 🕸 Nguội", "## 🚫 Chưa vào đường truy xuất",
+                             "## 🔗 Cụm ít kết nối", "## 🗺 Theo khu vực")))
+check("R ket thuc bang link index", txt.rstrip().endswith("[[Index - Audit Vault]]"))
+
+os.environ["GRAPH3D_INSIGHT_REPORT"] = RP
+_p, _t, changed = IN.write_report(I, dry_run=True)
+check("R dry-run KHONG ghi dia", not os.path.exists(RP) and changed)
+p2, t2, _c = IN.write_report(I)
+check("R ghi that ra dung duong dan env", p2 == RP and os.path.exists(RP))
+with open(RP, "rb") as f:
+    raw = f.read()
+check("R file ghi ra LF + UTF-8", b"\r\n" not in raw and raw.decode("utf-8"))
+_p3, _t3, changed2 = IN.write_report(I, dry_run=True)
+check("R ghi lai cung data -> khong doi (idempotent)", not changed2)
+os.environ.pop("GRAPH3D_INSIGHT_REPORT", None)
+os.remove(RP)
+
+# ---- serve: nguon first/last cho chi so "nguoi" + endpoint ----
+import serve as SV
+check("V serve co merge_cumulative_stores", hasattr(SV, "merge_cumulative_stores"))
+merged, hmeta = SV.merge_cumulative_stores()
+check("V merge tra (notes, meta) dung hinh",
+      isinstance(merged, dict) and set(hmeta) == {"machines", "since", "updated"}, hmeta)
+if merged:
+    row = next(iter(merged.values()))
+    check("V moi note trong store co first/last (nguon chi so nguoi)",
+          "first" in row and "last" in row, row)
+check("V /heat scope=all giu nguyen contract cu",
+      set(SV.build_heat_cumulative(top_n=1)) >= {"scope", "counts", "max", "total",
+                                                 "distinct", "machines", "since",
+                                                 "updated", "top"})
+sv_src = open(os.path.join(G3D, "serve.py"), encoding="utf-8").read()
+check("V serve co endpoint /insight goi insight.build_insight",
+      '"/insight"' in sv_src and "insight.build_insight" in sv_src)
+check("V insight.py nam trong _VERSION_FILES (sua module PHAI restart server)",
+      '"insight.py"' in open(os.path.join(G3D, "activity_paths.py"), encoding="utf-8").read())
+ui_src = open(os.path.join(G3D, "src", "insight.js"), encoding="utf-8").read()
+check("V UI khong tu tinh lai chi so (khong co nguong hard-code)",
+      "pollInsight" in ui_src and "cold_days" not in ui_src.split("function render")[0])
+
+print("\nTONG KET:", ("FAIL %d muc" % len(fails)) if fails else "ALL PASS")
+sys.exit(1 if fails else 0)

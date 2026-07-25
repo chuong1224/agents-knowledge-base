@@ -19,6 +19,10 @@ Endpoint:
                     mọi nguồn log, kèm danh sách ngày còn trong log — UI phát lại
   /dashboard?day= -> tổng hợp hiệu quả truy xuất một ngày: per-agent + histogram
                      giờ + top note (metric chuỗi tính bằng build_chains)
+  /insight?days=&cold= -> "vault đang khoẻ không" (W10): note nóng/đang nguội theo
+                     tuần cuộn, note nguội theo lần đụng cuối, note CHƯA BAO GIỜ
+                     agent đụng, cụm ít kết nối, coverage theo khu vực — tính trong
+                     insight.py (CLI --report của module đó dùng CÙNG hàm)
   /activity?cursor=N -> event mới trong activity.jsonl từ byte-offset N
                         (hook log_activity.py của Claude Code ghi file này)
   /work          -> bản đồ việc đang mở của vault, đã phân loại (làm ngay được / chờ việc / chờ điều kiện)
@@ -58,6 +62,7 @@ _httpd = None            # gán trong main() để /shutdown gọi được
 sys.path.insert(0, HERE)
 import build_graph_data  # noqa: E402
 import log_activity  # noqa: E402  (dùng append_events cho endpoint /ping)
+import insight  # noqa: E402  (tầng insight sức khoẻ vault — /insight)
 
 _cache = {"ts": 0.0, "data": None}
 _cache_lock = threading.Lock()
@@ -438,9 +443,17 @@ def build_heat(events, top_n=14):
                     for f, r in top]}
 
 
-def build_heat_cumulative(top_n=14):
-    """Heat TÍCH LUỸ dài hạn: gộp mọi heat_cumulative-<HOST>.json (đa máy) trong vault.
-    Không mất khi log xoay vòng — dùng phân tích hiệu quả vault lâu dài."""
+def merge_cumulative_stores():
+    """Gộp mọi heat_cumulative-<HOST>.json (đa máy) trong vault → (notes, meta).
+
+    notes = {rel: {total, read, search, edit, first, last, agents}} — `first`/`last`
+    là mốc dài hạn KHÔNG mất khi log cuộn xoay vòng, nên đây là nguồn duy nhất trả
+    lời được "note này bao lâu rồi không ai đụng" (insight.py dùng).
+    meta  = {machines, since, updated}.
+
+    Tách riêng khỏi build_heat_cumulative để hai người tiêu thụ (/heat và /insight)
+    dùng CHUNG một logic gộp — /heat giữ nguyên contract của nó (chỉ counts + top).
+    """
     try:
         log_activity.reconcile_cumulative_with_log()
     except Exception:
@@ -464,17 +477,31 @@ def build_heat_cumulative(top_n=14):
         for rel, r in (d.get("notes") or {}).items():
             if not isinstance(r, dict):
                 continue
-            m = merged.setdefault(rel, {"total": 0, "read": 0, "search": 0, "edit": 0, "agents": {}})
+            m = merged.setdefault(rel, {"total": 0, "read": 0, "search": 0, "edit": 0,
+                                        "first": None, "last": None, "agents": {}})
             m["total"] += r.get("total", 0)
             for t in ("read", "search", "edit"):
                 m[t] += r.get(t, 0)
+            for k, pick in (("first", min), ("last", max)):
+                v = r.get(k)
+                if isinstance(v, (int, float)) and v:
+                    m[k] = v if m[k] is None else pick(m[k], v)
             for ag, n in (r.get("agents") or {}).items():
                 m["agents"][ag] = m["agents"].get(ag, 0) + n
+    return merged, {"machines": sorted(set(machines)), "since": since, "updated": updated}
+
+
+def build_heat_cumulative(top_n=14):
+    """Heat TÍCH LUỸ dài hạn cho heatmap: đếm + top note (gộp đa máy qua
+    merge_cumulative_stores). Không mất khi log xoay vòng — dùng phân tích hiệu quả
+    vault lâu dài."""
+    merged, hmeta = merge_cumulative_stores()
+    machines, since, updated = hmeta["machines"], hmeta["since"], hmeta["updated"]
     counts = {f: r["total"] for f, r in merged.items()}
     mx = max(counts.values()) if counts else 0
     top = sorted(merged.items(), key=lambda kv: kv[1]["total"], reverse=True)[:top_n]
     return {"scope": "all", "counts": counts, "max": mx, "total": sum(counts.values()),
-            "distinct": len(counts), "machines": sorted(set(machines)),
+            "distinct": len(counts), "machines": machines,
             "since": since, "updated": updated,
             "top": [{"file": f, "n": r["total"],
                      "types": {t: r.get(t, 0) for t in ("read", "search", "edit")},
@@ -745,6 +772,28 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, body)
             return
 
+        if path == "/insight":
+            # "Vault đang khoẻ không" (W10): tính trong insight.build_insight — cùng
+            # hàm mà CLI `insight.py --report` gọi, không có bộ đếm thứ hai. Chỉ ĐỌC:
+            # event đã cache theo mtime + graph cache 3s + store heat, không ghi gì.
+            qs = parse_qs(parsed.query)
+
+            def _int(name, default, lo, hi):
+                try:
+                    return max(lo, min(hi, int(qs.get(name, [str(default)])[0])))
+                except ValueError:
+                    return default
+            days = _int("days", insight.DEFAULT_DAYS, 1, 90)
+            cold = _int("cold", insight.DEFAULT_COLD, 1, 365)
+            heat_notes, heat_meta = merge_cumulative_stores()
+            ins = insight.build_insight(read_all_events(), get_graph_data(),
+                                        heat_notes=heat_notes, heat_meta=heat_meta,
+                                        days=days, cold_days=cold)
+            ins["boot_id"] = BOOT_ID
+            ins["host"] = host_name()
+            self._send(200, json.dumps(ins, ensure_ascii=False).encode("utf-8"))
+            return
+
         if path == "/work":
             # Work Map — xem workmap_export(). Lỗi đọc registry (JSON hỏng, script
             # lỗi) trả 500 kèm thông điệp để UI hiện thẳng, đừng nuốt im.
@@ -824,7 +873,7 @@ def _restart_sources_sane():
     """Chống restart vào nguồn OneDrive đang ghi DỞ: file .py phải compile được,
     index.html phải kết thúc bằng </html>. Hỏng → coi như CHƯA ổn định, chờ bản
     hoàn chỉnh ở tick sau thay vì relaunch vào code cụt (review P5.9)."""
-    for name in ("serve.py", "log_activity.py", "activity_paths.py"):
+    for name in ("serve.py", "log_activity.py", "activity_paths.py", "insight.py"):
         try:
             with open(os.path.join(HERE, name), "rb") as f:
                 compile(f.read(), name, "exec")

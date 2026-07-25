@@ -133,7 +133,8 @@ def journal_host(path):
 # đang chạy có "cũ" so với code trên đĩa hay không → tự chữa.
 # Từ giai đoạn 0 Vault Cockpit: UI tách thành ES modules trong src/ — hash phủ cả
 # src/* để sửa module cũng kích tự-reload y như sửa index.html.
-_VERSION_FILES = ("serve.py", "index.html", "activity_paths.py", "log_activity.py")
+_VERSION_FILES = ("serve.py", "index.html", "activity_paths.py", "log_activity.py",
+                  "insight.py")   # serve import lúc nạp => sửa file này PHẢI restart
 
 
 def _version_paths(here):
