@@ -689,5 +689,48 @@ select#ck-day:focus { border-color: var(--cyan); }
 .itg-item .d { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; color: var(--faint); }
 
+/* ---------- 🌱 Onboarding vault trống (W13): 3 lối đi thay cho không gian rỗng ----------
+   z-index 42 = TRÊN mọi overlay khác (41): vault trống thì chẳng có gì để xem bên dưới,
+   và đây là thứ duy nhất user mới cần thấy. Không dùng backdrop mờ đặc — vẫn để lộ
+   nền sao/brand để user thấy app đang chạy bình thường, chỉ là chưa có dữ liệu. */
+#onb { position: absolute; inset: 0; z-index: 42; display: none; background: rgba(8,6,16,.72); }
+#onb.show { display: block; }
+#onb-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: min(860px, 94vw); max-height: 90vh; overflow-y: auto; background: var(--panel);
+  border: 1px solid var(--border); border-radius: 16px; backdrop-filter: blur(12px);
+  padding: 20px 22px 18px;
+  box-shadow: 0 0 44px rgba(255,46,151,.16), inset 0 0 60px rgba(4,217,255,.05); }
+#onb-head { display: flex; align-items: baseline; gap: 10px; }
+#onb-head h3 { margin: 0; font-size: 14px; letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--cyan); flex: none; }
+#onb-sum { color: var(--faint); font-size: 11px; }
+#onb-sum b { color: var(--muted); }
+#onb-x { margin-left: auto; cursor: pointer; color: var(--faint); font-size: 15px; flex: none; }
+#onb-x:hover { color: var(--magenta); }
+/* Câu tuyên ngôn EN — cùng thông điệp README/landing đợt 5, đặt ngay đầu vì hiểu lầm
+   "phải học Obsidian trước" là thứ chặn user mới nhiều nhất. */
+#onb-lead { margin: 9px 0 15px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+#onb-lead b { color: var(--text); }
+#onb-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 11px; }
+.onb-card { border: 1px solid var(--border); border-radius: 12px; padding: 13px 13px 12px;
+  background: rgba(24,20,40,.5); display: flex; flex-direction: column; }
+.onb-card:hover { border-color: var(--faint); }
+.onb-ic { font-size: 20px; line-height: 1; }
+.onb-t { margin-top: 7px; font-size: 12.5px; color: var(--text); font-weight: 600; }
+.onb-d { margin-top: 5px; color: var(--faint); font-size: 11px; line-height: 1.55; flex: 1; }
+.onb-d b { color: var(--muted); }
+.onb-d code { color: var(--muted); font-size: 10px; word-break: break-all; }
+.onb-path { margin-top: 7px; color: var(--muted); font-size: 10.5px; font-family: ui-monospace,
+  Consolas, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.onb-a { display: flex; margin-top: 11px; }
+.onb-a .btn { padding: 7px 0; }
+.onb-cmd { flex: 1; cursor: pointer; padding: 6px 8px; border-radius: 8px; font-size: 10.5px;
+  border: 1px dashed var(--border); background: var(--bg2); color: var(--muted);
+  word-break: break-all; }
+.onb-cmd:hover { border-color: var(--cyan); color: var(--text); }
+#onb-status { margin-top: 13px; min-height: 16px; font-size: 11.5px; color: var(--faint); }
+#onb-status.ok { color: var(--green); }
+#onb-status.warn { color: var(--orange); }
+
 #err { position: absolute; inset: 0; display: none; place-items: center; z-index: 50;
   background: var(--bg); color: var(--muted); text-align: center; padding: 30px; }

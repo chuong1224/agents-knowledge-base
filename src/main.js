@@ -15,6 +15,7 @@ import { initCockpit, openTimeline, closeTimeline, openDashboard, closeDashboard
 import { initWorkMap, openWorkMap, closeWorkMap, pollWorkCount } from './work.js';
 import { initInsight, openInsight, closeInsight, pollInsight } from './insight.js';
 import { initIntegrity, openIntegrity, closeIntegrity, pollIntegrity } from './integrity.js';
+import { initOnboarding, openOnboarding, closeOnboarding } from './onboarding.js';
 import { initWorkspace, WS, wsOpen, wsSwitch, wsCloseTab, wsSplit, wsBack,
          togglePin, pushRecent, renderSbSections } from './workspace.js';
 
@@ -36,7 +37,7 @@ async function boot() {
 
   initGraph();                           // ForceGraph3D + orphanPull + controls + trailGroup
   window.__G = S.Graph; // debug hook: truy cập Graph từ DevTools console
-  window.__fx = { nodeOnScreen, followFlyTo, agentTrails, agentFlow, replayFlow, buildUI, updateTrails, updateWarps, spawnWarp, warps, openReader, closeReader, openSwitcher, closeSwitcher, buildTree, openTimeline, closeTimeline, openDashboard, closeDashboard, openWorkMap, closeWorkMap, openInsight, closeInsight, pollInsight, openIntegrity, closeIntegrity, pollIntegrity, WS, wsOpen, wsSwitch, wsCloseTab, wsSplit, wsBack, togglePin, pushRecent, renderSbSections }; // debug hook nghiệm thu (Ư1/Ư4/Ư6/Reader/Finder/Cockpit/Workspace/Insight — tab ẩn không có rAF, phải gọi tay)
+  window.__fx = { nodeOnScreen, followFlyTo, agentTrails, agentFlow, replayFlow, buildUI, updateTrails, updateWarps, spawnWarp, warps, openReader, closeReader, openSwitcher, closeSwitcher, buildTree, openTimeline, closeTimeline, openDashboard, closeDashboard, openWorkMap, closeWorkMap, openInsight, closeInsight, pollInsight, openIntegrity, closeIntegrity, pollIntegrity, openOnboarding, closeOnboarding, WS, wsOpen, wsSwitch, wsCloseTab, wsSplit, wsBack, togglePin, pushRecent, renderSbSections }; // debug hook nghiệm thu (Ư1/Ư4/Ư6/Reader/Finder/Cockpit/Workspace/Insight — tab ẩn không có rAF, phải gọi tay)
 
   physics('bung', true);
   addStars();
@@ -53,6 +54,7 @@ async function boot() {
   initInsight();                  // 🩺 Sức khoẻ vault (/insight — W10)
   initIntegrity();                // 🧪 Toàn vẹn vault (/integrity — W11), cùng section 🩺
   initSections();                 // Ư2.1: gập/mở section + nhớ trạng thái localStorage
+  initOnboarding();               // 🌱 Vault TRỐNG (W13): 3 lối đi thay vì graph rỗng
   // Ư3.3: chú giải ký hiệu chuỗi — đóng 1 lần là nhớ vĩnh viễn
   try { if (localStorage.getItem('kbgraph3d.chainHelp.v1') === 'off') $('chain-help').style.display = 'none'; } catch (e) {}
   $('chain-help-x').onclick = () => {

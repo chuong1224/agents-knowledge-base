@@ -28,6 +28,13 @@ Endpoint:
                      bắt buộc, file nhị phân chưa "mở nilon" — tính trong
                      integrity.py (tiêu chí bỏ qua note lấy của gate verify_vault_
                      integrity.py; luật đếm được đọc từ vault-rules.json trong vault)
+  /onboarding    -> vault có TRỐNG không + lối đi nào sẵn có (W13): starter-vault/
+                    và demo/vault/ bundled hay không — UI dựng empty-state từ đây
+  POST /starter-init -> chép starter-vault/ vào vault đang trống (không đè file)
+  POST /demo-start   -> mở cockpit trên vault demo bundled ở PORT RIÊNG (gọi
+                    ensure_graph3d.py --demo, không tự chạy serve.py)
+                    Hai POST này là hành động DUY NHẤT có tác dụng phụ — có hàng rào
+                    Origin; xem onboarding.py.
   /activity?cursor=N -> event mới trong activity.jsonl từ byte-offset N
                         (hook log_activity.py của Claude Code ghi file này)
   /work          -> bản đồ việc đang mở của vault, đã phân loại (làm ngay được / chờ việc / chờ điều kiện)
@@ -42,6 +49,7 @@ from collections import Counter
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -55,7 +63,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 VAULT = os.path.dirname(HERE)
 from activity_paths import (active_activity_log_path,  # noqa: E402
                             activity_log_candidates, source_version,
-                            cumulative_heat_files, parse_jsonl,
+                            cumulative_heat_files, parse_jsonl, restart_py_files,
                             vault_journal_files, journal_host, host_name)
 
 # Danh tính process (browser dùng để phát hiện server vừa restart → tự resync,
@@ -63,12 +71,14 @@ from activity_paths import (active_activity_log_path,  # noqa: E402
 BOOT_ID = uuid.uuid4().hex[:12]
 VERSION = source_version(HERE) or "unknown"
 _httpd = None            # gán trong main() để /shutdown gọi được
+PORT = [8321]            # gán trong main() — POST guard so Origin theo port đang chạy
 
 sys.path.insert(0, HERE)
 import build_graph_data  # noqa: E402
 import log_activity  # noqa: E402  (dùng append_events cho endpoint /ping)
 import insight  # noqa: E402  (tầng insight sức khoẻ vault — /insight)
 import integrity  # noqa: E402  (đèn báo toàn vẹn vault — /integrity)
+import onboarding  # noqa: E402  (vault trống: empty-state + starter vault — /onboarding)
 
 _cache = {"ts": 0.0, "data": None}
 _cache_lock = threading.Lock()
@@ -820,6 +830,15 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, json.dumps(rep, ensure_ascii=False).encode("utf-8"))
             return
 
+        if path == "/onboarding":
+            # Vault TRỐNG (W13): UI hỏi "có gì để mời user vào không" — số note lấy
+            # từ cache graph (khỏi quét lần hai), phần còn lại là những lối đi có
+            # SẴN trên máy này (starter-vault/ + demo/vault/ bundled hay không).
+            st = onboarding.state(VAULT, notes=get_graph_data()["meta"]["notes"])
+            st["boot_id"] = BOOT_ID
+            self._send(200, json.dumps(st, ensure_ascii=False).encode("utf-8"))
+            return
+
         if path == "/work":
             # Work Map — xem workmap_export(). Lỗi đọc registry (JSON hỏng, script
             # lỗi) trả 500 kèm thông điệp để UI hiện thẳng, đừng nuốt im.
@@ -891,6 +910,81 @@ class Handler(BaseHTTPRequestHandler):
 
         self._send(404, b'{"error":"not found"}')
 
+    # ---- POST: hai hành động DUY NHẤT có tác dụng phụ (W13 — onboarding) ----
+    # Mọi thứ khác của app là GET thuần đọc. Hai cái này CỐ Ý là POST chứ không phải
+    # GET như /ping: chúng ghi file vào vault / spawn process, mà GET thì một trang web
+    # bất kỳ đang mở trong cùng trình duyệt cũng gọi được (server bind loopback nhưng
+    # trình duyệt của user thì ở trong loopback). POST cùng-origin luôn kèm header
+    # Origin ⇒ so Origin là hàng rào CSRF đủ chặt cho server local.
+    def _origin_ok(self):
+        origin = self.headers.get("Origin")
+        if not origin:
+            return True                      # curl / script trên chính máy này
+        return origin in ("http://127.0.0.1:%d" % PORT[0],
+                          "http://localhost:%d" % PORT[0])
+
+    def do_POST(self):
+        path = urlparse(self.path).path
+        if not self._origin_ok():
+            self._send(403, b'{"error":"origin khong hop le"}')
+            return
+
+        if path == "/starter-init":
+            # Dựng vault ĐẦU TIÊN ngay trong app: chép starter-vault/ vào vault đang
+            # trống. Hàng rào "vault phải trống" + "không đè file" nằm trong
+            # onboarding.install_starter (một chỗ, CLI dùng chung).
+            try:
+                res = onboarding.install_starter(VAULT)
+            except onboarding.OnboardingError as exc:
+                self._send(400, json.dumps({"error": str(exc)},
+                                           ensure_ascii=False).encode("utf-8"))
+                return
+            except OSError as exc:
+                self._send(500, json.dumps({"error": str(exc)},
+                                           ensure_ascii=False).encode("utf-8"))
+                return
+            with _cache_lock:                # vault vừa đổi → /graph-data phải quét lại ngay
+                _cache["data"] = None
+            self._send(200, json.dumps(res, ensure_ascii=False).encode("utf-8"))
+            return
+
+        if path == "/demo-start":
+            # Mở cockpit trên vault demo bundled. Server KHÔNG tự chạy serve.py —
+            # nó gọi ensure_graph3d.py (điểm vào idempotent) đúng như launcher, và
+            # trên PORT KHÁC nên server hiện tại không bị đụng.
+            st = onboarding.state(VAULT)
+            if not st["demo"]["available"]:
+                self._send(400, json.dumps(
+                    {"error": "bản cài này không kèm vault demo (%s)" % st["demo"]["path"]},
+                    ensure_ascii=False).encode("utf-8"))
+                return
+            port = st["demo"]["port"]
+            try:
+                subprocess.Popen(
+                    [sys.executable, os.path.join(HERE, "ensure_graph3d.py"),
+                     "--demo", "--no-open", "--port", str(port)],
+                    cwd=HERE, env=onboarding.demo_env(), close_fds=True,
+                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL)
+            except OSError as exc:
+                self._send(500, json.dumps({"error": str(exc)},
+                                           ensure_ascii=False).encode("utf-8"))
+                return
+            # Chép app + khởi động mất vài giây; chờ hộ client (mỗi request một thread)
+            # để UI chỉ việc nhảy sang URL khi đã chắc chắn có server.
+            h = onboarding.wait_health(port, timeout=45.0)
+            if not h:
+                self._send(504, json.dumps(
+                    {"error": "demo chưa báo khoẻ sau 45s — chạy tay: %s" % st["cmd"]["demo"]},
+                    ensure_ascii=False).encode("utf-8"))
+                return
+            self._send(200, json.dumps({"url": "http://127.0.0.1:%d" % port,
+                                        "port": port, "notes": st["demo"]["notes"]},
+                                       ensure_ascii=False).encode("utf-8"))
+            return
+
+        self._send(404, b'{"error":"not found"}')
+
     def log_message(self, fmt, *args):  # im lặng, tránh lỗi encoding console
         pass
 
@@ -899,7 +993,7 @@ def _restart_sources_sane():
     """Chống restart vào nguồn OneDrive đang ghi DỞ: file .py phải compile được,
     index.html phải kết thúc bằng </html>. Hỏng → coi như CHƯA ổn định, chờ bản
     hoàn chỉnh ở tick sau thay vì relaunch vào code cụt (review P5.9)."""
-    for name in ("serve.py", "log_activity.py", "activity_paths.py", "insight.py"):
+    for name in restart_py_files():          # derive từ _VERSION_FILES — đừng chép tay
         try:
             with open(os.path.join(HERE, name), "rb") as f:
                 compile(f.read(), name, "exec")
@@ -956,6 +1050,7 @@ def main():
     ap.add_argument("--port", type=int, default=8321)
     ap.add_argument("--no-open", action="store_true")
     args = ap.parse_args()
+    PORT[0] = args.port                      # hàng rào Origin của do_POST so theo port này
 
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")

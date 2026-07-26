@@ -90,15 +90,23 @@ def host_name():
     return (os.environ.get("COMPUTERNAME") or socket.gethostname() or "unknown").strip() or "unknown"
 
 
+def cumulative_heat_dir():
+    """Thư mục chứa store heat tích luỹ. Env GRAPH3D_HEAT_DIR là override cho TEST và
+    cho server DEMO (W13) — file runtime mang TÊN MÁY không được rơi vào working tree
+    repo public; mirror pattern GRAPH3D_JOURNAL_DIR."""
+    env = os.environ.get("GRAPH3D_HEAT_DIR", "").strip()
+    return os.path.normpath(env) if env else HERE
+
+
 def cumulative_heat_path():
     """Store heat TÍCH LUỸ dài hạn — TRONG vault (sync OneDrive), PER-MÁY để tránh
     conflict đa máy (giống graph-<HOST>.json của graph 2D). Dùng phân tích lâu dài."""
-    return os.path.join(HERE, "heat_cumulative-%s.json" % host_name())
+    return os.path.join(cumulative_heat_dir(), "heat_cumulative-%s.json" % host_name())
 
 
 def cumulative_heat_files():
     """Mọi file cumulative của mọi máy (để server gộp khi xem scope=all)."""
-    return sorted(glob.glob(os.path.join(HERE, "heat_cumulative-*.json")))
+    return sorted(glob.glob(os.path.join(cumulative_heat_dir(), "heat_cumulative-*.json")))
 
 
 def vault_journal_dir():
@@ -128,13 +136,35 @@ def journal_host(path):
     return name[len("activity-"):] or "unknown"
 
 
+# DANH SÁCH DUY NHẤT mã nguồn của app — mọi nơi cần "app gồm những file nào" phải
+# đọc từ đây, không chép tay: mirror bản demo (onboarding.mirror_app), whitelist
+# publish sang repo public (tools/publish_from_vault.py), bộ test (selfcheck PY_MAIN).
+# Bài học đợt 7+8 repo public: ba danh sách chép tay ⇒ thêm module .py mới là sót một
+# chỗ, và sót thì im lặng (publish báo OK, demo chết lúc import). Selfcheck có contract
+# đối chiếu danh sách này với *.py thật trong thư mục — quên khai là FAIL ngay.
+# backup_graph3d.py KHÔNG nằm đây: file vận hành riêng bản private, không publish.
+APP_PY = ("activity_paths.py", "build_graph_data.py", "ensure_graph3d.py",
+          "insight.py", "integrity.py", "log_activity.py", "onboarding.py",
+          "run_graph3d.py", "serve.py")
+APP_TOP = APP_PY + ("index.html", "Start-Graph3D.bat")
+APP_DIRS = ("src", "vendor")
+
 # Các file mà khi đổi thì SERVER phải khởi động lại (build_graph_data.py auto-reload
 # nên KHÔNG nằm đây — tránh restart thừa). ensure/run so version này để biết server
 # đang chạy có "cũ" so với code trên đĩa hay không → tự chữa.
 # Từ giai đoạn 0 Vault Cockpit: UI tách thành ES modules trong src/ — hash phủ cả
 # src/* để sửa module cũng kích tự-reload y như sửa index.html.
+# ⚠ MỌI module serve.py import lúc nạp PHẢI có mặt ở đây (selfcheck contract 2k soi
+# thẳng lệnh import trong serve.py) — thiếu thì sửa module xong server vẫn phục vụ
+# bản cũ, lặng thinh (bug integrity.py, đợt 8 repo public).
 _VERSION_FILES = ("serve.py", "index.html", "activity_paths.py", "log_activity.py",
-                  "insight.py", "integrity.py")   # serve import lúc nạp => sửa file này PHẢI restart
+                  "insight.py", "integrity.py", "onboarding.py")
+
+
+def restart_py_files():
+    """Chỉ phần .py của _VERSION_FILES — serve.py dùng để kiểm 'nguồn có đang ghi dở'
+    trước khi tự restart. Derive chứ không chép: thêm module mới chỉ khai MỘT chỗ."""
+    return tuple(n for n in _VERSION_FILES if n.endswith(".py"))
 
 
 def _version_paths(here):

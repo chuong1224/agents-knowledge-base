@@ -14,6 +14,7 @@ Steps:
 3. Prints `git status` — review, commit and push manually.
 """
 import argparse
+import importlib.util
 import os
 import shutil
 import subprocess
@@ -21,16 +22,31 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-TOP_FILES = [
-    "Start-Graph3D.bat", "activity_paths.py", "build_graph_data.py",
-    "ensure_graph3d.py", "insight.py", "integrity.py", "log_activity.py",
-    "run_graph3d.py", "serve.py", "index.html", ".gitattributes",
-]
-DIRS = ["src", "tests", "vendor"]
+# Files that only make sense in this repo, not in the app itself.
+EXTRA_TOP = [".gitattributes"]
+EXTRA_DIRS = ["tests"]
 SKIP_DIR_NAMES = {"__pycache__"}
 SKIP_SUFFIXES = (".jsonl", ".lock")
 SKIP_CONTAINS = (".bak-",)
 SCAN_SKIP_DIRS = {".git"}
+
+
+def app_lists(src):
+    """What to copy, read from the app's own single source of truth
+    (`activity_paths.APP_TOP` / `APP_DIRS` in --src) instead of a hand-kept list here.
+
+    A hand-kept list is why a new module was silently skipped once: this script printed
+    "Copy OK" while the file never left the working copy. The app also machine-checks
+    that list (selfcheck contract "every root .py is declared"), so it cannot go stale.
+    """
+    path = os.path.join(src, "activity_paths.py")
+    spec = importlib.util.spec_from_file_location("_src_activity_paths", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    if not hasattr(mod, "APP_TOP") or not hasattr(mod, "APP_DIRS"):
+        sys.exit("--src is too old: activity_paths.py has no APP_TOP/APP_DIRS "
+                 "(the single list of app files). Update the working copy first.")
+    return list(mod.APP_TOP) + EXTRA_TOP, list(mod.APP_DIRS) + EXTRA_DIRS
 
 
 def copy_tree(src_dir, dst_dir):
@@ -83,10 +99,11 @@ def main():
         sys.exit("--src does not look like a .graph3d copy (serve.py missing): %s" % src)
 
     terms = load_denylist(src)
+    top_files, dirs = app_lists(src)
 
-    for f in TOP_FILES:
+    for f in top_files:
         shutil.copyfile(os.path.join(src, f), os.path.join(REPO, f))
-    for d in DIRS:
+    for d in dirs:
         dst = os.path.join(REPO, d)
         if os.path.isdir(dst):
             shutil.rmtree(dst)

@@ -2,18 +2,21 @@
 """Selfcheck .graph3d (G1.2) — luat G1.3: sua .graph3d/* xong PHAI chay selfcheck, PASS moi duoc ghi nghiem thu.
 
 3 lop, ca bo < 30s:
-  1. Compile — syntax 6 file .py goc + tests/*.py; index.html phai ket thuc </html>;
+  1. Compile — syntax moi file .py goc (danh sach doc tu activity_paths.APP_PY, khong
+     chep tay) + tests/*.py; index.html phai ket thuc </html>;
      src/* (ES modules giai doan 0) khong rong + LF + ket thuc \n + index tro /src/main.js
      (cung logic voi _restart_sources_sane trong serve.py).
-  2. Contract grep — ma hoa cac bug DA SUA trong review 2026-07-10 (muc 2a..2i, < 1s):
-     moi contract la mot bug tung xay ra, FAIL nghia la co nguoi vua dua bug do quay lai.
+  2. Contract grep — ma hoa cac bug DA SUA (muc 2a..2k, < 1s): moi contract la mot bug
+     tung xay ra, FAIL nghia la co nguoi vua dua bug do quay lai. 2a..2i tu review
+     2026-07-10; 2j/2k tu 2 su co publish doi 7+8 (danh sach file .py chep tay bi sot).
   3. Unit — test_p1/p3/p4/p5 + test_reader (guard /note + /asset, giai doan 1 Vault
      Cockpit) + test_finder (/search fold + AND + loai dot-folder, giai doan 2)
      + test_cockpit (/timeline + /dashboard theo ngay local, giai doan 3)
      + test_journal (journal dong bo log 2 may qua vault, v1.25.0)
      + test_insight (tang insight suc khoe vault /insight + note bao cao, W10)
      + test_integrity (den bao toan ven vault /integrity — link/nhung/anchor gay,
-       anh mo coi, frontmatter, "mo nilon"; W11);
+       anh mo coi, frontmatter, "mo nilon"; W11)
+     + test_onboarding (vault trong: state/install_starter/mirror_app, W13);
      test_p2 (~15s, spawn process that + chiem port 8397) chi chay khi --slow.
 
 Chay:  python .graph3d/tests/selfcheck.py [--slow]
@@ -26,12 +29,30 @@ sys.dont_write_bytecode = True   # khong sinh __pycache__ trong vault
 from _scratch import SCRATCH, G3D, VAULT
 
 TESTS = os.path.dirname(os.path.abspath(__file__))
-PY_MAIN = ["activity_paths.py", "backup_graph3d.py", "build_graph_data.py",
-           "ensure_graph3d.py", "insight.py", "integrity.py", "log_activity.py",
-           "run_graph3d.py", "serve.py"]
 # File CHI co trong ban private (backup git nam ngoai OneDrive — khong publish).
 # Thieu file NAY thi bo qua; thieu bat ky file nao KHAC van la FAIL (bug that).
 PRIVATE_ONLY = {"backup_graph3d.py"}
+# Nguoc lai: script CHI co o ban public (repo clone) — khong thuoc app, khong mirror,
+# khong publish tu vault. Co mat cung khong sao, khong can khai trong APP_PY.
+REPO_ONLY = {"try_demo.py"}
+
+
+def _declared_py():
+    """Danh sach .py goc KHONG chep tay nua (W13): doc tu activity_paths.APP_PY —
+    nguon DUY NHAT dung chung voi mirror demo va whitelist publish. activity_paths
+    hong syntax -> fallback glob de lop 1 con bao duoc dung loi compile."""
+    try:
+        sys.path.insert(0, G3D)
+        import activity_paths as ap
+        return sorted(set(ap.APP_PY) | PRIVATE_ONLY), ap
+    except Exception:                                    # noqa: BLE001
+        return sorted(os.path.basename(p) for p in glob.glob(os.path.join(G3D, "*.py"))), None
+
+
+PY_MAIN, AP = _declared_py()
+# Module serve.py import luc nap NHUNG co y khong nam _VERSION_FILES: no co duong
+# reload rieng (importlib.reload theo mtime — gotcha #8), khai vao day se restart thua.
+RELOADABLE = {"build_graph_data.py"}
 INDEX = os.path.join(G3D, "index.html")
 SRC = os.path.join(G3D, "src")
 
@@ -170,12 +191,35 @@ def lop2_contract():
     badges = [b for _, txt in ui for b in re.findall(r"\bv\d+\.\d+\.\d+\b", txt)]
     check("2i badge version xuat hien dung 1 lan (index+src)", len(badges) == 1, badges)
 
+    # 2j — bug doi 7 repo public: whitelist publish (TOP_FILES) liet ke CUNG tung file .py
+    # nen them insight.py la SOT, va sot thi im lang (publish bao OK, file moi khong len).
+    # Cung lop voi try_demo.py sot insight/integrity -> demo chet luc serve import.
+    # Tu W13 chi con MOT danh sach: activity_paths.APP_PY. Contract nay bat quen khai.
+    # Huong kiem: moi file CO MAT phai duoc khai (do la bug can bat). Chieu nguoc lai —
+    # file da khai ma vang mat — do py_main() lo san ("0 thieu file goc"), va PRIVATE_ONLY
+    # duoc mien o day de ban public khong FAIL oan.
+    if AP is None:
+        check("2j nap duoc activity_paths de doc APP_PY", False, "import that bai")
+    else:
+        found = {os.path.basename(p) for p in glob.glob(os.path.join(G3D, "*.py"))} - REPO_ONLY
+        undeclared = sorted(found - (set(AP.APP_PY) | PRIVATE_ONLY))
+        check("2j moi .py goc duoc khai trong APP_PY", not undeclared, undeclared)
+
+    # 2k — bug doi 8: integrity.py khong nam _VERSION_FILES -> sua module xong server
+    # VAN phuc vu ban cu, lang thinh (source_version khong hash file do). Luat: moi
+    # module local serve.py import luc nap phai co trong _VERSION_FILES (tru RELOADABLE).
+    if AP is not None:
+        mods = set(re.findall(r"(?m)^(?:import|from)\s+(\w+)", sv))
+        local = {m + ".py" for m in mods if os.path.isfile(os.path.join(G3D, m + ".py"))}
+        thieu = sorted(local - set(AP._VERSION_FILES) - RELOADABLE)
+        check("2k module serve.py import deu nam trong _VERSION_FILES", not thieu, thieu)
+
 
 # ---- Lop 3: unit ----
 def lop3_unit(slow):
     files = ["test_p1.py", "test_p3.py", "test_p4.py", "test_p5.py", "test_reader.py",
              "test_finder.py", "test_cockpit.py", "test_journal.py", "test_insight.py",
-             "test_integrity.py"]
+             "test_integrity.py", "test_onboarding.py"]
     if slow:
         files.append("test_p2.py")
     for name in files:
