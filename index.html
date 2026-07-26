@@ -11,7 +11,7 @@
 
 <div id="brand">
   <h1>KB GRAPH 3D</h1>
-  <div class="sub">KNOWLEDGE BASE · SYNTHWAVE · <span style="color:var(--cyan)">v1.44.0</span></div>
+  <div class="sub">KNOWLEDGE BASE · SYNTHWAVE · <span style="color:var(--cyan)">v1.45.0</span></div>
 </div>
 
 <div id="sidebar">
@@ -237,17 +237,19 @@
 </div>
 
 <div id="onb">
-  <div id="onb-box" role="dialog" aria-label="Bắt đầu — vault đang trống">
+  <div id="onb-box" role="dialog" aria-modal="true" aria-label="Bắt đầu dùng app — chọn một lối đi">
     <div id="onb-head">
       <h3>🌱 Vault này chưa có note nào</h3>
       <span id="onb-sum"></span>
       <span id="onb-x" title="Để tôi tự làm (Esc)">✕</span>
     </div>
     <div id="onb-lead">A vault is just a <b>folder of markdown files</b> — Obsidian is an optional editor, not a prerequisite.</div>
+    <div id="onb-note"></div>
     <div id="onb-cards"></div>
     <div id="onb-status"></div>
   </div>
 </div>
+<button id="onb-fab" title="Mở lại hướng dẫn bắt đầu">🌱</button>
 
 <div id="err"><div><h2>Không tải được graph</h2><p id="err-msg"></p></div></div>
 

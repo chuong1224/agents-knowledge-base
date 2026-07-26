@@ -79,6 +79,59 @@ def count_notes(path):
         return 0
 
 
+_bundled_cache = {}
+
+
+def count_bundled(path):
+    """Như count_notes nhưng CACHE theo mtime thư mục — dùng cho starter-vault/ và
+    demo/vault/ (nội dung tĩnh, đóng gói sẵn). Lý do: từ W42 `/onboarding` còn được
+    gọi khi vault KHÔNG trống (để bắt ca cài sai chỗ), mà quét lại 120 note demo mỗi
+    lần boot thì đắt vô ích."""
+    try:
+        key = os.path.getmtime(path)
+    except OSError:
+        return 0
+    hit = _bundled_cache.get(path)
+    if hit and hit[0] == key:
+        return hit[1]
+    n = count_notes(path)
+    _bundled_cache[path] = (key, n)
+    return n
+
+
+def installed_in_vault(app_dir=None):
+    """App có đang nằm TRONG vault dưới tên `.graph3d` hay không.
+
+    Đây là tín hiệu bắt ca cài sai chỗ phổ biến nhất (audit 26/07/2026): user clone
+    repo bình thường rồi chạy `ensure_graph3d.py` ngay trong đó — vì "vault = thư mục
+    CHA của app", server đi quét cả thư mục chứa repo (đo thật: 141 note của các repo
+    khác) và empty-state cũ KHÔNG bắn vì vault "không trống". README chỉ có một cách
+    cài đúng — clone THÀNH `.graph3d` trong vault — nên tên thư mục là tín hiệu thẳng
+    thắn và rẻ nhất. Cảnh báo phải cho tắt vĩnh viễn (ai cố tình đổi tên thư mục vẫn
+    là chuyện của họ), xem cờ localStorage phía UI."""
+    return os.path.basename(os.path.abspath(app_dir or HERE)) == ".graph3d"
+
+
+# Note "cửa vào" của starter vault, theo thứ tự ưu tiên (so trên stem đã casefold).
+# Cài xong mà không mở gì thì người mới không biết bước kế là đọc note nào (audit W42).
+ENTRY_PREF = ("start here", "bắt đầu", "index", "readme")
+
+
+def entry_note(created):
+    """Note nên mở ngay sau khi dựng starter vault: khớp ENTRY_PREF trước, không có
+    thì lấy note .md nằm nông nhất (đường dẫn ngắn nhất) — luôn trả về gì đó nếu có
+    ít nhất một note, để UI khỏi phải tự đoán."""
+    notes = [r for r in created if r.lower().endswith(".md")]
+    if not notes:
+        return None
+    for pref in ENTRY_PREF:
+        for rel in notes:
+            stem = os.path.splitext(os.path.basename(rel))[0].casefold()
+            if stem.startswith(pref):
+                return rel
+    return min(notes, key=lambda r: (r.count("/"), len(r)))
+
+
 # ---------------------------------------------------------------- trạng thái
 def state(vault, notes=None):
     """Dữ liệu cho UI empty-state: vault có trống không, và những lối đi nào SẴN CÓ
@@ -87,17 +140,24 @@ def state(vault, notes=None):
     if notes is None:
         notes = count_notes(vault)
     sd, dd = starter_dir(), demo_vault_dir()
-    s_notes, d_notes = count_notes(sd), count_notes(dd)
+    s_notes, d_notes = count_bundled(sd), count_bundled(dd)
+    app = os.path.abspath(HERE)
     return {
         "empty": not notes,
         "notes": notes,
         "vault": os.path.basename(vault) or vault,
         "vault_path": vault,
+        # W42: app nằm đúng chỗ chưa (tên thư mục = .graph3d). False = rất có thể user
+        # đang xem thư mục CHA của bản clone chứ không phải vault của mình.
+        "installed": installed_in_vault(app),
+        "app_dir": os.path.basename(app),
         "starter": {"available": s_notes > 0, "notes": s_notes, "path": sd},
         "demo": {"available": d_notes > 0, "notes": d_notes, "path": dd,
                  "port": DEMO_PORT},
         "cmd": {"demo": "python .graph3d/ensure_graph3d.py --demo",
-                "starter": "python .graph3d/ensure_graph3d.py --init-starter <thư-mục>"},
+                "starter": "python .graph3d/ensure_graph3d.py --init-starter <thư-mục>",
+                "install": 'git clone https://github.com/chuong1224/agents-knowledge-base '
+                           '"<đường-dẫn-vault>/.graph3d"'},
     }
 
 
@@ -136,8 +196,11 @@ def install_starter(target, src=None, force=False):
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copyfile(os.path.join(root, fn), dst)
             created.append(rel)
-    return {"created": sorted(created), "skipped": sorted(skipped),
+    created.sort()
+    return {"created": created, "skipped": sorted(skipped),
             "notes": sum(1 for r in created if r.lower().endswith(".md")),
+            # note mở ngay sau khi dựng — đừng để người mới nhìn 9 node rồi tự đoán
+            "entry": entry_note(created),
             "src": src, "target": target}
 
 

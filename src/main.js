@@ -15,7 +15,7 @@ import { initCockpit, openTimeline, closeTimeline, openDashboard, closeDashboard
 import { initWorkMap, openWorkMap, closeWorkMap, pollWorkCount } from './work.js';
 import { initInsight, openInsight, closeInsight, pollInsight } from './insight.js';
 import { initIntegrity, openIntegrity, closeIntegrity, pollIntegrity } from './integrity.js';
-import { initOnboarding, openOnboarding, closeOnboarding } from './onboarding.js';
+import { initOnboarding, openOnboarding, closeOnboarding, syncOnbFab } from './onboarding.js';
 import { initWorkspace, WS, wsOpen, wsSwitch, wsCloseTab, wsSplit, wsBack,
          togglePin, pushRecent, renderSbSections } from './workspace.js';
 
@@ -54,7 +54,7 @@ async function boot() {
   initInsight();                  // 🩺 Sức khoẻ vault (/insight — W10)
   initIntegrity();                // 🧪 Toàn vẹn vault (/integrity — W11), cùng section 🩺
   initSections();                 // Ư2.1: gập/mở section + nhớ trạng thái localStorage
-  initOnboarding();               // 🌱 Vault TRỐNG (W13): 3 lối đi thay vì graph rỗng
+  initOnboarding();               // 🌱 Vault TRỐNG / cài sai chỗ (W13 + W42): mời 3 lối đi
   // Ư3.3: chú giải ký hiệu chuỗi — đóng 1 lần là nhớ vĩnh viễn
   try { if (localStorage.getItem('kbgraph3d.chainHelp.v1') === 'off') $('chain-help').style.display = 'none'; } catch (e) {}
   $('chain-help-x').onclick = () => {
@@ -80,7 +80,8 @@ async function boot() {
   if (panelOpen() && sectOpen('insight')) { pollInsight(); pollIntegrity(); }
   pollActivity();
   setInterval(() => { if (!document.hidden) pollActivity(); }, 800);
-  setInterval(() => { if (!document.hidden) refreshData(); }, 45000);
+  // Vault đổi từ ngoài app (user tự tạo note đầu tiên) → nút mời 🌱 tự biến mất
+  setInterval(async () => { if (!document.hidden) { await refreshData(); syncOnbFab(); } }, 45000);
   pollChains();
   setInterval(() => { if (!document.hidden && panelOpen() && sectOpen('chains')) pollChains(); }, 4000);
   $('ch-refresh').onclick = pollChains;

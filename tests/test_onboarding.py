@@ -95,10 +95,37 @@ check("co starter-vault -> available True + dem dung so note",
 check("count_notes bo qua dot-folder nhu scanner graph",
       ONB.count_notes(STARTER) == 2, ONB.count_notes(STARTER))
 
+# ---- W42: app co nam trong vault duoi ten .graph3d hay khong ----
+check("installed_in_vault: ten thu muc .graph3d -> True",
+      ONB.installed_in_vault(os.path.join(ROOT, "vault-x", ".graph3d")) is True)
+check("installed_in_vault: clone bare (ten repo) -> False",
+      ONB.installed_in_vault(os.path.join(ROOT, "agents-knowledge-base")) is False)
+check("state mang co installed + ten thu muc app",
+      "installed" in st and st["app_dir"] == os.path.basename(os.path.dirname(os.path.abspath(ONB.__file__))))
+check("state co lenh cai dat dung cho ca canh bao",
+      ".graph3d" in st["cmd"]["install"] and "clone" in st["cmd"]["install"], st["cmd"])
+
+# count_bundled: cache theo mtime (state() bay gio chay ca khi vault KHONG trong)
+n1 = ONB.count_bundled(STARTER)
+n2 = ONB.count_bundled(STARTER)
+check("count_bundled cache theo mtime (2 lan cung ket qua)", n1 == n2 == 2, (n1, n2))
+check("count_bundled thu muc khong ton tai -> 0", ONB.count_bundled(os.path.join(ROOT, "khong-co")) == 0)
+
+# ---- W42: note "cua vao" mo ngay sau khi dung starter vault ----
+check("entry_note uu tien 'Start Here'",
+      ONB.entry_note(["attachments/a.txt", "What Is a Note.md", "Start Here.md"]) == "Start Here.md")
+check("entry_note nhan tieng Viet 'Bat Dau'",
+      ONB.entry_note(["Linking Notes.md", "Bắt Đầu — Tiếng Việt.md"]) == "Bắt Đầu — Tiếng Việt.md")
+check("entry_note khong co ten uu tien -> note nong nhat/ngan nhat",
+      ONB.entry_note(["sub/deep/z.md", "b.md"]) == "b.md")
+check("entry_note khong co .md -> None", ONB.entry_note(["attachments/a.png"]) is None)
+
 # ---- install_starter ----
 res = ONB.install_starter(VAULT_EMPTY)
 check("install_starter tao du file (2 note + 1 file kem)",
       len(res["created"]) == 3 and res["notes"] == 2, res)
+check("install_starter tra ve note 'cua vao' de UI mo ngay (W42)",
+      res["entry"] == "Start Here.md", res.get("entry"))
 check("install_starter giu cau truc thu muc con",
       os.path.isfile(os.path.join(VAULT_EMPTY, "attachments", "note.txt")), res["created"])
 check("install_starter bo qua dot-file trong nguon",
