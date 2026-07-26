@@ -23,6 +23,11 @@ Endpoint:
                      tuần cuộn, note nguội theo lần đụng cuối, note CHƯA BAO GIỜ
                      agent đụng, cụm ít kết nối, coverage theo khu vực — tính trong
                      insight.py (CLI --report của module đó dùng CÙNG hàm)
+  /integrity     -> "vault có đang GÃY chỗ nào không" (W11): wikilink/nhúng gãy,
+                     anchor lệch heading, ảnh mồ côi, note thiếu trường frontmatter
+                     bắt buộc, file nhị phân chưa "mở nilon" — tính trong
+                     integrity.py (tiêu chí bỏ qua note lấy của gate verify_vault_
+                     integrity.py; luật đếm được đọc từ vault-rules.json trong vault)
   /activity?cursor=N -> event mới trong activity.jsonl từ byte-offset N
                         (hook log_activity.py của Claude Code ghi file này)
   /work          -> bản đồ việc đang mở của vault, đã phân loại (làm ngay được / chờ việc / chờ điều kiện)
@@ -63,6 +68,7 @@ sys.path.insert(0, HERE)
 import build_graph_data  # noqa: E402
 import log_activity  # noqa: E402  (dùng append_events cho endpoint /ping)
 import insight  # noqa: E402  (tầng insight sức khoẻ vault — /insight)
+import integrity  # noqa: E402  (đèn báo toàn vẹn vault — /integrity)
 
 _cache = {"ts": 0.0, "data": None}
 _cache_lock = threading.Lock()
@@ -792,6 +798,26 @@ class Handler(BaseHTTPRequestHandler):
             ins["boot_id"] = BOOT_ID
             ins["host"] = host_name()
             self._send(200, json.dumps(ins, ensure_ascii=False).encode("utf-8"))
+            return
+
+        if path == "/integrity":
+            # Đèn báo toàn vẹn vault (W11): tính trong integrity.collect — cùng hàm
+            # mà CLI `integrity.py` gọi. Chỉ ĐỌC (cache theo chữ ký mtime toàn vault
+            # + mtime nguồn luật), không ghi gì; lỗi đọc trả 500 kèm thông điệp.
+            qs = parse_qs(parsed.query)
+            try:
+                limit = max(1, min(500, int(qs.get("limit", [str(integrity.LIST_N)])[0])))
+            except ValueError:
+                limit = integrity.LIST_N
+            try:
+                rep = dict(integrity.collect(list_n=limit))   # copy: đừng bơm field vào bản cache
+            except Exception as exc:                          # noqa: BLE001
+                self._send(500, json.dumps({"error": str(exc)},
+                                           ensure_ascii=False).encode("utf-8"))
+                return
+            rep["boot_id"] = BOOT_ID
+            rep["host"] = host_name()
+            self._send(200, json.dumps(rep, ensure_ascii=False).encode("utf-8"))
             return
 
         if path == "/work":

@@ -23,8 +23,8 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 TOP_FILES = [
     "Start-Graph3D.bat", "activity_paths.py", "build_graph_data.py",
-    "ensure_graph3d.py", "insight.py", "log_activity.py", "run_graph3d.py",
-    "serve.py", "index.html", ".gitattributes",
+    "ensure_graph3d.py", "insight.py", "integrity.py", "log_activity.py",
+    "run_graph3d.py", "serve.py", "index.html", ".gitattributes",
 ]
 DIRS = ["src", "tests", "vendor"]
 SKIP_DIR_NAMES = {"__pycache__"}

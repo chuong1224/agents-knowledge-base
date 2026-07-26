@@ -6,6 +6,7 @@ import { pulses, agentFlow, endAgentFlow } from './effects.js';
 import { pollChains, addFeedEvent } from './activity.js';
 import { pollHeat, setHeatScope } from './heat.js';
 import { pollInsight } from './insight.js';
+import { pollIntegrity } from './integrity.js';
 import { openReader } from './reader.js';
 import { buildTree } from './finder.js';
 
@@ -123,7 +124,7 @@ export function initSections() {
       saveSectOpen();
       if (open && id === 'chains') pollChains();     // mở lại → dữ liệu tươi ngay (poll nền nghỉ lúc gập)
       if (open && id === 'heat') pollHeat();
-      if (open && id === 'insight') pollInsight();   // 🩺 không poll nền: mở section là đo
+      if (open && id === 'insight') { pollInsight(); pollIntegrity(); }  // 🩺 không poll nền: mở section là đo
     };
     // Ư5.2: header gập/mở dùng được bằng phím như click
     h.setAttribute('role', 'button');

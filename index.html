@@ -11,7 +11,7 @@
 
 <div id="brand">
   <h1>KB GRAPH 3D</h1>
-  <div class="sub">KNOWLEDGE BASE · SYNTHWAVE · <span style="color:var(--cyan)">v1.42.0</span></div>
+  <div class="sub">KNOWLEDGE BASE · SYNTHWAVE · <span style="color:var(--cyan)">v1.43.0</span></div>
 </div>
 
 <div id="sidebar">
@@ -80,10 +80,12 @@
     </div>
   </div>
   <div class="sect" data-sect="insight">
-    <h2>🩺 Sức khoẻ vault <span class="mini"><button id="ins-refresh" title="Đo lại">↻</button></span></h2>
+    <h2>🩺 Sức khoẻ vault <span class="mini"><button id="ins-refresh" title="Đo lại (cả truy xuất lẫn toàn vẹn)">↻</button></span></h2>
     <div id="ins-mini">đang đo…</div>
+    <div id="itg-mini" title="Đèn báo cơ học: wikilink/nhúng gãy, anchor lệch heading, ảnh mồ côi, thiếu trường frontmatter, file nhị phân chưa mở nilon">đang kiểm…</div>
     <div class="btns" style="margin-top:8px">
-      <button class="btn" id="ins-open" title="Vault đang khoẻ không: note nóng/nguội theo tuần, note chưa vào đường truy xuất, cụm ít kết nối, coverage theo khu vực">🩺 Mở báo cáo</button>
+      <button class="btn" id="ins-open" title="Vault đang khoẻ không: note nóng/nguội theo tuần, note chưa vào đường truy xuất, cụm ít kết nối, coverage theo khu vực">🩺 Truy xuất</button>
+      <button class="btn" id="itg-open" title="Vault có đang gãy chỗ nào không: link/nhúng/anchor gãy, ảnh mồ côi, frontmatter thiếu trường, file nhị phân chưa mở nilon — click một mục để mở note">🧪 Toàn vẹn</button>
     </div>
   </div>
   <div class="sect" data-sect="heat">
@@ -206,6 +208,18 @@
     </div>
     <div id="ins-body"></div>
     <div id="ins-foot"></div>
+  </div>
+</div>
+
+<div id="integ">
+  <div id="itg-box" role="dialog" aria-label="Toàn vẹn vault — lỗi cơ học">
+    <div id="itg-head">
+      <h3>🧪 Toàn vẹn vault</h3>
+      <span id="itg-sum"></span>
+      <span id="itg-x" title="Đóng (Esc)">✕</span>
+    </div>
+    <div id="itg-body"></div>
+    <div id="itg-foot"></div>
   </div>
 </div>
 

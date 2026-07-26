@@ -11,7 +11,9 @@
      Cockpit) + test_finder (/search fold + AND + loai dot-folder, giai doan 2)
      + test_cockpit (/timeline + /dashboard theo ngay local, giai doan 3)
      + test_journal (journal dong bo log 2 may qua vault, v1.25.0)
-     + test_insight (tang insight suc khoe vault /insight + note bao cao, W10);
+     + test_insight (tang insight suc khoe vault /insight + note bao cao, W10)
+     + test_integrity (den bao toan ven vault /integrity — link/nhung/anchor gay,
+       anh mo coi, frontmatter, "mo nilon"; W11);
      test_p2 (~15s, spawn process that + chiem port 8397) chi chay khi --slow.
 
 Chay:  python .graph3d/tests/selfcheck.py [--slow]
@@ -25,8 +27,8 @@ from _scratch import SCRATCH, G3D, VAULT
 
 TESTS = os.path.dirname(os.path.abspath(__file__))
 PY_MAIN = ["activity_paths.py", "backup_graph3d.py", "build_graph_data.py",
-           "ensure_graph3d.py", "insight.py", "log_activity.py", "run_graph3d.py",
-           "serve.py"]
+           "ensure_graph3d.py", "insight.py", "integrity.py", "log_activity.py",
+           "run_graph3d.py", "serve.py"]
 # File CHI co trong ban private (backup git nam ngoai OneDrive — khong publish).
 # Thieu file NAY thi bo qua; thieu bat ky file nao KHAC van la FAIL (bug that).
 PRIVATE_ONLY = {"backup_graph3d.py"}
@@ -172,7 +174,8 @@ def lop2_contract():
 # ---- Lop 3: unit ----
 def lop3_unit(slow):
     files = ["test_p1.py", "test_p3.py", "test_p4.py", "test_p5.py", "test_reader.py",
-             "test_finder.py", "test_cockpit.py", "test_journal.py", "test_insight.py"]
+             "test_finder.py", "test_cockpit.py", "test_journal.py", "test_insight.py",
+             "test_integrity.py"]
     if slow:
         files.append("test_p2.py")
     for name in files:
