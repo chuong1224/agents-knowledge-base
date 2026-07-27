@@ -70,9 +70,35 @@ sys.path.insert(0, HERE)
 import build_graph_data  # noqa: E402  (EXCLUDED_DIRS + đuôi media: CÙNG luật phạm vi với scanner graph)
 
 # Nguồn chân lý quy tắc đếm được (H1). Vault khác đặt chỗ khác: GRAPH3D_VAULT_RULES.
-RULES_DIR = os.environ.get("GRAPH3D_VAULT_RULES") or os.path.join(
-    VAULT, "Vault Operation", "Quy Tắc & Vận Hành", "Nguồn Chân Lý Quy Tắc Vault",
-    "attachments")
+# Không có env thì dò lần lượt: chỗ của vault này → hai chỗ QUY ƯỚC cho vault bất kỳ.
+# (Audit W41: mặc định cũ chỉ có đường dẫn của vault này, nên bản public muốn bật check
+#  contract phải sửa code hoặc đặt env — không ai đoán ra.)
+def rules_candidates(vault):
+    """Nơi có thể đặt `vault-rules.json`, theo thứ tự ưu tiên — TÍNH THEO VAULT ĐANG ĐO.
+
+    Đừng dựng theo hằng module: `--vault <chỗ khác>` (hay bản demo) phải soi nguồn luật
+    CỦA CHÍNH vault đó, không phải của vault chứa file này.
+    """
+    return [os.path.join(vault, "Vault Operation", "Quy Tắc & Vận Hành",
+                         "Nguồn Chân Lý Quy Tắc Vault", "attachments"),
+            os.path.join(vault, ".graph3d"),
+            vault]
+
+
+def _default_rules_dir(vault=None):
+    env = os.environ.get("GRAPH3D_VAULT_RULES")
+    if env:
+        return env
+    cands = rules_candidates(vault or VAULT)
+    for d in cands:
+        if os.path.isfile(os.path.join(d, "vault-rules.json")):
+            return d
+    return cands[-1]        # không thấy đâu cả → chỉ về chỗ QUY ƯỚC (gốc vault): thông
+                            # báo "không thấy …" phải nêu chỗ người ta nên đặt file, chứ
+                            # không phải cây thư mục riêng của vault nào đó (audit W41)
+
+
+RULES_DIR = _default_rules_dir()
 
 # Regex lấy NGUYÊN của gate verify_vault_integrity.py — sửa một bên phải sửa cả hai.
 EMBED_RE = re.compile(r"!\[\[([^\]]+)\]\]")            # ![[target]]
@@ -142,12 +168,56 @@ def is_ignored(stem, text):
 
 
 def split_target(t):
-    """'Note#Heading|alias' → ('Note', 'Heading'); mirror split_target của gate."""
-    t = t.split("|", 1)[0].strip()
+    """'Note#Heading|alias' → ('Note', 'Heading'); mirror split_target của gate.
+
+    `\\|` là cách Obsidian viết dấu ngăn alias khi wikilink nằm TRONG bảng markdown
+    (`[[Vector Databases\\|vector DB]]`) — không gỡ escape thì đích thành `Vector
+    Databases\\`, trên Windows `basename` nuốt luôn phần trước dấu `\\` và đèn báo
+    "wikilink gãy" cho một link hoàn toàn hợp lệ (audit W41 bắt được trên vault demo
+    của bản public). Gate `verify_vault_integrity.py` đã vá cùng lúc, cùng luật.
+    """
+    t = t.replace("\\|", "|").split("|", 1)[0].strip()
     if "#" in t:
         base, anchor = t.split("#", 1)
         return base.strip(), anchor.strip()
     return t, None
+
+
+FM_KEY_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$")
+
+
+def _parse_frontmatter_basic(text):
+    """Parser frontmatter TỐI THIỂU — chỉ dùng khi vault KHÔNG có `vault_rules.py`.
+
+    Cùng phạm vi với parser của nguồn chân lý: field một dòng + list (inline `[a, b]`
+    hoặc block `- a`). Không phải PyYAML, cố ý: app zero-dep. Vault nào có nguồn chân lý
+    thì KHÔNG chạy hàm này — luật "một parser dùng chung" vẫn giữ nguyên ở đó.
+    """
+    block = frontmatter_block(text)
+    if not block:
+        return {}
+    data, key = {}, None
+    for raw in block.splitlines():
+        line = raw.rstrip()
+        if not line.strip():
+            continue
+        if line.lstrip().startswith("- "):
+            if key:
+                data.setdefault(key, [])
+                if isinstance(data[key], list):
+                    data[key].append(line.split("- ", 1)[1].strip().strip("\"'"))
+            continue
+        m = FM_KEY_RE.match(line)
+        if not m:
+            continue
+        key, val = m.group(1), m.group(2).strip()
+        if val.startswith("[") and val.endswith("]"):
+            data[key] = [v.strip().strip("\"'") for v in val[1:-1].split(",") if v.strip()]
+        elif val == "":
+            data[key] = []
+        else:
+            data[key] = val.strip("\"'")
+    return data
 
 
 def _empty(val):
@@ -222,7 +292,7 @@ def load_rules(rules_dir=None):
     check đó tắt, các check còn lại vẫn chạy.
     Đọc mỗi lần gọi (file nhỏ) — sửa vault-rules.json là lần đo sau ăn ngay.
     """
-    rules_dir = rules_dir or RULES_DIR
+    rules_dir = rules_dir or _default_rules_dir()
     js = os.path.join(rules_dir, "vault-rules.json")
     py = os.path.join(rules_dir, "vault_rules.py")
     info = {"loaded": False, "path": _rel(js), "reason": ""}
@@ -235,17 +305,22 @@ def load_rules(rules_dir=None):
     except (OSError, ValueError) as exc:
         info["reason"] = "vault-rules.json đọc không được: %s" % exc
         return {}, info
-    if not os.path.isfile(py):
-        info["reason"] = "không thấy vault_rules.py (cần parser frontmatter dùng chung)"
-        return {}, info
-    try:
-        spec = importlib.util.spec_from_file_location("kb_vault_rules", py)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        parse_fm = mod.parse_frontmatter
-    except Exception as exc:                              # noqa: BLE001
-        info["reason"] = "vault_rules.py nạp lỗi: %s" % exc
-        return {}, info
+    # Parser frontmatter: ƯU TIÊN `vault_rules.py` của vault (cùng parser mà audit dùng
+    # — hết cảnh mỗi bên một regex). Vault không có file đó (bản public clone ra ngoài)
+    # thì rơi về parser tối thiểu ngay trong module: audit W41 phát hiện 5 đèn contract
+    # KHÔNG THỂ bật ở bản public vì đòi một script chỉ tồn tại trong vault này.
+    mod, parse_fm, engine = None, _parse_frontmatter_basic, "parser tối thiểu của app"
+    if os.path.isfile(py):
+        try:
+            spec = importlib.util.spec_from_file_location("kb_vault_rules", py)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            parse_fm = mod.parse_frontmatter
+            engine = "vault_rules.py"
+        except Exception as exc:                          # noqa: BLE001
+            info["reason"] = "vault_rules.py nạp lỗi (%s) — dùng parser tối thiểu" % exc
+            mod = None
+    info["parser"] = engine
     # Vocabulary nằm dạng {nhóm: [{tag, meaning}…]} — dàn phẳng đúng như vault_rules.py.
     vocab = sorted({str(t.get("tag", "")).strip()
                     for grp in (policy.get("tag_vocabulary") or {}).values()
@@ -261,6 +336,8 @@ def load_rules(rules_dir=None):
             "tag_vocabulary": vocab,
             "index_rule": dict(policy.get("index_rule") or {}),
             "title_rule": title_rule,
+            # phép so "tên này có phải tên file index không" dùng CHUNG với bên đếm
+            "is_index_name": getattr(mod, "is_index_name", None) if mod else None,
             "parse_frontmatter": parse_fm}, info
 
 
@@ -288,6 +365,7 @@ def build_integrity(scan, rules=None, rules_info=None, now=None, list_n=LIST_N):
     idx_prefix = str(index_rule.get("name_prefix") or "").strip().lower()
     idx_type = str(index_rule.get("type_field") or "").strip().lower()
     idx_only = bool(index_rule.get("only_tag"))
+    idx_name_fn = rules.get("is_index_name")
     require_h1 = bool(title_rule.get("require_h1"))
     # Ngoại lệ title khoá theo TÊN FILE (không đuôi, không phân biệt hoa/thường) — note
     # hay bị dời folder, tên file thì bền; đây cũng là cách §V và gate gọi tên chúng.
@@ -379,8 +457,8 @@ def build_integrity(scan, rules=None, rules_info=None, now=None, list_n=LIST_N):
                     hits["tag"].append({"file": rel, "line": 1, "target": "", "missing": unknown,
                                         "detail": "tag ngoài vocabulary: " + ", ".join(unknown)})
             if avail["index_tag"]:
-                is_index = bool(idx_prefix and n["stem"].lower().startswith(idx_prefix)) or \
-                    bool(idx_type and str(fm.get("type") or "").strip().lower() == idx_type)
+                is_index = is_index_note(n["stem"], fm.get("type"), idx_prefix, idx_type,
+                                         idx_name_fn)
                 why = ""
                 if is_index and idx_only and tags != [idx_tag]:
                     extra = [t for t in tags if t != idx_tag]
@@ -464,18 +542,47 @@ def build_integrity(scan, rules=None, rules_info=None, now=None, list_n=LIST_N):
     }
 
 
+def _name_is_index(stem, prefix):
+    """Dự phòng khi vault không có `vault_rules.py` (bản public) — CÙNG luật token."""
+    s, p = str(stem).lower(), str(prefix or "").lower()
+    if not p:
+        return False
+    return s == p or (s.startswith(p) and not s[len(p):len(p) + 1].isalnum())
+
+
+def is_index_note(stem, fm_type, prefix, type_field, name_fn=None):
+    """File index = frontmatter `type: <type_field>`, HOẶC tên khớp `prefix` dạng TOKEN.
+
+    `Index` và `Index - Work` là index; `Indexing Chiến Lược` thì KHÔNG — prefix trần
+    (`startswith`) khớp cả từ dài hơn và sẽ đòi note đó bỏ hết tag content: đúng kiểu
+    báo oan làm mất niềm tin vào đèn (audit W41 bắt được khi vault chưa có ca nào).
+
+    Phép so tên lấy THẲNG `is_index_name` của `vault_rules.py` khi có (`name_fn`) — cùng
+    hàm mà nguồn chân lý dùng để ĐẾM index, nên hai bên không thể lệch định nghĩa.
+    """
+    if type_field and str(fm_type or "").strip().lower() == type_field:
+        return True
+    return (name_fn or _name_is_index)(stem, prefix)
+
+
 def _title_problems(note, title, exc, require_h1):
     """Lệch của bộ ba `title` = tên file = H1 trên MỘT note → danh sách lý do (rỗng = sạch).
 
     `exc` là mục ngoại lệ đã khai (hoặc None). Ngoại lệ KHÔNG phải "miễn kiểm": nó pin
     luôn giá trị được phép, nên note trong danh sách vẫn bị bắt nếu title trôi tiếp.
     Thiếu hẳn `title` thì im — check frontmatter đã báo trường bắt buộc, đừng báo hai lần.
+    Ngoại lệ khai HỎNG (thiếu `title`) thì nói thẳng ra rồi kiểm theo luật thường — trước
+    đây nó lặng lẽ so với chuỗi rỗng, đẻ ra thông báo `≠ ngoại lệ đã khai ""` vô nghĩa
+    và che mất chuyện nguồn luật đang sai (audit W41).
     """
     if not title:
         return []
+    probs = []
+    if exc and not str(exc.get("title") or "").strip():
+        probs.append("ngoại lệ trong vault-rules.json khai thiếu `title` → tạm kiểm theo luật thường")
+        exc = None
     want_title = str(exc.get("title") or "").strip() if exc else note["stem"]
     want_h1 = (str(exc.get("h1") or exc.get("title") or "").strip()) if exc else title
-    probs = []
     if title != want_title:
         probs.append("title “%s” ≠ %s “%s”"
                      % (title, "ngoại lệ đã khai" if exc else "tên file", want_title))
@@ -514,7 +621,10 @@ def collect(vault=VAULT, rules_dir=None, list_n=LIST_N, use_cache=True, now=None
     """Đo toàn vẹn vault (I/O + phép tính). Cache theo (chữ ký file, mtime nguồn luật)
     — mở section/overlay liên tiếp không quét lại; sửa note là lần sau đo lại ngay."""
     sig = vault_signature(vault)
-    rules_dir = rules_dir or RULES_DIR
+    # Dò nguồn luật theo CHÍNH vault đang đo (không phải vault chứa module) — cũng là
+    # lý do dò LẠI mỗi lần gọi: thêm vault-rules.json xong là lần đo sau ăn ngay,
+    # không phải restart server.
+    rules_dir = rules_dir or _default_rules_dir(vault)
     rsig = tuple(sorted(
         (os.path.basename(p), os.path.getmtime(p))
         for p in (os.path.join(rules_dir, "vault-rules.json"),

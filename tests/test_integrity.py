@@ -41,6 +41,7 @@ VAULT_DIR = os.path.join(SCRATCH, "itg-vault")
 RULES_DIR = os.path.join(SCRATCH, "itg-rules")
 EMPTY_RULES = os.path.join(SCRATCH, "itg-rules-empty")
 PARTIAL_RULES = os.path.join(SCRATCH, "itg-rules-partial")   # co frontmatter, thieu index/title
+NOPY_RULES = os.path.join(SCRATCH, "itg-rules-nopy")         # co json, KHONG co vault_rules.py
 
 # Parser frontmatter dung chung: lay ban THAT trong vault neu co (test luon ca tuong
 # thich voi nguon chan ly), khong co (ban public clone ra ngoai vault) thi stub toi thieu.
@@ -93,6 +94,7 @@ RULES_JSON = {
                 {"file": "Ngoai Le Troi", "title": "Ngoai Le Troi — Ban Khai"},
                 {"file": "Ba Chan", "title": "Ba Chan — Title Khai", "h1": "H1 Khai Rieng"},
                 {"file": "Khong Con Nua", "title": "Khong Con Nua — Note da bi xoa"},
+                {"file": "Khai Hong", "why": "ngoai le khai THIEU title — audit W41"},
             ],
         },
     }
@@ -155,6 +157,11 @@ def build_fake_vault():
         json.dump(PARTIAL_JSON, f)
     shutil.copyfile(os.path.join(RULES_DIR, "vault_rules.py"),
                     os.path.join(PARTIAL_RULES, "vault_rules.py"))
+    # Bo luat CO json nhung KHONG co vault_rules.py — dung canh ban public clone ra ngoai
+    shutil.rmtree(NOPY_RULES, ignore_errors=True)
+    os.makedirs(NOPY_RULES)
+    with open(os.path.join(NOPY_RULES, "vault-rules.json"), "w", encoding="utf-8") as f:
+        json.dump(RULES_JSON, f)
 
     # Alpha: sach — link + anchor dung, nhung anh co that
     w("Work/Alpha/Alpha.md", fm("Alpha") +
@@ -210,6 +217,20 @@ def build_fake_vault():
     # Ngoai le pin ca H1 rieng (ca CLAUDE.md ngoai doi that) -> SACH
     w("Work/Ba Chan/Ba Chan.md", fm("Ba Chan — Title Khai", h1="H1 Khai Rieng"))
 
+    # --- 3 ca do AUDIT DOC LAP W41 bat duoc (27/07) ---
+    # Ten bat dau bang "Index" nhung KHONG phai file index -> KHONG duoc doi bo tag
+    w("Work/Indexing Chien Luoc/Indexing Chien Luoc.md", fm("Indexing Chien Luoc"))
+    # Note duoc mien (gate_ignore) ma vi pham CA 3 check moi -> phai im
+    w("Work/Mien Ca 3/Mien Ca 3.md",
+      "---\ntitle: Ten Khac Han\naliases: [\"x\"]\nsummary: \"s\"\ntags: [tu-che, index]\n"
+      "gate_ignore: true\n---\n\nkhong co H1\n")
+    # Ngoai le khai HONG (thieu title) -> noi thang, khong so voi chuoi rong
+    w("Work/Khai Hong/Khai Hong.md", fm("Khai Hong — Ban Dai Hon"))
+
+    # Wikilink trong BANG markdown phai escape dau ngan alias: [[Alpha\|ten hien thi]]
+    w("Work/Bang/Bang.md", fm("Bang") +
+      "| Cot | Gia tri |\n|---|---|\n| Link | [[Alpha\\|ten hien thi]] |\n")
+
     # Ngoai pham vi scanner: khong duoc quet (loi trong day PHAI im)
     w("node_modules/junk.md", "# junk\n\n[[Khong Ton Tai 4]]\n")
     w(".trash/rac.md", "# rac\n\n[[Khong Ton Tai 5]]\n")
@@ -224,10 +245,10 @@ rep = ITG.collect(vault=VAULT_DIR, rules_dir=RULES_DIR, use_cache=False)
 C = by_id(rep)
 
 # --- pham vi + tieu chi bo qua ---
-check("1 dem dung so note trong pham vi (bo node_modules/.trash)", rep["vault"]["notes"] == 15,
+check("1 dem dung so note trong pham vi (bo node_modules/.trash)", rep["vault"]["notes"] == 19,
       rep["vault"])
-check("1 mien 2 note (_Meta + gate_ignore Delta), kiem 13",
-      (rep["vault"]["ignored"], rep["vault"]["checked"]) == (2, 13), rep["vault"])
+check("1 mien 3 note (_Meta + 2 gate_ignore), kiem 16",
+      (rep["vault"]["ignored"], rep["vault"]["checked"]) == (3, 16), rep["vault"])
 
 # --- check cau truc ---
 check("2 wikilink gay = 1 (Beta -> Khong Ton Tai)", C["link"]["total"] == 1,
@@ -278,8 +299,8 @@ check("3b index sai tag chi dung 2 thu pham",
       == {"Index - Work.md", "Iota.md"},
       [i["file"] for i in C["index_tag"]["list"]])
 T = {os.path.basename(i["file"]): i["detail"] for i in C["title"]["list"]}
-check("3b title lech = 5 (title!=file · H1!=title · thieu H1 · ngoai le troi · ngoai le mo coi)",
-      C["title"]["total"] == 5, T)
+check("3b title lech = 6 (title!=file · H1!=title · thieu H1 · ngoai le troi · ngoai le mo coi · ngoai le khai hong)",
+      C["title"]["total"] == 6, T)
 check("3b bat title != ten file (Kappa)", "title" in T.get("Kappa.md", ""), T)
 check("3b bat H1 != title (Lambda)", "H1" in T.get("Lambda.md", ""), T)
 check("3b bat note khong co H1 (Mu)", "H1" in T.get("Mu.md", ""), T)
@@ -290,8 +311,23 @@ check("3b ngoai le KHONG phai mien kiem: title troi tiep van bi bat",
 check("3b ngoai le khai cho note khong con ton tai bi bao",
       any("Khong Con Nua" in i["detail"] for i in C["title"]["list"]),
       [i["detail"] for i in C["title"]["list"]])
-check("3b tong so van de = 14", rep["problems"] == 14,
+# --- 3 ca AUDIT DOC LAP W41 (27/07) ---
+check("3c ten bat dau 'Index' nhung khong phai index KHONG bi doi bo tag (bao oan)",
+      all("Indexing" not in i["file"] for i in C["index_tag"]["list"]),
+      [i["file"] for i in C["index_tag"]["list"]])
+check("3c note gate_ignore vi pham ca 3 check moi van duoc MIEN",
+      all("Mien Ca 3" not in i["file"]
+          for k in ("tag", "index_tag", "title") for i in C[k]["list"]),
+      {k: [i["file"] for i in C[k]["list"]] for k in ("tag", "index_tag", "title")})
+check("3c ngoai le khai HONG (thieu title) duoc noi thang, khong so voi chuoi rong",
+      "khai thiếu" in T.get("Khai Hong.md", "") and '“”' not in T.get("Khai Hong.md", ""),
+      T.get("Khai Hong.md"))
+check("3b tong so van de = 15", rep["problems"] == 15,
       {c["id"]: c["total"] for c in rep["checks"]})
+
+check("3c wikilink trong bang `[[Note\|alias]]` KHONG bi bao gay (bao oan, audit W41)",
+      all("Bang" not in i["file"] for i in C["link"]["list"]),
+      [(i["file"], i["target"]) for i in C["link"]["list"]])
 
 # --- thieu nguon luat: contract TAT em, cau truc van chay ---
 rep2 = ITG.collect(vault=VAULT_DIR, rules_dir=EMPTY_RULES, use_cache=False)
@@ -313,6 +349,18 @@ check("4b thieu index_rule/title_rule -> dung 2 check do tat",
 check("4b cac check contract khac VAN chay (frontmatter/digest/tag)",
       all(C3[k]["available"] for k in ("frontmatter", "digest", "tag")), rep3["rules"])
 
+# --- CO vault-rules.json nhung KHONG co vault_rules.py (ban public) ---
+rep4 = ITG.collect(vault=VAULT_DIR, rules_dir=NOPY_RULES, use_cache=False)
+C4 = by_id(rep4)
+check("4c thieu vault_rules.py -> van chay contract bang parser du phong",
+      all(C4[k]["available"] for k in ("frontmatter", "digest", "tag", "index_tag", "title")),
+      rep4["rules"])
+check("4c parser du phong dem RA CUNG KET QUA voi parser cua vault",
+      {k: C4[k]["total"] for k in ("frontmatter", "digest", "tag", "index_tag", "title")}
+      == {k: C[k]["total"] for k in ("frontmatter", "digest", "tag", "index_tag", "title")},
+      {"du phong": {k: C4[k]["total"] for k in C4}, "that": {k: C[k]["total"] for k in C}})
+check("4c rules.parser noi ro dang dung parser nao", rep4["rules"].get("parser"), rep4["rules"])
+
 # --- cache theo chu ky mtime ---
 a = ITG.collect(vault=VAULT_DIR, rules_dir=RULES_DIR)
 b = ITG.collect(vault=VAULT_DIR, rules_dir=RULES_DIR)
@@ -330,6 +378,11 @@ check("6 is_ignored KHONG an nham dong gate_ignore trong THAN note",
       not ITG.is_ignored("X", "---\ntitle: X\n---\n\n# X\n\ngate_ignore: true\n"))
 check("6 split_target tach alias + anchor",
       ITG.split_target("Note#Heading|alias") == ("Note", "Heading"))
+check("6 is_index_note: khop token chu khong phai startswith tran",
+      (ITG.is_index_note("Index", None, "index", "index"),
+       ITG.is_index_note("Index - Work", None, "index", "index"),
+       ITG.is_index_note("Indexing Chien Luoc", None, "index", "index"),
+       ITG.is_index_note("Ghi Chu", "index", "index", "index")) == (True, True, False, True))
 check("6 _title_problems im khi note THIEU han title (check frontmatter da bao roi)",
       ITG._title_problems({"stem": "X", "h1": None}, "", None, True) == [])
 check("6 _title_problems: khop du bo ba thi rong",

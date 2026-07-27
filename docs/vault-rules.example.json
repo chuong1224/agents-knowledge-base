@@ -1,0 +1,38 @@
+{
+  "_doc": "Example rule file for the integrity lamps (see README, '🩺 Vault health'). Put a copy at your vault root, or in .graph3d/, or point GRAPH3D_VAULT_RULES at the folder holding it. Every key under `policy` is optional: each contract check reads only its own slice and switches off when its rule is absent, so you can start with one key and grow. Nothing here is invented by the app — if you do not declare a rule, the app will not guess it.",
+  "policy": {
+    "mandatory_frontmatter": ["title", "aliases", "summary", "tags"],
+
+    "binary_digest_ext": [".xlsx", ".xls", ".csv", ".pdf", ".docx", ".pptx"],
+
+    "tag_vocabulary": {
+      "topic": [
+        { "tag": "research", "meaning": "technical research notes" },
+        { "tag": "project", "meaning": "anything tied to a shipping project" }
+      ],
+      "structure": [
+        { "tag": "index", "meaning": "navigation node — index files only" }
+      ]
+    },
+
+    "index_rule": {
+      "_doc": "An index file is one whose name matches `name_prefix` as a TOKEN ('Index' and 'Index - Research' match, 'Indexing Strategy' does not), or that carries `type: <type_field>` in its frontmatter. With only_tag=true it must carry exactly one tag — `tag` — and ordinary notes may not borrow that tag.",
+      "name_prefix": "Index",
+      "type_field": "index",
+      "tag": "index",
+      "only_tag": true
+    },
+
+    "title_rule": {
+      "_doc": "`title` in the frontmatter must equal the .md filename and the H1. Deliberate mismatches are DECLARED here, keyed by filename without extension (case-insensitive). Each entry pins the allowed value, so a listed file is still reported if its title drifts further; add `h1` only when the heading is deliberately different from the title. An exception naming a note that no longer exists is reported too — the list cleans itself.",
+      "require_h1": true,
+      "exceptions": [
+        {
+          "file": "README",
+          "title": "README — how this vault is organised",
+          "why": "filename is fixed by convention, the title carries the meaning"
+        }
+      ]
+    }
+  }
+}

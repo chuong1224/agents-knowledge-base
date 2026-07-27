@@ -89,10 +89,13 @@ function renderMini() {
   const d = DB;
   if (!d) return;
   const bad = d.checks.filter(c => c.available && c.total);
+  // Nhãn chạy giữa câu nên hạ chữ đầu — CHỈ chữ đầu: `toLowerCase()` cả chuỗi biến
+  // "title ≠ tên file ≠ H1" thành "… h1" (audit W41).
+  const lower = s => s.charAt(0).toLowerCase() + s.slice(1);
   $('itg-mini').innerHTML = d.ok
     ? tr('itg.mini.ok', { c: d.vault.checked, n: d.vault.notes })
     : tr('itg.mini.bad', { p: d.problems }) +
-      bad.map(c => `${c.total} ${esc(cText(c, 'label').toLowerCase())}`).join(' · ');
+      bad.map(c => `${c.total} ${esc(lower(cText(c, 'label')))}`).join(' · ');
 }
 
 export async function pollIntegrity() {
