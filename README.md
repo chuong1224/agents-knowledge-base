@@ -175,7 +175,7 @@ Remove the hook and the app still works fully — you just lose the live layer.
 
 The default tag taxonomy reflects the author's vault — moving it to a config file is the top roadmap item.
 
-> **Note on language:** the UI is currently in Vietnamese (the author's working language). English i18n is on the roadmap.
+> **Note on language:** the UI ships in **English and Vietnamese**. It picks up your browser language on first run; the **VI | EN** switch next to the logo changes it any time and the choice is remembered. Your own content is never translated — note names, tags, colour groups and paths appear exactly as they are in your vault.
 
 ## Tests
 
@@ -190,7 +190,6 @@ The suite is designed to run with the app installed inside a real vault.
 
 - Config file for tag groups & colors (no code edits needed)
 - Standalone mode (`--vault path`) without installing into the vault
-- English UI / i18n
 - Cross-platform process management (mac/linux)
 - Semantic search for vaults that outgrow full-text
 
@@ -221,6 +220,7 @@ Trỏ vào một thư mục note markdown (vault kiểu Obsidian), app phục v�
 - **Sức khoẻ vault:** 🩺 *truy xuất* (`/insight`) — note nóng tuần này so với tuần trước, note đang nguội đi, phân bố tuổi lần đụng cuối, note chưa bao giờ vào đường truy xuất, cụm ít kết nối trên đồ thị note–note, coverage theo khu vực (kèm CLI `python insight.py --report` sinh note báo cáo); 🧪 *toàn vẹn* (`/integrity`) — 4 check **cấu trúc** không cần cấu hình (wikilink gãy, nhúng gãy, anchor lệch heading, ảnh/video mồ côi) và 5 check **contract** đọc luật của chính bạn (thiếu trường frontmatter bắt buộc, file nhị phân chưa tóm tắt trong note, tag ngoài vocabulary, index sai tag, `title` lệch tên file/H1). Click một mục là mở đúng note đó. Chạy tay `python integrity.py` **trả exit 1 khi có lỗi** (cắm thẳng vào pre-commit/CI). Bật check contract: chép `docs/vault-rules.example.json` ra gốc vault thành `vault-rules.json` (hoặc vào `.graph3d/`, hoặc trỏ `GRAPH3D_VAULT_RULES`) rồi **sửa theo vocabulary của bạn** — đây là bản mẫu, không phải bản dùng ngay; mỗi check chỉ đọc phần luật của nó nên khai một khoá là sáng đúng một đèn; không có file thì 5 đèn đó tự tắt êm, 4 check cấu trúc vẫn chạy.
 - **Work map (tuỳ chọn):** vault nào giữ bản đồ việc-đang-mở dạng máy đọc thì app vẽ luôn thành **cây rẽ nhánh** — băng ngang là nhóm, cột là độ sâu phụ thuộc (lá bên trái), mũi tên nghĩa là *phải xong trước*; click một việc mở note đã khai nó; lọc "chỉ việc làm được" theo đúng máy đang ngồi. Server import chính script của bản đồ (cache theo mtime) nên luật phân loại chỉ có một bản trong vault; trỏ `GRAPH3D_WORKMAP_DIR` tới thư mục đó, không có thì panel nói rõ.
 - **2 máy:** journal per-máy nằm trong vault — 2 máy sync chung vault (OneDrive/Drive/Syncthing) tự thấy lịch sử của nhau, máy thứ hai không cần chạy server.
+- **Ngôn ngữ:** giao diện có **song ngữ VI/EN** — lần đầu tự nhận theo ngôn ngữ trình duyệt, đổi bằng nút **VI | EN** cạnh logo (nhớ lựa chọn). Nội dung của bạn không bị dịch: tên note, tag, nhóm màu, đường dẫn giữ nguyên như trong vault.
 - **Cấu hình:** nhóm màu tag ở `TAG_COLORS` (`build_graph_data.py`) + `GROUP_ORDER` (`src/state.js`); loại folder ở `EXCLUDED_DIRS`; đổi port bằng `--port`. Taxonomy mặc định đang theo vault của tác giả — tách ra file config là mục roadmap số một.
 - **Test:** `python tests/selfcheck.py` (~3s; thêm `--slow` cho test port/kill ~16s).
 
