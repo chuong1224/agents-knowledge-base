@@ -6,14 +6,14 @@
    KHÔNG poll nền: chỉ số ở thang ngày/tuần nên fetch lúc mở section, mở overlay và
    khi bấm ↻ — thêm một vòng poll 4s vào đây chỉ tốn CPU cho số không đổi. */
 import { $, esc, byId, focusInto, restoreFocus } from './state.js';
-import { tr } from './i18n.js';
+import { tr, locale } from './i18n.js';
 import { wsOpen } from './workspace.js';
 
 let DB = null;
 
 function fmtDay(ts) {
   if (!ts) return '—';
-  return new Date(ts * 1000).toLocaleDateString('vi-VN');
+  return new Date(ts * 1000).toLocaleDateString(locale());
 }
 
 /* Một dòng note: tên note (stem) + số bên phải. Note không còn trong graph

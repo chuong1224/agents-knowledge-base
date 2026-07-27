@@ -39,6 +39,11 @@ let LANG = initialLang();
 
 export const lang = () => LANG;
 
+/* Locale cho toLocaleDateString/-String. Ngày giờ CŨNG là giao diện: để 'vi-VN' cứng
+   thì user chọn EN vẫn nhận định dạng Việt (audit W43 bắt 4 chỗ). Bên EN dùng en-GB
+   để giữ thứ tự ngày-trước như bản Việt — en-US mm/dd đọc lệch nghĩa với cùng con số. */
+export const locale = () => (LANG === 'vi' ? 'vi-VN' : 'en-GB');
+
 export function setLang(l) {
   if (!LANGS.includes(l) || l === LANG) return;
   try { localStorage.setItem(KEY, l); } catch (e) {}
@@ -90,7 +95,6 @@ export function initLangSwitch() {
 export const DICT = {
   vi: {
     /* --- khung chung --- */
-    'app.title': 'KB Graph 3D — Knowledge Base',
     'lang.switch': 'Ngôn ngữ giao diện',
     'hint.controls': '<b>Kéo trái</b> xoay · <b>Lăn chuột</b> zoom · <b>Kéo phải</b> di chuyển · <b>Kéo node</b> sắp xếp (tự ghim) · <b>Click đúp</b> thả ghim · <b>Click</b> xem note · <b>Ctrl+P</b> tìm nhanh',
     'err.title': 'Không tải được graph',
@@ -148,9 +152,6 @@ export const DICT = {
     'agent.empty': 'Chưa có hoạt động.<br>Khi agent đọc / tìm / sửa note trong vault,<br>node sẽ phát sáng tại đây.',
     'agent.demo': '▶ Demo hiệu ứng',
     'agent.node.missing': 'Node chưa có trên graph — vẫn hiện thao tác',
-    'agent.type.read': 'đọc',
-    'agent.type.search': 'tìm',
-    'agent.type.edit': 'sửa',
 
     /* --- panel: chuỗi truy xuất --- */
     'chain.h2': '⛓ Chuỗi truy xuất',
@@ -159,8 +160,6 @@ export const DICT = {
     'chain.help.hide': 'Ẩn chú giải (nhớ lựa chọn)',
     'chain.empty': 'Chưa có chuỗi truy xuất.',
     'chain.replay': 'Phát lại chuỗi này trên graph',
-    'chain.notes': 'note',
-    'chain.dwell': 'thời gian đọc',
 
     /* --- panel: cockpit ngày --- */
     'ck.h2': '🚀 Cockpit ngày',
@@ -236,13 +235,10 @@ export const DICT = {
     'rd.obsidian': 'Mở trong Obsidian',
     'rd.close': 'Đóng (Esc) — tab giữ nguyên, mở lại còn đủ',
     'rd.newtab': 'Mở note ở tab mới (tìm nhanh)',
-    'rd.backlinks': 'Liên kết tới note này',
     'rd.loading': 'Đang tải…',
-    'rd.err': 'Không đọc được note: {e}',
-    'rd.missing': 'Note không tồn tại: {f}',
     'ws.justnow': 'vừa xong',
-    'ws.minutes': '{n} phút trước',
-    'ws.hours': '{n} giờ trước',
+    'ws.minutes': '{n}ph',
+    'ws.hours': '{n}h',
     'ws.days': '{n} ngày trước',
 
     /* --- quick switcher --- */
@@ -252,7 +248,6 @@ export const DICT = {
     'qs.recent': 'Đọc gần đây',
     'qs.byname': 'Theo tên',
     'qs.content': 'Nội dung',
-    'qs.none': 'Không có kết quả.',
 
     /* --- onboarding (W13 + W42) --- */
     'onb.aria': 'Bắt đầu dùng app — chọn một lối đi',
@@ -439,7 +434,6 @@ export const DICT = {
   },
 
   en: {
-    'app.title': 'KB Graph 3D — Knowledge Base',
     'lang.switch': 'Interface language',
     'hint.controls': '<b>Left-drag</b> rotate · <b>Scroll</b> zoom · <b>Right-drag</b> pan · <b>Drag a node</b> to arrange (pins it) · <b>Double-click</b> unpin · <b>Click</b> read note · <b>Ctrl+P</b> quick find',
     'err.title': 'Could not load the graph',
@@ -492,9 +486,6 @@ export const DICT = {
     'agent.empty': 'No activity yet.<br>When an agent reads / searches / edits a note in the vault,<br>its node lights up here.',
     'agent.demo': '▶ Effects demo',
     'agent.node.missing': 'Not on the graph yet — the action is still shown',
-    'agent.type.read': 'read',
-    'agent.type.search': 'search',
-    'agent.type.edit': 'edit',
 
     'chain.h2': '⛓ Retrieval chains',
     'chain.refresh': 'Refresh',
@@ -502,8 +493,6 @@ export const DICT = {
     'chain.help.hide': 'Hide this legend (remembered)',
     'chain.empty': 'No retrieval chains yet.',
     'chain.replay': 'Replay this chain on the graph',
-    'chain.notes': 'notes',
-    'chain.dwell': 'reading time',
 
     'ck.h2': '🚀 Day cockpit',
     'ck.day': 'Day in the log',
@@ -574,13 +563,10 @@ export const DICT = {
     'rd.obsidian': 'Open in Obsidian',
     'rd.close': 'Close (Esc) — tabs are kept, reopening restores them',
     'rd.newtab': 'Open a note in a new tab (quick find)',
-    'rd.backlinks': 'Links to this note',
     'rd.loading': 'Loading…',
-    'rd.err': 'Could not read the note: {e}',
-    'rd.missing': 'Note not found: {f}',
     'ws.justnow': 'just now',
-    'ws.minutes': '{n} min ago',
-    'ws.hours': '{n} h ago',
+    'ws.minutes': '{n}m',
+    'ws.hours': '{n}h',
     'ws.days': '{n} d ago',
 
     'qs.ph': 'Find a note… (#tag to browse by tag · 2+ characters searches contents too)',
@@ -589,7 +575,6 @@ export const DICT = {
     'qs.recent': 'Recently read',
     'qs.byname': 'By name',
     'qs.content': 'Contents',
-    'qs.none': 'No results.',
 
     'onb.aria': 'Getting started — pick a way in',
     'onb.head.empty': '🌱 This vault has no notes yet',

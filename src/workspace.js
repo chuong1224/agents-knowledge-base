@@ -5,7 +5,7 @@
    không endpoint mới, không database phụ trong vault (ràng buộc Vault Cockpit).
    Top-level chỉ ĐỊNH NGHĨA (không gọi chéo module lúc eval) — an toàn vòng import. */
 import { S, $, esc } from './state.js';
-import { tr } from './i18n.js';
+import { tr, locale } from './i18n.js';
 import { renderPane, paneRefs, saveScroll, syncPin, closeReader } from './reader.js';
 import { openSwitcher } from './finder.js';
 
@@ -43,10 +43,10 @@ function splitOn() { return WS.tabs[1].length > 0; }
 function ago(ts) {
   const d = Date.now() / 1000 - ts;
   if (d < 90) return tr('ws.justnow');
-  if (d < 3600) return Math.round(d / 60) + 'ph';
-  if (d < 86400) return Math.round(d / 3600) + 'h';
+  if (d < 3600) return tr('ws.minutes', { n: Math.round(d / 60) });
+  if (d < 86400) return tr('ws.hours', { n: Math.round(d / 3600) });
   if (d < 7 * 86400) return tr('ws.days', { n: Math.round(d / 86400) });
-  return new Date(ts * 1000).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+  return new Date(ts * 1000).toLocaleDateString(locale(), { day: '2-digit', month: '2-digit' });
 }
 
 /* ---------- render tabbar + trạng thái split ---------- */

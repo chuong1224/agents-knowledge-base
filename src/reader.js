@@ -9,7 +9,7 @@
    mà graph đã tạo cạnh, một ngữ nghĩa duy nhất.
    Top-level chỉ ĐỊNH NGHĨA (không gọi chéo module lúc eval) — an toàn vòng import. */
 import { S, $, esc, idOf } from './state.js';
-import { tr } from './i18n.js';
+import { tr, locale } from './i18n.js';
 import { flyTo } from './graph.js';
 import { pulses } from './effects.js';
 import { WS, wsOpen, wsBack, wsSplit, tabAt, isPinned, togglePin, pushRecent } from './workspace.js';
@@ -266,7 +266,7 @@ export async function renderPane(p, opts = {}) {
     return;
   }
   if (R.token !== token || tabAt(p) !== t || t.note !== node.id) return;  // đã nhảy sang note/tab khác
-  const when = new Date(d.mtime * 1000).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
+  const when = new Date(d.mtime * 1000).toLocaleString(locale(), { dateStyle: 'short', timeStyle: 'short' });
   R.meta.textContent = tr('rd.meta.edited', { folder: node.folder, n: node.degree, when });
   const text = d.text.replace(/^---\r?\n[\s\S]*?\r?\n---(\r?\n|$)/, '');   // frontmatter đã hiện ở header
   R.content.innerHTML = mdRenderer().render(text, { folder: node.folder });

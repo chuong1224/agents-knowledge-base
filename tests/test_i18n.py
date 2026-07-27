@@ -154,5 +154,49 @@ for blk, lang in ((blk_vi, "vi"), (blk_en, "en")):
             broken.append("%s %s" % (lang, s[:90]))
 check("9 moi dong tu dien la chuoi JS dong kin", not broken, broken[:5])
 
+# --- 10: chu tieng Viet trong markup phai duoc khoa phu (audit W43) ---
+# Bug that: aria-label cua #onb-box mang tieng Viet ma khong co data-i18n-aria -> doc
+# man hinh o che do EN van doc tieng Viet. Kiem 3 chi bat "khoa dung co that", KHONG
+# bat chieu nguoc lai "chu co that co duoc khoa khong".
+ATTR_KEY = {"title": "data-i18n-title", "placeholder": "data-i18n-ph", "aria-label": "data-i18n-aria"}
+bare_attr = []
+for tag in re.findall(r"<[a-zA-Z][^>]*>", html):
+    for attr, key in ATTR_KEY.items():
+        for val in re.findall(r'%s="([^"]*)"' % attr, tag):
+            if VI_CHARS.search(val) and key not in tag:
+                bare_attr.append("%s=%s" % (attr, val[:60]))
+check("10 attribute tieng Viet trong markup deu co khoa i18n", not bare_attr, bare_attr[:5])
+
+bare_text = []
+for m in re.finditer(r"(<[a-zA-Z][^>]*>)([^<>]*[^\s<>][^<>]*)(?=<)", html):
+    tag, text = m.group(1), m.group(2)
+    if not VI_CHARS.search(text) or "data-i18n" in tag:
+        continue
+    before = html[:m.start()]
+    if before.rfind("data-i18n-html") > before.rfind("</div>"):
+        continue                                   # nam trong khoi da khai -html
+    bare_text.append(text.strip()[:60])
+check("10 text node tieng Viet trong markup deu co khoa i18n", not bare_text, bare_text[:5])
+
+# --- 11: khong hardcode locale (ngay/gio cung la giao dien) ---
+# Bug that: 4 cho toLocaleDateString('vi-VN') -> chon EN van ra dinh dang Viet.
+hard_locale = []
+for p in sorted(glob.glob(os.path.join(SRC, "*.js"))):
+    if os.path.basename(p) == "i18n.js":
+        continue
+    for i, line in enumerate(read(p).splitlines(), 1):
+        if re.search(r"toLocale\w*\(\s*['\"][a-z]{2}-[A-Z]{2}['\"]", line):
+            hard_locale.append("%s:%d" % (os.path.basename(p), i))
+check("11 khong hardcode locale ngoai i18n.js (dung locale())", not hard_locale, hard_locale)
+
+# --- 12: khong de khoa chet trong tu dien ---
+# Khoa khai ma khong ai dung = rac, va che mat loi go sai ten khoa (khoa that thi thanh
+# "thieu", khoa cu thi nam im). Khoa DONG do server gui id/code duoc mien.
+used = set(re.findall(r'data-i18n(?:-html|-title|-ph|-aria)?="([^"]+)"', html))
+used |= used_js
+DYNAMIC_PREFIX = ("itg.c.", "onb.e.")           # ghep tu id check / ma loi cua server
+dead = sorted(k for k in vi - used if not k.startswith(DYNAMIC_PREFIX))
+check("12 tu dien khong con khoa chet", not dead, dead[:8])
+
 print("\nTONG KET test_i18n: %s" % (("FAIL %d: %s" % (len(fails), ", ".join(fails))) if fails else "ALL PASS"))
 sys.exit(1 if fails else 0)

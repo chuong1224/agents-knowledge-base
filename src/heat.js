@@ -1,6 +1,6 @@
 /* heat.js — heatmap tần suất truy xuất (/heat): trạng thái + poll + render top-list */
 import { S, byId, $, esc } from './state.js';
-import { tr } from './i18n.js';
+import { tr, locale } from './i18n.js';
 import { flyTo, refreshAllNodes } from './graph.js';
 import { agentHit } from './effects.js';
 
@@ -32,7 +32,7 @@ function renderHeatStats() {
   const el = $('heat-stats'); if (!el) return;
   const h = lastHeat || {}, tot = h.total || 0, dis = h.distinct || 0;
   if (h.scope === 'all') {
-    const since = h.since ? new Date(h.since * 1000).toLocaleDateString('vi-VN') : '—';
+    const since = h.since ? new Date(h.since * 1000).toLocaleDateString(locale()) : '—';
     const mc = (h.machines || []).length;
     el.textContent = tr('heat.all.stats', { tot, dis, since }) + (mc > 1 ? tr('heat.machines', { n: mc }) : '');
   } else {
