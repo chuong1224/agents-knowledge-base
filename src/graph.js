@@ -1,6 +1,7 @@
 /* graph.js — dựng ForceGraph3D + node/link + lọc hiển thị + physics + camera.
    Top-level chỉ ĐỊNH NGHĨA (không gọi chéo module lúc eval) — an toàn với vòng import. */
 import * as THREE from 'three';
+import { tr } from './i18n.js';
 import { S, byId, adjacency, tagOn, extOn, $, esc, idOf, linkKey } from './state.js';
 import { glowSprite, glowTexture, textSprite } from './sprites.js';
 import { pulses, hotLinks, visitFx } from './effects.js';
@@ -654,7 +655,7 @@ export async function addBloom() {
     const { UnrealBloomPass } = await import('three/addons/postprocessing/UnrealBloomPass.js');
     S.bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.15 + S.neon * 1.1, 0.4, 0.3);
     S.Graph.postProcessingComposer().addPass(S.bloomPass);
-  } catch (e) { console.warn('Bloom tắt:', e); }
+  } catch (e) { console.warn('bloom disabled:', e); }
 }
 export function setNeon(v) {
   S.neon = v;
@@ -669,7 +670,7 @@ export function initGraph() {
     .showNavInfo(false)
     .nodeThreeObject(nodeObject)
     .nodeLabel(n => n.kind === 'file'
-      ? `<div class="tt-title">📎 ${esc(n.name)}</div><div class="tt-tags">${esc(n.folder)} · ${n.degree} liên kết</div>`
+      ? `<div class="tt-title">📎 ${esc(n.name)}</div><div class="tt-tags">${esc(n.folder)} · ${tr('tt.links', { n: n.degree })}</div>`
       : n.kind === 'tag'
       ? `<div class="tt-title">${esc(n.name)}</div><div class="tt-tags">${n.degree} note</div>`
       : `<div class="tt-title">${esc(n.name)}</div>` +

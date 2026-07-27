@@ -1,6 +1,7 @@
 /* ui.js — panel điều khiển: chip/lọc, section gập/mở + persist, demo hiệu ứng,
    refreshData khi vault đổi. (Card thông tin cũ đã thay bằng reader.js — giai đoạn 1.) */
 import { S, byId, adjacency, tagOn, tagOff, extOn, $, esc, deAccent, GROUP_ORDER } from './state.js';
+import { tr } from './i18n.js';
 import { applyFilters, refreshAllNodes, updateStats, applyNodeState, physics, pauseRotate, setNeon, linkAux, setCluster } from './graph.js';
 import { pulses, agentFlow, endAgentFlow } from './effects.js';
 import { pollChains, addFeedEvent } from './activity.js';
@@ -297,7 +298,7 @@ export function buildUI() {
     const el = $('sw-cluster'), lock = S.mode === 'uni';
     el.classList.toggle('disabled', lock);
     el.setAttribute('aria-disabled', lock);
-    el.title = lock ? '🪐 đang quy định tâm cụm — 🧲 mở lại khi rời Vũ Trụ' : '';
+    el.title = lock ? tr('fx.cluster.uni') : '';
   };
   const preset = mode => { physics(mode); syncClusterLock(); };
   $('ph-bung').onclick = () => preset('bung');

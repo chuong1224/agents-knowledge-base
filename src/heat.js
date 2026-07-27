@@ -1,5 +1,6 @@
 /* heat.js — heatmap tần suất truy xuất (/heat): trạng thái + poll + render top-list */
 import { S, byId, $, esc } from './state.js';
+import { tr } from './i18n.js';
 import { flyTo, refreshAllNodes } from './graph.js';
 import { agentHit } from './effects.js';
 
@@ -33,9 +34,9 @@ function renderHeatStats() {
   if (h.scope === 'all') {
     const since = h.since ? new Date(h.since * 1000).toLocaleDateString('vi-VN') : '—';
     const mc = (h.machines || []).length;
-    el.textContent = `Tích luỹ · ${tot} lượt · ${dis} note · từ ${since}` + (mc > 1 ? ` · ${mc} máy` : '');
+    el.textContent = tr('heat.all.stats', { tot, dis, since }) + (mc > 1 ? tr('heat.machines', { n: mc }) : '');
   } else {
-    el.textContent = `Gần đây (log cuộn) · ${tot} lượt · ${dis} note`;
+    el.textContent = tr('heat.window.stats', { tot, dis });
   }
 }
 function renderHeatTop() {
@@ -43,14 +44,14 @@ function renderHeatTop() {
   const sig = heatScope + '#' + heatTop.map(t => t.file + ':' + t.n).join('|');
   if (sig === lastHeatSig) return;
   lastHeatSig = sig;
-  if (!heatTop.length) { wrap.innerHTML = '<div id="heat-empty">Chưa có dữ liệu truy xuất.</div>'; return; }
+  if (!heatTop.length) { wrap.innerHTML = `<div id="heat-empty">${tr('heat.empty')}</div>`; return; }
   const mx = heatTop[0].n || 1;
   wrap.innerHTML = heatTop.map(t => {
     const node = byId.get(t.file);
     const stem = node ? node.stem : (t.file || '').split('/').pop().replace(/\.md$/i, '');
     const w = Math.round(100 * t.n / mx);
     const col = node ? node.color : '#6e6597';
-    return `<div class="heatrow" data-file="${esc(t.file)}" title="${esc(stem)} · ${t.n} lượt"><span class="hn">${esc(stem)}</span><span class="hbar"><span style="width:${w}%;background:${col}"></span></span><span class="hc">${t.n}</span></div>`;
+    return `<div class="heatrow" data-file="${esc(t.file)}" title="${esc(stem)} · ${tr('heat.hits', { n: t.n })}"><span class="hn">${esc(stem)}</span><span class="hbar"><span style="width:${w}%;background:${col}"></span></span><span class="hc">${t.n}</span></div>`;
   }).join('');
   wrap.querySelectorAll('.heatrow').forEach(el => {
     el.onclick = () => { const n = byId.get(el.dataset.file); if (n) { flyTo(n, 900); agentHit(n, 'read', true); } };

@@ -52,7 +52,14 @@ DEMO_PORT = 8322
 
 
 class OnboardingError(Exception):
-    """Lỗi người dùng sửa được (thiếu nguồn, vault không trống…) — caller in nguyên văn."""
+    """Lỗi người dùng sửa được (thiếu nguồn, vault không trống…) — caller in nguyên văn.
+
+    `code` để UI DỊCH được sang ngôn ngữ đang chọn (W43): thông điệp tiếng Việt trong
+    ngoặc vẫn là bản gốc cho CLI và cho trường hợp UI chưa có khoá tương ứng."""
+
+    def __init__(self, msg, code=""):
+        super().__init__(msg)
+        self.code = code
 
 
 # ---------------------------------------------------------------- nguồn bundled
@@ -174,12 +181,13 @@ def install_starter(target, src=None, force=False):
     src = os.path.abspath(src or starter_dir())
     target = os.path.abspath(target)
     if not os.path.isdir(src):
-        raise OnboardingError("không tìm thấy starter-vault: %s" % src)
+        raise OnboardingError("không tìm thấy starter-vault: %s" % src, "starter_missing")
     if count_notes(src) <= 0:
-        raise OnboardingError("starter-vault không có note .md nào: %s" % src)
+        raise OnboardingError("starter-vault không có note .md nào: %s" % src, "starter_empty")
     if not force and count_notes(target) > 0:
         raise OnboardingError(
-            "thư mục đích đã có note .md — starter vault chỉ dùng cho vault TRỐNG: %s" % target)
+            "thư mục đích đã có note .md — starter vault chỉ dùng cho vault TRỐNG: %s" % target,
+            "target_not_empty")
 
     created, skipped = [], []
     for root, dirs, files in os.walk(src):

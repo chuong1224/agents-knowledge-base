@@ -16,7 +16,9 @@
      + test_insight (tang insight suc khoe vault /insight + note bao cao, W10)
      + test_integrity (den bao toan ven vault /integrity — link/nhung/anchor gay,
        anh mo coi, frontmatter, "mo nilon"; W11)
-     + test_onboarding (vault trong: state/install_starter/mirror_app, W13);
+     + test_onboarding (vault trong: state/install_starter/mirror_app, W13)
+     + test_i18n (song ngu VI/EN: 2 ngon ngu cung tap khoa, khoa dung deu co that,
+       bien {x} khop, src/*.js het chuoi giao dien tieng Viet; W43);
      test_p2 (~15s, spawn process that + chiem port 8397) chi chay khi --slow.
 
 Chay:  python .graph3d/tests/selfcheck.py [--slow]
@@ -219,7 +221,7 @@ def lop2_contract():
 def lop3_unit(slow):
     files = ["test_p1.py", "test_p3.py", "test_p4.py", "test_p5.py", "test_reader.py",
              "test_finder.py", "test_cockpit.py", "test_journal.py", "test_insight.py",
-             "test_integrity.py", "test_onboarding.py"]
+             "test_integrity.py", "test_onboarding.py", "test_i18n.py"]
     if slow:
         files.append("test_p2.py")
     for name in files:

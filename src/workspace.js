@@ -5,6 +5,7 @@
    không endpoint mới, không database phụ trong vault (ràng buộc Vault Cockpit).
    Top-level chỉ ĐỊNH NGHĨA (không gọi chéo module lúc eval) — an toàn vòng import. */
 import { S, $, esc } from './state.js';
+import { tr } from './i18n.js';
 import { renderPane, paneRefs, saveScroll, syncPin, closeReader } from './reader.js';
 import { openSwitcher } from './finder.js';
 
@@ -41,10 +42,10 @@ export function tabAt(p) { return WS.tabs[p][WS.active[p]] || null; }
 function splitOn() { return WS.tabs[1].length > 0; }
 function ago(ts) {
   const d = Date.now() / 1000 - ts;
-  if (d < 90) return 'vừa xong';
+  if (d < 90) return tr('ws.justnow');
   if (d < 3600) return Math.round(d / 60) + 'ph';
   if (d < 86400) return Math.round(d / 3600) + 'h';
-  if (d < 7 * 86400) return Math.round(d / 86400) + ' ngày';
+  if (d < 7 * 86400) return tr('ws.days', { n: Math.round(d / 86400) });
   return new Date(ts * 1000).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
 }
 
@@ -56,7 +57,7 @@ function renderTabbar(p) {
     return `<div class="tab${on ? ' on' : ''}" role="tab" tabindex="0" aria-selected="${on}"` +
       ` data-i="${i}" title="${esc(n ? n.name : t.note)}">` +
       `<span class="dot" style="background:${n ? n.color : 'var(--faint)'}"></span>` +
-      `<span class="n">${esc(n ? n.stem : '(đã xoá)')}</span><span class="tx" title="Đóng tab">✕</span></div>`;
+      `<span class="n">${esc(n ? n.stem : tr('ws.deleted'))}</span><span class="tx" title="${tr('ws.closetab')}">✕</span></div>`;
   }).join('');
 }
 function syncSplit() { $('reader').classList.toggle('split', splitOn()); }
@@ -212,7 +213,7 @@ export function renderSbSections() {
   pbox.classList.toggle('has', pn.length > 0);
   pbox.querySelector('.c').textContent = pn.length ? String(pn.length) : '';
   pbox.querySelector('.sb-list').innerHTML =
-    pn.map(n => sbRow(n, '<span class="ux" title="Bỏ ghim">✕</span>')).join('');
+    pn.map(n => sbRow(n, `<span class="ux" title="${tr('ws.unpin')}">✕</span>`)).join('');
   const rc = recentNotes(RECENT_SHOW);
   const rbox = $('sb-recent');
   rbox.classList.toggle('has', rc.length > 0);

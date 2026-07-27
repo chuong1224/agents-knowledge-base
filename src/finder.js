@@ -6,7 +6,8 @@
    từ giai đoạn 4: nhóm "Đọc gần đây" khi ô trống + Ctrl/middle-click mở TAB MỚI
    (cây lẫn switcher; nút ＋ tabbar mở switcher ở chế độ tab mới).
    Top-level chỉ ĐỊNH NGHĨA (không gọi chéo module lúc eval) — an toàn vòng import. */
-import { S, $, esc, deAccent } from './state.js';
+import { S, $, esc, deAccent, focusInto, restoreFocus } from './state.js';
+import { tr } from './i18n.js';
 import { openReader } from './reader.js';
 import { recentNotes, renderSbSections } from './workspace.js';
 
@@ -74,14 +75,14 @@ function renderDir(dir, path, depth, out) {
       `<span class="dot" style="background:${n.color}"></span><span class="n">${esc(n.stem)}</span></div>`));
   dir.files.slice().sort((a, b) => viCmp(a.name, b.name)).forEach(f =>
     out.push(`<div class="tr file" role="button" tabindex="0" data-file="${esc(f.id)}"` +
-      ` style="padding-left:${pad}px" title="${esc(f.id)} — mở tab mới">` +
+      ` style="padding-left:${pad}px" title="${tr('tree.newtab', { f: esc(f.id) })}">` +
       `<span class="tw">📎</span><span class="n">${esc(f.name)}</span></div>`));
 }
 export function buildTree() {
   if (!_restored) { restoreTreeOpen(); _restored = true; }
   const out = [];
   renderDir(treeModel(), '', 0, out);
-  $('tree').innerHTML = out.join('') || '<div class="bl-empty">Vault trống.</div>';
+  $('tree').innerHTML = out.join('') || `<div class="bl-empty">${tr('sb.empty')}</div>`;
   renderSbSections();   // section Ghim/Gần đây rebuild cùng nhịp (tên/màu note có thể đổi)
 }
 function onTreeActivate(row, newTab) {
@@ -136,18 +137,18 @@ function qsRender() {
   let html = '';
   if (!qRaw) {
     const rc = recentNotes(6);          // giai đoạn 4: mở switcher trống = quay lại chỗ vừa đọc
-    if (rc.length) html = '<div class="qs-h">Đọc gần đây</div>' + rc.map(r => qsNoteRow(r.node)).join('');
+    if (rc.length) html = `<div class="qs-h">${tr('qs.recent')}</div>` + rc.map(r => qsNoteRow(r.node)).join('');
     const top = notes.slice().sort((a, b) => b.degree - a.degree).slice(0, 8);
-    html += '<div class="qs-h">Note nhiều liên kết</div>' + top.map(n => qsNoteRow(n)).join('');
+    html += `<div class="qs-h">${tr('qs.top')}</div>` + top.map(n => qsNoteRow(n)).join('');
   } else if (qRaw.startsWith('#')) {
     // Duyệt theo tag: #q khớp không dấu với bất kỳ tag nào của note
     const q = deAccent(qRaw.slice(1));
     const hit = notes.filter(n => n.tags.some(t => deAccent(t).includes(q)))
       .sort((a, b) => viCmp(a.stem, b.stem)).slice(0, 30);
-    html = `<div class="qs-h">Duyệt tag · ${hit.length} note</div>` +
+    html = `<div class="qs-h">${tr('qs.tagbrowse', { n: hit.length })}</div>` +
       (hit.map(n => qsNoteRow(n,
         `<span class="tagb">#${esc(n.tags.find(t => deAccent(t).includes(q)) || '')}</span>`)).join('') ||
-        '<div class="qs-miss">Không có tag nào khớp.</div>');
+        `<div class="qs-miss">${tr('qs.tag.none')}</div>`);
   } else {
     const q = deAccent(qRaw);
     const starts = [], incl = [];
@@ -158,15 +159,15 @@ function qsRender() {
     });
     const named = starts.sort((a, b) => viCmp(a.stem, b.stem))
       .concat(incl.sort((a, b) => viCmp(a.stem, b.stem))).slice(0, 8);
-    html = '<div class="qs-h">Tên note</div>' +
-      (named.map(n => qsNoteRow(n)).join('') || '<div class="qs-miss">Không note nào khớp tên.</div>');
+    html = `<div class="qs-h">${tr('qs.byname')}</div>` +
+      (named.map(n => qsNoteRow(n)).join('') || `<div class="qs-miss">${tr('qs.name.none')}</div>`);
     if (qRaw.length >= 2) {
-      html += '<div class="qs-h">Nội dung</div>';
+      html += `<div class="qs-h">${tr('qs.content')}</div>`;
       if (_qsContent.q === qRaw) {
         html += _qsContent.rows.map(qsContentRow).join('') ||
-          '<div class="qs-miss">Không khớp nội dung note nào.</div>';
+          `<div class="qs-miss">${tr('qs.content.none')}</div>`;
       } else {
-        html += '<div class="qs-miss">Đang tìm…</div>';
+        html += `<div class="qs-miss">${tr('qs.searching')}</div>`;
       }
     }
   }
@@ -202,12 +203,14 @@ export function openSwitcher(opts) {
   _qsContent = { q: '', rows: [] };
   _qsNewTab = !!(opts && opts.newTab);
   $('qs').classList.add('show');
+  focusInto($('qs-box'));
   const inp = $('qs-input');
   inp.value = '';
   qsRender();
   inp.focus();
 }
-export function closeSwitcher() { $('qs').classList.remove('show'); _qsNewTab = false; }
+export function closeSwitcher() { $('qs').classList.remove('show');
+  restoreFocus(); _qsNewTab = false; }
 
 /* ---------- sidebar trái (nhà của cây vault) ---------- */
 function applySidebar(open) {

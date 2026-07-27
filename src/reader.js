@@ -9,6 +9,7 @@
    mà graph đã tạo cạnh, một ngữ nghĩa duy nhất.
    Top-level chỉ ĐỊNH NGHĨA (không gọi chéo module lúc eval) — an toàn vòng import. */
 import { S, $, esc, idOf } from './state.js';
+import { tr } from './i18n.js';
 import { flyTo } from './graph.js';
 import { pulses } from './effects.js';
 import { WS, wsOpen, wsBack, wsSplit, tabAt, isPinned, togglePin, pushRecent } from './workspace.js';
@@ -41,7 +42,7 @@ export function syncPin(p) {
   const on = !!(t && isPinned(t.note));
   R.pin.textContent = on ? '★' : '☆';
   R.pin.classList.toggle('on', on);
-  R.pin.title = on ? 'Bỏ ghim note' : 'Ghim note (hiện ở sidebar)';
+  R.pin.title = on ? tr('rd.unpin') : tr('rd.pin');
 }
 
 /* ---------- resolve target (mirror resolve_note/resolve_file của scanner) ---------- */
@@ -120,7 +121,7 @@ function renderWikilink(meta, env) {
   const f = resolveFile(target, env.folder);
   if (f) return meta.embed && IMG_EXTS.has(f.ext)
     ? `<img src="${assetUrl(f)}" alt="${esc(disp)}" loading="lazy">` : fileAnchor(f, disp);
-  return `<span class="wl miss" title="Không có trong vault">${esc(disp)}</span>`;
+  return `<span class="wl miss" title="${tr('rd.wl.miss')}">${esc(disp)}</span>`;
 }
 function wikilinkRule(md) {
   md.inline.ruler.before('link', 'wikilink', (state, silent) => {
@@ -219,8 +220,8 @@ function renderBacklinks(node, R) {
     rows.push(src);
   });
   rows.sort((a, b) => a.name.localeCompare(b.name, 'vi'));
-  if (!rows.length) { R.backlinks.innerHTML = '<h4>🔗 Backlinks</h4><div class="bl-empty">Chưa có note nào trỏ tới đây.</div>'; return; }
-  R.backlinks.innerHTML = `<h4>🔗 Backlinks · ${rows.length} note trỏ tới đây</h4>` + rows.map(n =>
+  if (!rows.length) { R.backlinks.innerHTML = `<h4>🔗 Backlinks</h4><div class="bl-empty">${tr('rd.bl.empty')}</div>`; return; }
+  R.backlinks.innerHTML = `<h4>${tr('rd.bl.count', { n: rows.length })}</h4>` + rows.map(n =>
     `<div class="bl-row" data-note="${esc(n.id)}"><span class="dot" style="background:${n.color}"></span><span class="n">${esc(n.name)}</span></div>`
   ).join('');
 }
@@ -236,7 +237,7 @@ export async function renderPane(p, opts = {}) {
     R.title.textContent = t.note.split('/').pop().replace(/\.md$/, '');
     R.meta.textContent = '';
     R.tags.innerHTML = '';
-    R.content.innerHTML = '<div class="bl-empty">Note không còn trong vault — đóng tab này.</div>';
+    R.content.innerHTML = `<div class="bl-empty">${tr('rd.gone')}</div>`;
     R.backlinks.innerHTML = '';
     return;
   }
@@ -245,8 +246,8 @@ export async function renderPane(p, opts = {}) {
   R.tags.innerHTML = node.tags.map(tg => `<span class="tag">#${esc(tg)}</span>`).join('');
   R.obsidian.href = `obsidian://open?vault=${encodeURIComponent(S.vaultName)}&file=${encodeURIComponent(node.id.replace(/\.md$/, ''))}`;
   syncPin(p);
-  R.meta.textContent = `📁 ${node.folder} · ${node.degree} liên kết`;
-  R.content.innerHTML = '<div class="bl-empty">Đang tải…</div>';
+  R.meta.textContent = tr('rd.meta', { folder: node.folder, n: node.degree });
+  R.content.innerHTML = `<div class="bl-empty">${tr('rd.loading')}</div>`;
   if (opts.fly !== false) {
     flyTo(node, 1100);
     pulses.push({ node, t0: performance.now(), dur: 1800, color: '#ffffff', soft: true });
@@ -259,14 +260,14 @@ export async function renderPane(p, opts = {}) {
     d = await res.json();
   } catch (e) {
     if (R.token === token) {
-      R.content.innerHTML = `<div class="bl-empty">Không đọc được note (${esc(e.message)}) — có thể vừa bị xoá/đổi tên, chờ graph refresh.</div>`;
+      R.content.innerHTML = `<div class="bl-empty">${tr('rd.readerr', { e: esc(e.message) })}</div>`;
       R.backlinks.innerHTML = '';
     }
     return;
   }
   if (R.token !== token || tabAt(p) !== t || t.note !== node.id) return;  // đã nhảy sang note/tab khác
   const when = new Date(d.mtime * 1000).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
-  R.meta.textContent = `📁 ${node.folder} · ${node.degree} liên kết · sửa ${when}`;
+  R.meta.textContent = tr('rd.meta.edited', { folder: node.folder, n: node.degree, when });
   const text = d.text.replace(/^---\r?\n[\s\S]*?\r?\n---(\r?\n|$)/, '');   // frontmatter đã hiện ở header
   R.content.innerHTML = mdRenderer().render(text, { folder: node.folder });
   decorateCallouts(R.content);

@@ -5,7 +5,8 @@
    hàm mà CLI --report dùng), đừng tính lại con số nào ở đây.
    KHÔNG poll nền: chỉ số ở thang ngày/tuần nên fetch lúc mở section, mở overlay và
    khi bấm ↻ — thêm một vòng poll 4s vào đây chỉ tốn CPU cho số không đổi. */
-import { $, esc, byId } from './state.js';
+import { $, esc, byId, focusInto, restoreFocus } from './state.js';
+import { tr } from './i18n.js';
 import { wsOpen } from './workspace.js';
 
 let DB = null;
@@ -38,70 +39,68 @@ function histHtml(hist, oldest) {
     `<span class="b"><span style="width:${Math.round(100 * n / mx)}%"></span></span>` +
     `<span class="c">${n}</span></div>`).join('');
   return `<div class="ins-hist">${bars}</div>` +
-    `<div class="ins-note">Đơn vị: NGÀY kể từ lần cuối có agent đụng · note già nhất ${oldest.toFixed(1)} ngày</div>`;
+    `<div class="ins-note">${tr('ins.hist.unit', { d: oldest.toFixed(1) })}</div>`;
 }
 
 function render() {
   const d = DB, p = d.params, c = d.coverage, w = d.window, wk = d.weak, da = d.data;
   $('ins-sum').innerHTML =
-    `<b>${c.notes}</b> note · coverage <b>${c.pct}%</b> · cửa sổ <b>${p.days}</b> ngày cuộn` +
-    ` · nguội ≥ <b>${p.cold_days}</b> ngày · 🖥 ${esc(d.host || '')}`;
+    tr('ins.sum', { n: c.notes, pct: c.pct, days: p.days, cold: p.cold_days }) + ` · 🖥 ${esc(d.host || '')}`;
 
   const tiles = [
-    ['Ghé tuần này', w.cur_notes + ' note', ''],
-    ['Lượt tuần này', w.cur_events + (w.cur_events >= w.prev_events ? ' ▲' : ' ▼'), ''],
-    ['Chưa bao giờ đụng', c.never, c.never ? 'warn' : ''],
-    ['Nguội ≥' + p.cold_days + 'd', d.cold.total, d.cold.total ? 'warn' : ''],
-    ['Đang nguội đi', d.cooling.total, ''],
-    ['Không nằm index', wk.no_index.total, wk.no_index.total ? 'warn' : ''],
+    [tr('ins.tile.week'), w.cur_notes + ' ' + tr('stats.notes'), ''],
+    [tr('ins.tile.hits'), w.cur_events + (w.cur_events >= w.prev_events ? ' ▲' : ' ▼'), ''],
+    [tr('ins.tile.never'), c.never, c.never ? 'warn' : ''],
+    [tr('ins.tile.cold', { d: p.cold_days }), d.cold.total, d.cold.total ? 'warn' : ''],
+    [tr('ins.tile.cooling'), d.cooling.total, ''],
+    [tr('ins.tile.noindex'), wk.no_index.total, wk.no_index.total ? 'warn' : ''],
   ].map(([lab, val, cls]) =>
     `<div class="tile ${cls}"><b>${esc(String(val))}</b><span>${esc(lab)}</span></div>`).join('');
 
   const hotMax = Math.max(1, ...d.hot.map(h => h.n));
   const hot = d.hot.map(h => row(h.file, h.n,
-    `${h.file}\ntuần này ${h.n} lượt · tuần trước ${h.prev} · chênh ${h.delta > 0 ? '+' : ''}${h.delta}`,
+    `${h.file}\n` + tr('ins.tip.hot', { n: h.n, prev: h.prev, delta: (h.delta > 0 ? '+' : '') + h.delta }),
     Math.round(100 * h.n / hotMax), (byId.get(h.file) || {}).color));
 
   const cooling = d.cooling.list.map(x => row(x.file, x.prev + ' → 0',
-    `${x.file}\ntuần trước ${x.prev} lượt · tuần này chưa lần nào`));
+    `${x.file}\n` + tr('ins.tip.cooling', { prev: x.prev })));
 
   const cold = d.cold.list.map(x => row(x.file, x.days.toFixed(1) + 'd',
-    `${x.file}\nlần cuối ${fmtDay(x.last)} (${x.days.toFixed(1)} ngày) · tổng ${x.total} lượt`));
+    `${x.file}\n` + tr('ins.tip.cold', { day: fmtDay(x.last), d: x.days.toFixed(1), n: x.total })));
 
   const never = d.never.list.map(x => row(x.file, x.degree + '🔗',
-    `${x.file}\nchưa có dấu vết truy xuất nào · ${x.degree} liên kết note`));
+    `${x.file}\n` + tr('ins.tip.never', { n: x.degree })));
   const unread = d.unread.list.map(f => row(f, 'grep',
-    `${f}\nchỉ tình cờ khớp tìm kiếm — chưa lần nào được đọc/sửa`));
+    `${f}\n` + tr('ins.tip.unread')));
 
   const small = wk.small.map(cl =>
-    `<div class="ins-note">cụm ${cl.size} note: ${cl.files.map(f =>
+    `<div class="ins-note">${tr('ins.cluster', { n: cl.size })}${cl.files.map(f =>
       esc((byId.get(f) || {}).stem || f)).join(' · ')}</div>`).join('');
   const areas = d.areas.map(a =>
     `<div class="ins-arow"><span class="n">${esc(a.area)}</span>` +
-    `<span>${a.notes} note</span><span>${a.touched} đã đụng</span>` +
-    `<span class="${a.never ? 'w' : ''}">${a.never} chưa</span>` +
-    `<span>${a.cold} nguội</span><span class="${a.orphans ? 'w' : ''}">${a.orphans} mồ côi</span></div>`).join('');
+    `<span>${a.notes} ${tr('stats.notes')}</span><span>${a.touched} ${tr('ins.a.touched')}</span>` +
+    `<span class="${a.never ? 'w' : ''}">${a.never} ${tr('ins.a.never')}</span>` +
+    `<span>${a.cold} ${tr('ins.a.cold')}</span><span class="${a.orphans ? 'w' : ''}">${a.orphans} ${tr('ins.a.orphans')}</span></div>`).join('');
 
   $('ins-body').innerHTML =
     `<div id="ins-tiles">${tiles}</div>` +
-    `<div class="dash-h">🔥 Nóng nhất ${p.days} ngày qua (số = lượt; tooltip có tuần trước)</div>${list(hot, 'Chưa có lượt truy xuất nào trong cửa sổ này.')}` +
-    `<div class="dash-h">🌡 Tuổi lần đụng cuối — toàn vault</div>${histHtml(d.cold.hist, d.cold.oldest_age)}` +
-    `<div class="dash-h">🥶 Đang nguội đi (tuần trước ≥${p.cooling_min} lượt, tuần này 0)</div>${list(cooling, 'Không có note nào vừa rời tay.')}` +
-    `<div class="dash-h">🕸 Nguội ≥${p.cold_days} ngày (${d.cold.total} note, nguội nhất trước)</div>${list(cold, 'Không có note nào nguội quá ngưỡng.')}` +
-    `<div class="dash-h">🚫 Chưa vào đường truy xuất (${d.never.total} không dấu vết · ${d.unread.total} chỉ khớp tìm kiếm)</div>${list(never.concat(unread), 'Mọi note đều đã từng được agent mở.')}` +
-    `<div class="dash-h">🔗 Cụm ít kết nối — đồ thị note–note (${wk.components} thành phần, lớn nhất ${wk.largest} note)</div>` +
+    `<div class="dash-h">${tr('ins.h.hot', { d: p.days })}</div>${list(hot, tr('ins.e.hot'))}` +
+    `<div class="dash-h">${tr('ins.h.age')}</div>${histHtml(d.cold.hist, d.cold.oldest_age)}` +
+    `<div class="dash-h">${tr('ins.h.cooling', { n: p.cooling_min })}</div>${list(cooling, tr('ins.e.cooling'))}` +
+    `<div class="dash-h">${tr('ins.h.cold', { d: p.cold_days, n: d.cold.total })}</div>${list(cold, tr('ins.e.cold'))}` +
+    `<div class="dash-h">${tr('ins.h.never', { n: d.never.total, u: d.unread.total })}</div>${list(never.concat(unread), tr('ins.e.never'))}` +
+    `<div class="dash-h">${tr('ins.h.weak', { c: wk.components, l: wk.largest })}</div>` +
     (small || '') +
-    list(wk.orphans.list.map(f => row(f, 'mồ côi', f + '\nkhông có liên kết note nào'))
-      .concat(wk.thin.list.map(f => row(f, '1 dây', f + '\nchỉ có đúng 1 liên kết note')))
-      .concat(wk.no_index.list.map(f => row(f, 'ngoài index', f + '\nkhông liên kết tới note index/MOC nào'))),
-      'Không có note rời rạc: mọi note đều nhiều dây và nằm trong index.') +
-    `<div class="dash-h">🗺 Theo khu vực</div><div class="ins-areas">${areas}</div>`;
+    list(wk.orphans.list.map(f => row(f, tr('ins.w.orphan'), f + '\n' + tr('ins.w.orphan.tip')))
+      .concat(wk.thin.list.map(f => row(f, tr('ins.w.thin'), f + '\n' + tr('ins.w.thin.tip'))))
+      .concat(wk.no_index.list.map(f => row(f, tr('ins.w.noindex'), f + '\n' + tr('ins.w.noindex.tip')))),
+      tr('ins.e.weak')) +
+    `<div class="dash-h">${tr('ins.h.areas')}</div><div class="ins-areas">${areas}</div>`;
 
   $('ins-foot').innerHTML =
-    `Cửa sổ dữ liệu: event từ <b>${fmtDay(da.oldest_event)}</b> (${da.events} event, log cuộn) · ` +
-    `heat tích luỹ từ <b>${fmtDay(da.heat_since)}</b> · máy: ${esc((da.heat_machines || []).join(', ') || '—')}` +
-    (da.heat_stale_paths ? ` · ${da.heat_stale_paths} đường dẫn trong heat store không còn trong vault (note đã rename/xoá)` : '') +
-    `<br>Không tính note báo cáo do chính công cụ sinh — vì vậy tổng note ở đây lệch 1 so với thanh stats của graph.`;
+    tr('ins.foot.window', { day: fmtDay(da.oldest_event), n: da.events, since: fmtDay(da.heat_since), hosts: esc((da.heat_machines || []).join(', ') || '—') }) +
+    (da.heat_stale_paths ? tr('ins.foot.stale', { n: da.heat_stale_paths }) : '') +
+    tr('ins.foot.self');
 
   $('ins-body').querySelectorAll('.heatrow').forEach(el => {
     const node = byId.get(el.dataset.file);
@@ -114,9 +113,7 @@ function renderMini() {
   const d = DB;
   if (!d) return;
   $('ins-mini').innerHTML =
-    `coverage <b>${d.coverage.pct}%</b> · ${d.coverage.never} chưa đụng · ` +
-    `<b>${d.cold.total}</b> nguội ≥${d.params.cold_days}d · ${d.weak.orphans.total} mồ côi · ` +
-    `${d.weak.no_index.total} ngoài index`;
+    tr('ins.mini', { pct: d.coverage.pct, never: d.coverage.never, cold: d.cold.total, d: d.params.cold_days, orph: d.weak.orphans.total, noidx: d.weak.no_index.total });
 }
 
 export async function pollInsight() {
@@ -127,20 +124,21 @@ export async function pollInsight() {
     renderMini();
     if ($('insight').classList.contains('show')) render();
   } catch (e) {
-    $('ins-mini').textContent = 'không đo được sức khoẻ vault: ' + String(e);
+    $('ins-mini').textContent = tr('ins.err', { e: String(e) });
   }
 }
 
 export async function openInsight() {
   $('insight').classList.add('show');
+  focusInto($('ins-box'), '#ins-x');
   if (!DB) {
-    $('ins-body').innerHTML = '<div class="dash-empty">Đang đo sức khoẻ vault…</div>';
+    $('ins-body').innerHTML = `<div class="dash-empty">${tr('ins.measuring2')}</div>`;
     await pollInsight();
   }
   if (DB) render();
 }
 
-export function closeInsight() { $('insight').classList.remove('show'); }
+export function closeInsight() { $('insight').classList.remove('show'); restoreFocus(); }
 
 export function initInsight() {
   $('ins-open').onclick = () => openInsight();

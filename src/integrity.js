@@ -5,7 +5,8 @@
    hàm mà CLI `python .graph3d/integrity.py` gọi), đừng tính lại phép kiểm nào ở đây.
    KHÔNG poll nền: vault không tự gãy giữa hai cú click — fetch lúc mở section, mở
    overlay và khi bấm ↻ (cùng nhịp với insight). */
-import { $, esc, byId } from './state.js';
+import { $, esc, byId, focusInto, restoreFocus } from './state.js';
+import { tr } from './i18n.js';
 import { wsOpen } from './workspace.js';
 
 let DB = null;
@@ -13,12 +14,15 @@ let DB = null;
 /* 🟢 sạch · 🔴 có vấn đề · ⚪ check tắt (vault không có nguồn luật) */
 function lamp(c) { return !c.available ? '⚪' : (c.total ? '🔴' : '🟢'); }
 
-/* Mở mục lỗi: note → Reader; ảnh/video → tab mới qua /asset (như cây vault). */
+/* Mở mục lỗi: note → Reader; file khác → tab mới qua /asset (như cây vault).
+   Không phải mục nào cũng là node trên graph: mục "ngoại lệ mồ côi" trỏ thẳng tới
+   vault-rules.json (file .json không lên graph) — cứ theo ĐUÔI mà chọn cửa, đừng
+   ném file phi-.md vào /note. */
 function openItem(rel) {
   const node = byId.get(rel);
   if (node && node.kind === 'note') { closeIntegrity(); wsOpen(node); return; }
-  if (node) { window.open('/asset?path=' + encodeURIComponent(rel), '_blank', 'noopener'); return; }
-  window.open('/note?path=' + encodeURIComponent(rel), '_blank', 'noopener');
+  const url = /\.md$/i.test(rel) ? '/note?path=' : '/asset?path=';
+  window.open(url + encodeURIComponent(rel), '_blank', 'noopener');
 }
 
 function itemRow(it) {
@@ -30,21 +34,29 @@ function itemRow(it) {
     `<span class="d">${esc(it.detail || '')}</span></div>`;
 }
 
+/* Nhãn/mô tả/cách sửa của 6 check do integrity.py gửi kèm (tiếng Việt — CLI dùng chính
+   chuỗi đó). Trên UI thì ƯU TIÊN từ điển theo id check để còn dịch được; thiếu khoá thì
+   rơi về chuỗi server, không bao giờ trống. Server vẫn là nơi ĐỊNH NGHĨA check. */
+function cText(c, field) {
+  const key = `itg.c.${c.id}.${field}`;
+  const s = tr(key);
+  return s === key ? (c[field] || '') : s;
+}
+
 function checkBlock(c) {
   const head = `<div class="itg-h"><span class="lp">${lamp(c)}</span>` +
-    `<b>${esc(c.label)}</b><span class="n">${c.available ? c.total : '—'}</span></div>`;
+    `<b>${esc(cText(c, 'label'))}</b><span class="n">${c.available ? c.total : '—'}</span></div>`;
   let body;
   if (!c.available) {
-    body = `<div class="itg-desc">Tắt: vault này không có nguồn luật đếm được ` +
-      `(<code>vault-rules.json</code>) nên app không tự đoán tiêu chí.</div>`;
+    body = `<div class="itg-desc">${tr('itg.off')}</div>`;
   } else if (!c.total) {
-    body = `<div class="itg-desc">${esc(c.desc)} — sạch.</div>`;
+    body = `<div class="itg-desc">${esc(cText(c, 'desc'))} — ${tr('itg.clean')}</div>`;
   } else {
     const more = c.total > c.list.length
-      ? `<div class="itg-desc">… còn ${c.total - c.list.length} mục nữa (xem <code>python .graph3d/integrity.py</code>).</div>` : '';
-    body = `<div class="itg-desc">${esc(c.desc)}</div>` +
+      ? `<div class="itg-desc">${tr('itg.more', { n: c.total - c.list.length })}</div>` : '';
+    body = `<div class="itg-desc">${esc(cText(c, 'desc'))}</div>` +
       `<div class="itg-items">${c.list.map(itemRow).join('')}</div>${more}` +
-      `<div class="itg-fix">🛠 ${esc(c.fix)}</div>`;
+      `<div class="itg-fix">🛠 ${esc(cText(c, 'fix'))}</div>`;
   }
   return `<div class="itg-check${c.total && c.available ? ' bad' : ''}">${head}${body}</div>`;
 }
@@ -52,22 +64,21 @@ function checkBlock(c) {
 function render() {
   const d = DB, v = d.vault;
   $('itg-sum').innerHTML = d.ok
-    ? `<b>sạch</b> · ${v.checked}/${v.notes} note được kiểm`
-    : `<b>${d.problems}</b> vấn đề · ${v.checked}/${v.notes} note được kiểm`;
+    ? tr('itg.sum.ok', { c: v.checked, n: v.notes })
+    : tr('itg.sum.bad', { p: d.problems, c: v.checked, n: v.notes });
 
   $('itg-body').innerHTML =
-    `<div class="dash-h">Cấu trúc — cùng tiêu chí gate verify_vault_integrity.py</div>` +
+    `<div class="dash-h">${tr('itg.fam.structure')}</div>` +
     d.checks.filter(c => c.family === 'structure').map(checkBlock).join('') +
-    `<div class="dash-h">Contract — luật đọc từ vault-rules.json</div>` +
+    `<div class="dash-h">${tr('itg.fam.contract')}</div>` +
     d.checks.filter(c => c.family === 'contract').map(checkBlock).join('');
 
   const r = d.rules || {};
   $('itg-foot').innerHTML =
-    `Phạm vi: <b>${v.notes}</b> note · <b>${v.files}</b> file (<b>${v.media}</b> ảnh/video) — đúng phạm vi graph (bỏ dot-folder). ` +
-    `<b>${v.ignored}</b> note được miễn báo lỗi theo tiêu chí gate (tên bắt đầu <code>_</code> hoặc <code>gate_ignore: true</code>).<br>` +
-    (r.loaded ? `Nguồn luật: <b>${esc(r.path || '')}</b> — bắt buộc: ${esc((r.mandatory || []).join(', '))}.`
-      : `Nguồn luật KHÔNG nạp được (${esc(r.reason || '?')}) → 2 check contract đang tắt.`) +
-    `<br>Đèn này là <b>tập con</b> của gate: im lặng ở đây KHÔNG thay cho gate PASS (gate còn bắt CN remnant, và là chuẩn nghiệm thu).`;
+    tr('itg.foot.scope', { n: v.notes, f: v.files, m: v.media, i: v.ignored }) +
+    (r.loaded ? tr('itg.foot.rules', { p: esc(r.path || ''), m: esc((r.mandatory || []).join(', ')) })
+      : tr('itg.foot.norules', { r: esc(r.reason || '?') })) +
+    tr('itg.foot.subset');
 
   $('itg-body').querySelectorAll('.itg-item').forEach(el => {
     el.onclick = () => openItem(el.dataset.file);
@@ -79,9 +90,9 @@ function renderMini() {
   if (!d) return;
   const bad = d.checks.filter(c => c.available && c.total);
   $('itg-mini').innerHTML = d.ok
-    ? `🧪 toàn vẹn: <b>sạch</b> · ${d.vault.checked}/${d.vault.notes} note được kiểm`
-    : `🧪 <b>${d.problems}</b> vấn đề: ` +
-      bad.map(c => `${c.total} ${esc(c.label.toLowerCase())}`).join(' · ');
+    ? tr('itg.mini.ok', { c: d.vault.checked, n: d.vault.notes })
+    : tr('itg.mini.bad', { p: d.problems }) +
+      bad.map(c => `${c.total} ${esc(cText(c, 'label').toLowerCase())}`).join(' · ');
 }
 
 export async function pollIntegrity() {
@@ -92,20 +103,21 @@ export async function pollIntegrity() {
     renderMini();
     if ($('integ').classList.contains('show')) render();
   } catch (e) {
-    $('itg-mini').textContent = 'không kiểm được toàn vẹn vault: ' + String(e);
+    $('itg-mini').textContent = tr('itg.err', { e: String(e) });
   }
 }
 
 export async function openIntegrity() {
   $('integ').classList.add('show');
+  focusInto($('itg-box'), '#itg-x');
   if (!DB) {
-    $('itg-body').innerHTML = '<div class="dash-empty">Đang kiểm toàn vẹn vault…</div>';
+    $('itg-body').innerHTML = `<div class="dash-empty">${tr('itg.checking2')}</div>`;
     await pollIntegrity();
   }
   if (DB) render();
 }
 
-export function closeIntegrity() { $('integ').classList.remove('show'); }
+export function closeIntegrity() { $('integ').classList.remove('show'); restoreFocus(); }
 
 export function initIntegrity() {
   $('itg-open').onclick = () => openIntegrity();

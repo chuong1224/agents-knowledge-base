@@ -1,6 +1,7 @@
 /* main.js — điểm vào: error handler toàn cục + boot() + vòng poll.
    index.html chỉ còn markup + importmap + <script type="module" src="/src/main.js">. */
 import { S, $, tagOn } from './state.js';
+import { applyI18n, initLangSwitch } from './i18n.js';
 import { initGraph, physics, addStars, addBloom, visibleData, indexData, updateStats,
          nodeOnScreen, followFlyTo } from './graph.js';
 import { fxLoop, scheduleAmbient, agentTrails, agentFlow, replayFlow,
@@ -20,7 +21,7 @@ import { initWorkspace, WS, wsOpen, wsSwitch, wsCloseTab, wsSplit, wsBack,
          togglePin, pushRecent, renderSbSections } from './workspace.js';
 
 // Mọi uncaught error phải hiện ra console — lỗi trong rAF/setTimeout chết câm rất khó lần
-window.addEventListener('error', e => console.error('lỗi trang:', e.message, '@', (e.filename || '').split('/').pop() + ':' + e.lineno));
+window.addEventListener('error', e => console.error('page error:', e.message, '@', (e.filename || '').split('/').pop() + ':' + e.lineno));
 window.addEventListener('unhandledrejection', e => console.error('promise reject:', e.reason));
 
 /* ---------- boot ---------- */
@@ -38,6 +39,10 @@ async function boot() {
   initGraph();                           // ForceGraph3D + orphanPull + controls + trailGroup
   window.__G = S.Graph; // debug hook: truy cập Graph từ DevTools console
   window.__fx = { nodeOnScreen, followFlyTo, agentTrails, agentFlow, replayFlow, buildUI, updateTrails, updateWarps, spawnWarp, warps, openReader, closeReader, openSwitcher, closeSwitcher, buildTree, openTimeline, closeTimeline, openDashboard, closeDashboard, openWorkMap, closeWorkMap, openInsight, closeInsight, pollInsight, openIntegrity, closeIntegrity, pollIntegrity, openOnboarding, closeOnboarding, WS, wsOpen, wsSwitch, wsCloseTab, wsSplit, wsBack, togglePin, pushRecent, renderSbSections }; // debug hook nghiệm thu (Ư1/Ư4/Ư6/Reader/Finder/Cockpit/Workspace/Insight — tab ẩn không có rAF, phải gọi tay)
+
+  // W43: dich markup tinh TRUOC khi cac module doc/dung UI — chay mot lan, khong ton kem
+  applyI18n();
+  initLangSwitch();
 
   physics('bung', true);
   addStars();

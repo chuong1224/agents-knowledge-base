@@ -6,16 +6,21 @@ Bộ ba câu hỏi về vault, mỗi cái một module:
   `/insight`   → "vault có đang được dùng đủ khắp không" (insight.py)
   `/integrity` → **"vault có đang GÃY chỗ nào không"** — module này.
 
-Sáu check cơ học, chia hai họ:
+Chín check cơ học, chia hai họ:
   CẤU TRÚC (không cần nguồn luật — vault nào cũng chạy được)
     1 link    wikilink `[[Note]]` trỏ tới note/file không tồn tại
     2 embed   nhúng `![[file]]` trỏ tới file không tồn tại
     3 anchor  `[[Note#Heading]]` mà Note không có heading đó
     4 orphan  ảnh/video trong vault không note nào nhắc tới
-  CONTRACT (đọc luật từ `vault-rules.json` — thiếu nguồn luật thì tắt êm)
+  CONTRACT (đọc luật từ `vault-rules.json` — thiếu luật nào thì check đó tắt êm)
     5 frontmatter  note thiếu trường BẮT BUỘC (`policy.mandatory_frontmatter`)
     6 digest       file nhị phân trong `attachments/` chưa "mở nilon"
                    (thiếu tên trong `file_digest` — §VI Q18, `policy.binary_digest_ext`)
+    7 tag          note dùng tag ngoài controlled vocabulary (`policy.tag_vocabulary`)
+    8 index_tag    file index không đúng 1 tag `index`, hoặc note thường mượn tag
+                   `index` (§IV, `policy.index_rule`)
+    9 title        `title` ≠ tên file ≠ H1 (§V, `policy.title_rule` — ngoại lệ khai
+                   trong `title_rule.exceptions`, KHÔNG đoán)
 
 KHÔNG thay thế gate `verify_vault_integrity.py` của skill `obsidian-vault-update`:
 gate vẫn là chuẩn NGHIỆM THU (nó còn bắt "CN remnant dính chữ" mà module này cố ý
@@ -30,18 +35,19 @@ Quan hệ số liệu với gate — chốt để hai bên không cãi nhau:
     (a) so khớp tên không phân biệt hoa/thường; (b) ảnh được nhắc bằng `[[x.png]]`
     hay `![](attachments/x.png)` vẫn tính là "có người dùng" (gate chỉ đếm `![[…]]`).
     ⇒ **app im lặng KHÔNG thay cho gate PASS.**
-  * 2 check contract: gate (bản laptop) chưa có — luật lấy thẳng từ nguồn chân lý,
-    nên khi bản gate hợp nhất xong hai bên vẫn cùng một luật gốc.
+  * 5 check contract: gate chưa có — luật lấy thẳng từ nguồn chân lý, nên khi gate
+    nhận thêm check nào thì hai bên vẫn cùng một luật gốc.
   * Phạm vi: app đo đúng phạm vi graph (bỏ mọi dot-folder + `EXCLUDED_DIRS` của
     scanner) — gate walk thêm `.graph3d/README.md`… nên TỔNG note hai bên lệch vài
     file. Con số phạm vi luôn đi kèm trong `vault` của báo cáo.
 
 Không chép luật (CLAUDE.md — quy tắc đếm được có nguồn sinh duy nhất): trường
-frontmatter bắt buộc + đuôi file phải "mở nilon" đọc thẳng `vault-rules.json`, và
-frontmatter parse bằng chính `parse_frontmatter` của `vault_rules.py` trong vault
-(cùng parser mà audit dùng — hết cảnh mỗi bên một regex). Vault khác/bản public
-không có hai file đó: 4 check cấu trúc vẫn chạy, 2 check contract báo "thiếu nguồn
-luật" thay vì đoán bừa.
+frontmatter bắt buộc, đuôi file phải "mở nilon", tag vocabulary, luật index và
+DANH SÁCH NGOẠI LỆ title đều đọc thẳng `vault-rules.json`, còn frontmatter parse
+bằng chính `parse_frontmatter` của `vault_rules.py` trong vault (cùng parser mà
+audit dùng — hết cảnh mỗi bên một regex). Vault khác/bản public không có hai file
+đó: 4 check cấu trúc vẫn chạy, check contract nào thiếu luật thì báo "thiếu nguồn
+luật" thay vì đoán bừa — mỗi check tự soi phần luật của mình.
 
 Chạy tay:
   python .graph3d/integrity.py            # tóm tắt console (exit 1 nếu có lỗi)
@@ -72,6 +78,7 @@ RULES_DIR = os.environ.get("GRAPH3D_VAULT_RULES") or os.path.join(
 EMBED_RE = re.compile(r"!\[\[([^\]]+)\]\]")            # ![[target]]
 WIKILINK_RE = re.compile(r"(?<!\!)\[\[([^\]]+)\]\]")   # [[target]] (không phải embed)
 HEADING_RE = re.compile(r"^#{1,6}\s+(.*?)\s*$")
+H1_RE = re.compile(r"^#\s+(.*?)\s*$")                  # riêng H1 — check title=H1 (§V)
 FRONTMATTER_RE = re.compile(r"\A﻿?---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.S)
 GATE_IGNORE_RE = re.compile(r"(?mi)^\s*gate_ignore:\s*true\b")
 
@@ -98,6 +105,15 @@ CHECKS = [
     ("digest", "File nhị phân chưa mở nilon", "contract",
      "file .xlsx/.pdf… trong attachments/ nhưng tên chưa có trong frontmatter file_digest",
      "Tóm tắt nội dung file vào thân note rồi khai tên file vào file_digest (§VI Q18)."),
+    ("tag", "Tag ngoài vocabulary", "contract",
+     "note gắn tag không có trong controlled vocabulary của vault-rules.json",
+     "Đổi sang tag đúng nghĩa. Cần tag MỚI thì thêm vào vault-rules.json trước (nguồn chân lý), đừng chế tag lẻ."),
+    ("index_tag", "Index sai tag", "contract",
+     "file index phải có ĐÚNG 1 tag `index`; note thường không được mượn tag `index`",
+     "Index là node điều hướng trung lập: bỏ mọi tag content khỏi index, và gỡ tag `index` khỏi note thường (§IV)."),
+    ("title", "title ≠ tên file ≠ H1", "contract",
+     "title (frontmatter) phải trùng tên file .md và trùng H1 — trừ ngoại lệ khai trong vault-rules.json",
+     "Sửa cho khớp. Lệch CÓ CHỦ Ý (rút gọn path) thì khai vào policy.title_rule.exceptions, đừng để đèn tự đoán."),
 ]
 
 
@@ -169,7 +185,7 @@ def vault_signature(vault):
 def scan_vault(vault, sig=None):
     """Đọc vault → dữ liệu thô cho build_integrity (I/O tách hẳn khỏi phép tính).
 
-    `notes[rel]` = {stem, text, headings, ignored}; `files[rel]` = đuôi (mọi file
+    `notes[rel]` = {stem, text, headings, h1, ignored}; `files[rel]` = đuôi (mọi file
     không phải .md — kể cả file rác: gate cũng cho chúng vào bảng basename nên
     `[[attachments/x.py]]` không bị báo gãy oan).
     """
@@ -185,12 +201,14 @@ def scan_vault(vault, sig=None):
         except OSError:
             continue
         stem = os.path.splitext(os.path.basename(rel))[0]
-        heads = set()
+        heads, h1 = set(), None
         for line in text.splitlines():
             hm = HEADING_RE.match(line)
             if hm:
                 heads.add(hm.group(1).strip().lower())
-        notes[rel] = {"stem": stem, "text": text, "headings": heads,
+                if h1 is None and H1_RE.match(line):
+                    h1 = hm.group(1).strip()      # H1 ĐẦU TIÊN — cái đóng vai tiêu đề note
+        notes[rel] = {"stem": stem, "text": text, "headings": heads, "h1": h1,
                       "ignored": is_ignored(stem, text)}
     return {"vault": vault, "notes": notes, "files": files}
 
@@ -199,7 +217,9 @@ def load_rules(rules_dir=None):
     """Nạp nguồn chân lý: policy trong `vault-rules.json` + parser của `vault_rules.py`.
 
     KHÔNG chép luật vào module này — vault không có nguồn luật thì trả rules rỗng
-    kèm lý do, hai check contract tự tắt (UI hiện "thiếu nguồn luật", không đoán bừa).
+    kèm lý do, mọi check contract tự tắt (UI hiện "thiếu nguồn luật", không đoán bừa).
+    Thiếu LẺ một khoá policy (vault khác chưa khai `index_rule`/`title_rule`) thì chỉ
+    check đó tắt, các check còn lại vẫn chạy.
     Đọc mỗi lần gọi (file nhỏ) — sửa vault-rules.json là lần đo sau ăn ngay.
     """
     rules_dir = rules_dir or RULES_DIR
@@ -226,11 +246,21 @@ def load_rules(rules_dir=None):
     except Exception as exc:                              # noqa: BLE001
         info["reason"] = "vault_rules.py nạp lỗi: %s" % exc
         return {}, info
+    # Vocabulary nằm dạng {nhóm: [{tag, meaning}…]} — dàn phẳng đúng như vault_rules.py.
+    vocab = sorted({str(t.get("tag", "")).strip()
+                    for grp in (policy.get("tag_vocabulary") or {}).values()
+                    for t in (grp or []) if str(t.get("tag", "")).strip()})
+    title_rule = dict(policy.get("title_rule") or {})
     info.update(loaded=True,
                 mandatory=list(policy.get("mandatory_frontmatter") or []),
-                digest_ext=sorted(e.lower() for e in (policy.get("binary_digest_ext") or [])))
+                digest_ext=sorted(e.lower() for e in (policy.get("binary_digest_ext") or [])),
+                vocab_n=len(vocab),
+                exceptions_n=len(title_rule.get("exceptions") or []))
     return {"mandatory_frontmatter": info["mandatory"],
             "binary_digest_ext": info["digest_ext"],
+            "tag_vocabulary": vocab,
+            "index_rule": dict(policy.get("index_rule") or {}),
+            "title_rule": title_rule,
             "parse_frontmatter": parse_fm}, info
 
 
@@ -240,7 +270,8 @@ def build_integrity(scan, rules=None, rules_info=None, now=None, list_n=LIST_N):
     """Ảnh chụp toàn vẹn vault — HÀM THUẦN (không đọc đĩa, `now` truyền vào → test được).
 
     scan       — kết quả scan_vault()
-    rules      — {} hoặc {mandatory_frontmatter, binary_digest_ext, parse_frontmatter}
+    rules      — {} hoặc {mandatory_frontmatter, binary_digest_ext, tag_vocabulary,
+                 index_rule, title_rule, parse_frontmatter}
     rules_info — mô tả nguồn luật để UI giải thích khi check contract tắt
     """
     now = float(now if now is not None else time.time())
@@ -248,8 +279,30 @@ def build_integrity(scan, rules=None, rules_info=None, now=None, list_n=LIST_N):
     rules = rules or {}
     mandatory = list(rules.get("mandatory_frontmatter") or [])
     digest_ext = {("." + e.lstrip(".")).lower() for e in (rules.get("binary_digest_ext") or [])}
+    vocab = {str(t).strip() for t in (rules.get("tag_vocabulary") or []) if str(t).strip()}
+    index_rule = dict(rules.get("index_rule") or {})
+    title_rule = dict(rules.get("title_rule") or {})
     parse_fm = rules.get("parse_frontmatter")
-    has_rules = bool(parse_fm and (mandatory or digest_ext))
+
+    idx_tag = str(index_rule.get("tag") or "").strip()
+    idx_prefix = str(index_rule.get("name_prefix") or "").strip().lower()
+    idx_type = str(index_rule.get("type_field") or "").strip().lower()
+    idx_only = bool(index_rule.get("only_tag"))
+    require_h1 = bool(title_rule.get("require_h1"))
+    # Ngoại lệ title khoá theo TÊN FILE (không đuôi, không phân biệt hoa/thường) — note
+    # hay bị dời folder, tên file thì bền; đây cũng là cách §V và gate gọi tên chúng.
+    excs = {str(e.get("file", "")).strip().lower(): e
+            for e in (title_rule.get("exceptions") or []) if str(e.get("file", "")).strip()}
+
+    # Mỗi check contract tự soi phần luật CỦA MÌNH: vault khai thiếu `index_rule` thì chỉ
+    # đèn index tắt, đừng kéo cả họ contract tắt theo (bản public/vault khác dùng dần).
+    avail = {"link": True, "embed": True, "anchor": True, "orphan": True,
+             "frontmatter": bool(parse_fm and mandatory),
+             "digest": bool(parse_fm and digest_ext),
+             "tag": bool(parse_fm and vocab),
+             "index_tag": bool(parse_fm and idx_tag),
+             "title": bool(parse_fm and title_rule)}
+    need_fm = any(avail[k] for k in ("frontmatter", "tag", "index_tag", "title"))
 
     # Bảng tra: stem note (thường hoá) và basename MỌI file — gate so khớp theo
     # basename chứ không theo path, giữ nguyên để hai bên cùng một phép so.
@@ -308,13 +361,43 @@ def build_integrity(scan, rules=None, rules_info=None, now=None, list_n=LIST_N):
                     continue        # anchor nội bộ / URL ngoài
                 referenced.add(os.path.basename(tgt.split("#")[0]).lower())
 
-        if active and parse_fm and mandatory:
-            fm = parse_fm(n["text"])
-            miss = [k for k in mandatory if _empty(fm.get(k))]
-            if miss:
-                hits["frontmatter"].append({"file": rel, "line": 1, "target": "",
-                                            "missing": miss,
-                                            "detail": "thiếu " + ", ".join(miss)})
+        if active and need_fm:
+            fm = parse_fm(n["text"])              # parse MỘT lần cho cả 4 check contract
+            tags = fm.get("tags") or []
+            tags = [tags] if isinstance(tags, str) else list(tags)
+            tags = [str(t).strip() for t in tags if str(t).strip()]
+
+            if avail["frontmatter"]:
+                miss = [k for k in mandatory if _empty(fm.get(k))]
+                if miss:
+                    hits["frontmatter"].append({"file": rel, "line": 1, "target": "",
+                                                "missing": miss,
+                                                "detail": "thiếu " + ", ".join(miss)})
+            if avail["tag"]:
+                unknown = [t for t in tags if t not in vocab]
+                if unknown:
+                    hits["tag"].append({"file": rel, "line": 1, "target": "", "missing": unknown,
+                                        "detail": "tag ngoài vocabulary: " + ", ".join(unknown)})
+            if avail["index_tag"]:
+                is_index = bool(idx_prefix and n["stem"].lower().startswith(idx_prefix)) or \
+                    bool(idx_type and str(fm.get("type") or "").strip().lower() == idx_type)
+                why = ""
+                if is_index and idx_only and tags != [idx_tag]:
+                    extra = [t for t in tags if t != idx_tag]
+                    why = ("index chỉ được đúng 1 tag `%s`" % idx_tag) + \
+                        (" — thừa: " + ", ".join(extra) if extra else " — đang thiếu tag đó")
+                elif is_index and not idx_only and idx_tag not in tags:
+                    why = "file index thiếu tag `%s`" % idx_tag
+                elif not is_index and idx_tag in tags:
+                    why = "note thường mượn tag `%s` (chỉ dành cho file index)" % idx_tag
+                if why:
+                    hits["index_tag"].append({"file": rel, "line": 1, "target": "", "detail": why})
+            if avail["title"]:
+                probs = _title_problems(n, str(fm.get("title") or "").strip(),
+                                        excs.get(n["stem"].lower()), require_h1)
+                if probs:
+                    hits["title"].append({"file": rel, "line": 1, "target": "",
+                                          "detail": " · ".join(probs)})
 
     # --- media mồ côi: file ảnh/video không basename nào nhắc tới ---
     for rel, ext in sorted(files.items()):
@@ -348,13 +431,25 @@ def build_integrity(scan, rules=None, rules_info=None, now=None, list_n=LIST_N):
                                        "missing": miss,
                                        "detail": "chưa khai trong file_digest: " + ", ".join(miss)})
 
+    # --- ngoại lệ title khai cho note không còn tồn tại: danh sách TỰ DỌN ---
+    # Đúng lớp lỗi làm luật này mãi không máy-đọc-được: danh sách ngoại lệ nằm ở văn xuôi
+    # rồi rữa dần theo từng lần đổi tên note. Khai trong nguồn chân lý thì đèn coi được.
+    if avail["title"] and excs:
+        stems = {n["stem"].lower() for n in notes.values()}
+        for key in sorted(excs):
+            if key not in stems:
+                hits["title"].append(
+                    {"file": (rules_info or {}).get("path", ""), "line": None, "target": "",
+                     "detail": "ngoại lệ title khai cho note không còn tồn tại: %s"
+                               % excs[key].get("file", key)})
+
     checks = []
     for cid, label, family, desc, fix in CHECKS:
-        avail = family == "structure" or has_rules
+        ok = avail[cid]
         checks.append({"id": cid, "label": label, "family": family, "desc": desc,
-                       "fix": fix, "available": avail,
-                       "total": len(hits[cid]) if avail else 0,
-                       "list": hits[cid][:list_n] if avail else []})
+                       "fix": fix, "available": ok,
+                       "total": len(hits[cid]) if ok else 0,
+                       "list": hits[cid][:list_n] if ok else []})
     problems = sum(c["total"] for c in checks)
     media = sum(1 for ext in files.values() if ext in MEDIA_EXTS)
     return {
@@ -367,6 +462,31 @@ def build_integrity(scan, rules=None, rules_info=None, now=None, list_n=LIST_N):
         "checks": checks,
         "limit": list_n,
     }
+
+
+def _title_problems(note, title, exc, require_h1):
+    """Lệch của bộ ba `title` = tên file = H1 trên MỘT note → danh sách lý do (rỗng = sạch).
+
+    `exc` là mục ngoại lệ đã khai (hoặc None). Ngoại lệ KHÔNG phải "miễn kiểm": nó pin
+    luôn giá trị được phép, nên note trong danh sách vẫn bị bắt nếu title trôi tiếp.
+    Thiếu hẳn `title` thì im — check frontmatter đã báo trường bắt buộc, đừng báo hai lần.
+    """
+    if not title:
+        return []
+    want_title = str(exc.get("title") or "").strip() if exc else note["stem"]
+    want_h1 = (str(exc.get("h1") or exc.get("title") or "").strip()) if exc else title
+    probs = []
+    if title != want_title:
+        probs.append("title “%s” ≠ %s “%s”"
+                     % (title, "ngoại lệ đã khai" if exc else "tên file", want_title))
+    h1 = note.get("h1")
+    if h1 is None:
+        if require_h1:
+            probs.append("note không có heading H1")
+    elif h1 != want_h1:
+        probs.append("H1 “%s” ≠ %s “%s”"
+                     % (h1, "H1 đã khai" if exc and exc.get("h1") else "title", want_h1))
+    return probs
 
 
 def _owner_note(folder, notes_by_folder, notes):

@@ -37,3 +37,29 @@ export const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt
 export const deAccent = s => String(s).toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/đ/g, 'd');
 export const idOf = x => (typeof x === 'object' && x !== null) ? x.id : x;
 export const linkKey = l => (typeof l.source === 'object' ? l.source.id : l.source) + '|' + (typeof l.target === 'object' ? l.target.id : l.target);
+
+/* --- W43: thứ tự focus cho overlay ---------------------------------------------
+   Mọi overlay của app nằm CUỐI body, nên bàn phím phải đi qua toàn bộ sidebar +
+   panel (24–28 control vô nghĩa lúc đó) mới tới được thứ duy nhất đang mở. Hai hàm
+   này đưa focus vào trong khi mở và TRẢ LẠI chỗ cũ khi đóng — trả lại mới là phần
+   hay quên: đóng modal mà focus rơi về <body> thì lần Tab kế bắt đầu lại từ đầu trang. */
+let focusReturn = null;
+
+export function focusInto(box, sel) {
+  focusReturn = document.activeElement;
+  const el = box.querySelector(sel || 'input, button:not([disabled]), [tabindex]:not([tabindex="-1"])');
+  if (el) el.focus();
+  // Overlay nào nút đóng là <span> (không nhận focus) thì focus() im lặng không làm gì
+  // và người dùng vẫn kẹt ngoài hộp — lùi về chính hộp: mở tabindex="-1" cho nó nhận
+  // focus theo lệnh (vẫn KHÔNG chen vào thứ tự Tab), Tab kế đi tiếp vào bên trong.
+  if (!box.contains(document.activeElement)) {
+    box.setAttribute('tabindex', '-1');
+    box.focus();
+  }
+}
+
+export function restoreFocus() {
+  const el = focusReturn;
+  focusReturn = null;
+  if (el && document.contains(el)) el.focus();
+}

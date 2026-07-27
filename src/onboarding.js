@@ -8,7 +8,8 @@
    trả qua /onboarding, hai hành động là POST /demo-start và POST /starter-init.
    Đừng đoán ở frontend (vd tự suy "chắc có starter-vault") — bản cài không kèm
    starter/demo thì card đó hiện lý do + lệnh chạy tay thay vì nút bấm chết. */
-import { S, $, esc, byId } from './state.js';
+import { S, $, esc, byId, focusInto, restoreFocus } from './state.js';
+import { tr } from './i18n.js';
 import { refreshData } from './ui.js';
 import { wsOpen } from './workspace.js';
 
@@ -28,6 +29,14 @@ function needed() {
   return '';
 }
 
+/* Lỗi từ server: dịch theo `code` nếu có khoá, không thì hiện nguyên văn thông điệp
+   (thà tiếng Việt còn hơn nuốt mất lý do). */
+function errText(res, fallback) {
+  const key = res && res.code ? `onb.e.${res.code}` : '';
+  const s = key ? tr(key) : '';
+  return (s && s !== key) ? s : ((res && res.error) || fallback);
+}
+
 function status(html, cls) {
   $('onb-status').className = cls || '';
   $('onb-status').innerHTML = html || '';
@@ -35,7 +44,7 @@ function status(html, cls) {
 
 /* Khối lệnh copy-1-chạm — dùng cho card không bấm được (bản cài thiếu demo/starter). */
 function cmdBlock(cmd) {
-  return `<code class="onb-cmd" title="Click để copy">${esc(cmd)}</code>`;
+  return `<code class="onb-cmd" title="${tr('onb.copy')}">${esc(cmd)}</code>`;
 }
 
 function card(o) {
@@ -64,19 +73,17 @@ function render() {
   const d = DB;
   const demo = d.demo, st = d.starter;
   const misplaced = !d.installed && !installAck();
-  $('onb-sum').innerHTML = `<b>${esc(d.vault)}</b> — ${d.notes} note`;
+  $('onb-sum').innerHTML = tr('onb.sum', { vault: `<b>${esc(d.vault)}</b>`, n: d.notes });
   $('onb-head').querySelector('h3').textContent = d.empty
-    ? '🌱 Vault này chưa có note nào'
-    : '⚠ App có vẻ chưa được cài vào vault';
+    ? tr('onb.head.empty')
+    : tr('onb.head.misplaced');
 
   // Cảnh báo cài sai chỗ: nói rõ app đang coi thư mục NÀO là vault, vì đó chính là
   // thứ user không nhìn thấy (app đọc thư mục CHA của chính nó).
   $('onb-note').innerHTML = misplaced
-    ? `Thư mục app đang tên <code>${esc(d.app_dir)}</code> chứ không phải <code>.graph3d</code>, ` +
-      `nên app đang coi <code title="${esc(d.vault_path)}">${esc(shortPath(d.vault_path))}</code> ` +
-      `là vault — thấy <b>${d.notes}</b> note. Cách cài đúng là clone THÀNH <code>.graph3d</code> bên trong vault:` +
+    ? tr('onb.warn', { app: esc(d.app_dir), full: esc(d.vault_path), short: esc(shortPath(d.vault_path)), n: d.notes }) +
       `<div class="onb-a">${cmdBlock(d.cmd.install)}</div>` +
-      `<button class="btn" id="onb-ack">✅ Đây đúng là vault của tôi</button>`
+      `<button class="btn" id="onb-ack">${tr('onb.ack')}</button>`
     : '';
   // 'block' tường minh, KHÔNG phải '': xoá inline style là trả về rule mặc định
   // `#onb-note{display:none}` → khung có nội dung mà vô hình (họ hàng bẫy CSS 11/07).
@@ -85,14 +92,12 @@ function render() {
   const cards = [
     // 1. CẢM NHẬN: thấy app sống động trước khi phải tự gõ chữ nào
     card(demo.available ? {
-      id: 'onb-demo', icon: '🌌', title: 'Xem thử vault demo',
-      desc: `<b>${demo.notes}</b> note dựng sẵn (nhiều nhóm màu, index, đủ liên kết) — ` +
-        `mở ở cổng <b>${demo.port}</b> nên vault của bạn không bị đụng tới.`,
-      action: '🌌 Mở demo',
+      id: 'onb-demo', icon: '🌌', title: tr('onb.demo.title'),
+      desc: tr('onb.demo.desc', { n: `<b>${demo.notes}</b>`, port: `<b>${demo.port}</b>` }),
+      action: tr('onb.demo.action'),
     } : {
-      icon: '🌌', title: 'Xem thử vault demo',
-      desc: 'Bản cài này không kèm vault demo (demo đi cùng repo public). ' +
-        'Có repo rồi thì chạy:',
+      icon: '🌌', title: tr('onb.demo.title'),
+      desc: tr('onb.demo.missing'),
       cmd: d.cmd.demo,
     }),
   ];
@@ -101,29 +106,25 @@ function render() {
   //    note vào thư mục cha của bản clone là đúng thứ user không hề muốn (audit W42).
   if (d.empty) {
     cards.push(card(!st.available ? {
-      icon: '🌱', title: 'Tạo vault đầu tiên',
-      desc: 'Bản cài này không kèm <code>starter-vault/</code>. Có repo rồi thì chạy:',
+      icon: '🌱', title: tr('onb.starter.title2'),
+      desc: tr('onb.starter.missing'),
       cmd: d.cmd.starter,
     } : misplaced ? {
-      icon: '🌱', title: 'Tạo vault đầu tiên', disabled: true,
-      desc: `Sẽ ghi <b>${st.notes}</b> note vào thư mục ở trên — mà thư mục đó có vẻ ` +
-        'không phải vault của bạn. <b>Cài đúng chỗ trước</b> (hoặc xác nhận ở khung trên) rồi quay lại.',
-      action: '🌱 Tạo tại đây',
+      icon: '🌱', title: tr('onb.starter.title2'), disabled: true,
+      desc: tr('onb.starter.blocked', { n: `<b>${st.notes}</b>` }),
+      action: tr('onb.starter.action'),
     } : {
-      id: 'onb-starter', icon: '🌱', title: 'Tạo vault đầu tiên ngay đây',
-      desc: `Chép <b>${st.notes}</b> note hướng dẫn vào chính vault này — đọc ngay trong app, ` +
-        'sửa được, xoá được. Đây là vault của bạn, không phải bản mẫu đọc cho vui.',
+      id: 'onb-starter', icon: '🌱', title: tr('onb.starter.title'),
+      desc: tr('onb.starter.desc', { n: `<b>${st.notes}</b>` }),
       path: d.vault_path,
-      action: '🌱 Tạo tại đây',
+      action: tr('onb.starter.action'),
     }));
   }
   // 3. THÓI QUEN: đúng 3 bước, không cần cài gì thêm
   cards.push(card({
-    icon: '📖', title: 'Tự làm — 1 phút',
-    desc: '① Tạo file <code>Note đầu tiên.md</code> trong thư mục vault.<br>' +
-      '② Trong note, viết <code>[[Tên note khác]]</code> để nối — mỗi liên kết là một cạnh trên graph.<br>' +
-      '③ Quay lại đây, bấm <b>Quét lại</b>.',
-    action: '↻ Quét lại',
+    icon: '📖', title: tr('onb.self.title'),
+    desc: tr('onb.self.desc'),
+    action: tr('onb.self.action'),
     id: 'onb-rescan',
   }));
   $('onb-cards').innerHTML = cards.join('');
@@ -140,7 +141,7 @@ function render() {
   $('onb-box').querySelectorAll('.onb-cmd').forEach(el => {
     el.onclick = () => {
       navigator.clipboard?.writeText(el.textContent).then(
-        () => status('Đã copy lệnh — dán vào terminal ở thư mục vault.', 'ok'),
+        () => status(tr('onb.copied'), 'ok'),
         () => {});
     };
   });
@@ -150,24 +151,24 @@ function render() {
 async function rescan() {
   if (busy) return;
   busy = true;
-  status('Đang quét lại vault…');
+  status(tr('onb.rescan.run'));
   try {
     await refreshData();
     const n = S.all.meta.notes;
-    if (n > 0) { status(`Thấy ${n} note — chào mừng!`, 'ok'); setTimeout(closeOnboarding, 900); }
-    else status('Vẫn chưa có note .md nào trong vault.', 'warn');
+    if (n > 0) { status(tr('onb.rescan.found', { n }), 'ok'); setTimeout(closeOnboarding, 900); }
+    else status(tr('onb.rescan.none'), 'warn');
   } finally { busy = false; }
 }
 
 async function installStarter() {
   if (busy) return;
   busy = true;
-  status('Đang chép starter vault…');
+  status(tr('onb.install.run'));
   try {
     const r = await fetch('/starter-init', { method: 'POST' });
     const res = await r.json();
-    if (!r.ok) { status('Không tạo được: ' + esc(res.error || ('HTTP ' + r.status)), 'warn'); return; }
-    status(`Đã tạo <b>${res.notes}</b> note. Đang nạp graph…`, 'ok');
+    if (!r.ok) { status(tr('onb.install.err', { e: esc(errText(res, 'HTTP ' + r.status)) }), 'warn'); return; }
+    status(tr('onb.install.done', { n: `<b>${res.notes}</b>` }), 'ok');
     await refreshData();
     syncOnbFab();
     // Đừng bỏ rơi người mới ở đây: cài xong mà chỉ đóng overlay thì họ nhìn 9 node và
@@ -176,9 +177,9 @@ async function installStarter() {
     const node = res.entry && byId.get(res.entry);
     closeOnboarding();
     if (node) wsOpen(node);
-    else status(`Đã tạo <b>${res.notes}</b> note — mở một node để bắt đầu đọc.`, 'ok');
+    else status(tr('onb.install.done2', { n: `<b>${res.notes}</b>` }), 'ok');
   } catch (e) {
-    status('Không tạo được: ' + esc(String(e)), 'warn');
+    status(tr('onb.install.err', { e: esc(String(e)) }), 'warn');
   } finally { busy = false; }
 }
 
@@ -188,19 +189,19 @@ async function startDemo() {
   // Server chép app sang demo/vault/.graph3d rồi khởi động supervisor ở port khác —
   // mất vài giây, và nó CHỜ /health khỏe mới trả về nên UI khỏi phải tự dò
   // (fetch sang port khác là cross-origin, trình duyệt chặn).
-  status('Đang dựng server demo (vài giây)…');
+  status(tr('onb.demo.run'));
   try {
     const r = await fetch('/demo-start', { method: 'POST' });
     const res = await r.json();
-    if (!r.ok) { status('Không mở được demo: ' + esc(res.error || ('HTTP ' + r.status)), 'warn'); return; }
-    status(`Demo ${res.notes} note đã chạy ở cổng ${res.port} — đang chuyển…`, 'ok');
+    if (!r.ok) { status(tr('onb.demo.err', { e: esc(errText(res, 'HTTP ' + r.status)) }), 'warn'); return; }
+    status(tr('onb.demo.ok', { n: res.notes, port: res.port }), 'ok');
     location.href = res.url;
   } catch (e) {
-    status('Không mở được demo: ' + esc(String(e)), 'warn');
+    status(tr('onb.demo.err', { e: esc(String(e)) }), 'warn');
   } finally { busy = false; }
 }
 
-export function closeOnboarding() { $('onb').classList.remove('show'); syncOnbFab(); }
+export function closeOnboarding() { $('onb').classList.remove('show'); restoreFocus(); syncOnbFab(); }
 
 /* Nút 🌱 đáy màn hình: LỐI QUAY LẠI. Đóng overlay bằng ✕ trước đây là mất hẳn đường
    vào (audit W42: 0 affordance mở lại, chỉ F5 — mà không chỗ nào nói vậy). Nút chỉ
@@ -211,9 +212,7 @@ export function syncOnbFab() {
   const why = needed();
   // 'block' tường minh (xem ghi chú ở #onb-note): mặc định CSS của nút là display:none
   b.style.display = why && !$('onb').classList.contains('show') ? 'block' : 'none';
-  b.title = why === 'empty'
-    ? 'Vault đang trống — mở lại 3 cách bắt đầu'
-    : 'App có vẻ chưa được cài vào vault — xem lại';
+  b.title = why === 'empty' ? tr('onb.fab.empty') : tr('onb.fab.misplaced');
   b.textContent = why === 'empty' ? '🌱' : '⚠';
 }
 
@@ -225,7 +224,7 @@ async function load() {
     DB = await r.json();
     return true;
   } catch (e) {
-    status('Không đọc được trạng thái onboarding: ' + esc(String(e)), 'warn');
+    status(tr('onb.state.err', { e: esc(String(e)) }), 'warn');
     return false;
   }
 }

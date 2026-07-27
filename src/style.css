@@ -36,6 +36,18 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   pointer-events: none; overflow: hidden; transition: left .25s ease; }
 #hint b { color: var(--muted); font-weight: 600; }
 
+/* Nút đổi ngôn ngữ VI | EN — nằm ngay dưới brand, luôn thấy (W43): mặc định lấy theo
+   ngôn ngữ trình duyệt, nên phải có đường đổi lại rõ ràng chứ không giấu trong panel. */
+/* Nằm CÙNG DÒNG version, không xuống dòng dưới: dòng dưới đã là vùng của #sidebar
+   (top 64px) — nút rơi vào đó là bị sidebar ăn mất click (đo bằng elementFromPoint). */
+#lang-sw { display: inline-flex; gap: 4px; margin-left: 9px; vertical-align: middle;
+  pointer-events: auto; }
+.lang-b { padding: 1px 7px; border-radius: 6px; font-size: 10px; letter-spacing: .6px;
+  border: 1px solid var(--border); background: rgba(20,18,31,.6); color: var(--faint);
+  cursor: pointer; }
+.lang-b:hover { color: var(--text); border-color: var(--faint); }
+.lang-b.on { color: var(--cyan); border-color: var(--cyan); }
+
 /* ---------- panel phải ---------- */
 #panel { position: absolute; top: 12px; right: 12px; bottom: 12px; width: 320px; z-index: 20;
   background: var(--panel); border: 1px solid var(--border); border-radius: 14px;

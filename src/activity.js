@@ -1,5 +1,6 @@
 /* activity.js — poll /activity + feed sự kiện + màu/legend agent + chuỗi truy xuất (/chains) */
 import { S, byId, $, esc, ICONS } from './state.js';
+import { tr } from './i18n.js';
 import { flyTo } from './graph.js';
 import { agentHit, agentFlow, replayFlow, agentTrails } from './effects.js';
 import { refreshData, chip } from './ui.js';
@@ -52,7 +53,7 @@ export function addFeedEvent(ev, node) {
   el.className = 'ev ' + (ev.type || 'read');
   const t = new Date((ev.ts || 0) * 1000).toTimeString().slice(0, 8);
   const stem = node ? node.stem : (ev.file || '').split('/').pop().replace(/\.md$/i, '');
-  const miss = node ? '' : ' title="Node chưa có trên graph — vẫn hiện thao tác"';
+  const miss = node ? '' : ` title="${tr('agent.node.missing')}"`;
   el.innerHTML = `<span class="t">${t}</span><span>${ICONS[ev.type] || ''}</span><span class="n"${miss}>${esc(stem || ev.file)}</span>${ev.agent ? agentBadge(ev.agent) : ''}`;
   el.onclick = () => { if (node) { flyTo(node, 1000); agentHit(node, ev.type, true); } };
   feed.prepend(el);
@@ -124,21 +125,21 @@ function renderChains(chains) {
   lastChainSig = sig;
   const vis = (chains || []).filter(c => agentVisible(c.agent));
   $('chain-stats').textContent = vis.length
-    ? `${vis.length} chuỗi · ${knownAgents.length} agent · tổng ${fmtDur(vis.reduce((s, c) => s + (c.span || 0), 0))}`
+    ? tr('chain.sum', { n: vis.length, a: knownAgents.length, d: fmtDur(vis.reduce((s, c) => s + (c.span || 0), 0)) })
     : '';
   if (!vis.length) {
-    wrap.innerHTML = '<div class="empty" style="color:var(--faint);font-size:11.5px;text-align:center;padding:12px 6px">Chưa có chuỗi truy xuất.</div>';
+    wrap.innerHTML = `<div class="empty" style="color:var(--faint);font-size:11.5px;text-align:center;padding:12px 6px">${tr('chain.empty')}</div>`;
     return;
   }
   wrap.innerHTML = '';
   vis.forEach(c => {
     const t = new Date((c.start || 0) * 1000).toTimeString().slice(0, 5);
-    const rr = c.rereads > 0 ? ` <span class="rr" title="đọc lặp — có thể là dấu hiệu cấu trúc chưa tối ưu">⟳${c.rereads}</span>` : '';
-    const re = c.reedits > 0 ? ` <span class="re" title="sửa lặp trên cùng file — workflow chỉnh sửa">✎${c.reedits}</span>` : '';
+    const rr = c.rereads > 0 ? ` <span class="rr" title="${tr('chain.rr.tip')}">⟳${c.rereads}</span>` : '';
+    const re = c.reedits > 0 ? ` <span class="re" title="${tr('chain.re.tip')}">✎${c.reedits}</span>` : '';
     const box = document.createElement('div'); box.className = 'chain';
     if (openChains.has(chainKey(c))) box.classList.add('open');   /* khôi phục trạng thái mở qua các lần render */
     box.innerHTML =
-      `<div class="chd">${agentBadge(c.agent)}<span class="meta">${t} · 📄${c.distinct}${c.count !== c.distinct ? '/' + c.count : ''}${rr}${re}</span><span class="sp">${fmtDur(c.span)}</span><button class="chplay" title="Phát lại chuỗi này trên graph">▶</button></div>` +
+      `<div class="chd">${agentBadge(c.agent)}<span class="meta">${t} · 📄${c.distinct}${c.count !== c.distinct ? '/' + c.count : ''}${rr}${re}</span><span class="sp">${fmtDur(c.span)}</span><button class="chplay" title="${tr('chain.replay')}">▶</button></div>` +
       `<div class="body">` +
       c.events.map(e => {
         const stem = (byId.get(e.file) || {}).stem || (e.file || '').split('/').pop().replace(/\.md$/i, '');

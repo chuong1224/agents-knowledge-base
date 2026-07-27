@@ -5,7 +5,8 @@
    (contract P4.3) — driver ở đây chỉ backpressure (queue agent đầy thì chờ).
    Mở thanh tua = ẩn #hint + #layout-fab (:root.tl-open) — bài học va chạm dải
    đáy 13/07 (hint đè cụm nút). Dashboard = modal pattern #qs, Esc bắt capture. */
-import { byId, $, esc, ICONS } from './state.js';
+import { byId, $, esc, ICONS, focusInto, restoreFocus } from './state.js';
+import { tr } from './i18n.js';
 import { flyTo } from './graph.js';
 import { agentFlow, endAgentFlow, agentTrails, agentHit } from './effects.js';
 import { agentVisible, agentColor, agentBadge, fmtDur } from './activity.js';
@@ -68,7 +69,7 @@ function dispatch(ev) {
 }
 function step() {
   if (!tl || !tl.playing) return;
-  if (tl.idx >= tl.events.length) { pause(); setNow('Hết ngày — ▶ phát lại từ đầu.'); return; }
+  if (tl.idx >= tl.events.length) { pause(); setNow(tr('ck.tl.end')); return; }
   const ev = tl.events[tl.idx];
   // backpressure: hàng đợi hop của agent này còn dày → chờ, KHÔNG phát tiếp
   // (tab ẩn rAF dừng → hop không xong → tự đứng lại thay vì dồn 500 hop)
@@ -104,7 +105,7 @@ function seekClientX(x) {
   if (i < 0) i = tl.events.length;
   tl.idx = i;
   setCursor(ts);
-  setNow(`Tua tới ${fmtClock(ts)}` + (i < tl.events.length ? ` — event kế: ${fmtClock(tl.events[i].ts)}` : ' — hết ngày'));
+  setNow(tr('ck.tl.seek', { at: fmtClock(ts) }) + (i < tl.events.length ? tr('ck.tl.next', { at: fmtClock(tl.events[i].ts) }) : tr('ck.tl.dayend')));
 }
 
 export async function openTimeline(day) {
@@ -122,18 +123,18 @@ export async function openTimeline(day) {
     if (!tl.events.length) {
       $('tl-info').textContent = fmtDay(tl.day);
       $('tl-ticks').innerHTML = ''; $('tl-dots').innerHTML = '';
-      setNow('Không có hoạt động trong ngày này.');
+      setNow(tr('ck.noactivity'));
       setCursor(0); setPlayBtn();
       return;
     }
     $('tl-info').textContent = `${fmtDay(tl.day)} · ${tl.events.length} event · ${ags.size} agent`;
     buildTrack();
     setCursor(tl.t0);
-    setNow(`${fmtClock(tl.events[0].ts)} → ${fmtClock(tl.events[tl.events.length - 1].ts)} — ▶ để phát lại.`);
+    setNow(`${fmtClock(tl.events[0].ts)} → ${fmtClock(tl.events[tl.events.length - 1].ts)}` + tr('ck.tl.ready'));
     setPlayBtn();
   } catch (e) {
     tl = null;
-    setNow('Không tải được timeline: ' + esc(String(e)));
+    setNow(tr('ck.tl.err', { e: esc(String(e)) }));
   }
 }
 export function closeTimeline() {
@@ -155,41 +156,41 @@ function renderDash(d) {
   $('dash-day').textContent = d.day
     ? `${fmtDay(d.day)} · ${fmtClock(d.first).slice(0, 5)} → ${fmtClock(d.last).slice(0, 5)}` : '—';
   if (!d.total) {
-    $('dash-body').innerHTML = '<div class="dash-empty">Không có hoạt động trong ngày này.</div>';
+    $('dash-body').innerHTML = `<div class="dash-empty">${tr('ck.noactivity')}</div>`;
     return;
   }
   let html = '<div id="dash-tiles">' +
-    tile(d.total, 'lượt truy xuất', `👁${d.by_type.read} · 🔎${d.by_type.search} · ✏️${d.by_type.edit}`) +
-    tile(d.distinct, 'note khác nhau') +
-    tile(d.chains, 'chuỗi truy xuất') +
-    tile(fmtDur(d.span_total), 'tổng thời gian') +
-    tile(d.rereads, 'đọc lặp', 'đọc lặp cùng note trong một chuỗi — tín hiệu cấu trúc chưa tối ưu', d.rereads > 0) +
+    tile(d.total, tr('ck.t.hits'), `👁${d.by_type.read} · 🔎${d.by_type.search} · ✏️${d.by_type.edit}`) +
+    tile(d.distinct, tr('ck.t.distinct')) +
+    tile(d.chains, tr('ck.t.chains')) +
+    tile(fmtDur(d.span_total), tr('ck.t.span')) +
+    tile(d.rereads, tr('ck.t.rereads'), tr('ck.t.rereads.tip'), d.rereads > 0) +
     '</div>';
   const maxH = Math.max(1, ...d.hours.map(h => h.read + h.search + h.edit));
-  html += '<div class="dash-h">Theo giờ trong ngày</div><div id="dash-hours">' +
+  html += `<div class="dash-h">${tr('ck.h.hours')}</div><div id="dash-hours">` +
     d.hours.map((h, i) => {
       const tot = h.read + h.search + h.edit;
       const seg = t => h[t] ? `<i class="${t[0]}" style="height:${Math.max(2, Math.round(56 * h[t] / maxH))}px"></i>` : '';
-      return `<div class="dh-col" title="${String(i).padStart(2, '0')}:00 — ${tot} lượt` +
+      return `<div class="dh-col" title="${String(i).padStart(2, '0')}:00 — ${tr('ck.hits', { n: tot })}` +
              (tot ? ` (👁${h.read} 🔎${h.search} ✏️${h.edit})` : '') + '">' +
              seg('read') + seg('search') + seg('edit') + '</div>';
     }).join('') +
     '</div><div id="dash-hlab"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>23h</span></div>';
   html += '<div class="dash-h">Theo agent</div>' + d.agents.map(a =>
     `<div class="dash-agent">${agentBadge(a.agent)}` +
-    `<span title="đọc / tìm / sửa">👁${a.read} 🔎${a.search} ✏️${a.edit}</span>` +
-    `<span title="note khác nhau">📄${a.distinct}</span>` +
-    `<span title="chuỗi truy xuất">⛓${a.chains}</span>` +
-    (a.rereads ? `<span class="rr" title="đọc lặp">⟳${a.rereads}</span>` : '') +
-    (a.reedits ? `<span class="re" title="sửa lặp">✎${a.reedits}</span>` : '') +
-    `<span class="m" title="tổng thời gian các chuỗi">${fmtDur(a.span)}</span></div>`).join('');
+    `<span title="${tr('ck.a.types')}">👁${a.read} 🔎${a.search} ✏️${a.edit}</span>` +
+    `<span title="${tr('ck.t.distinct')}">📄${a.distinct}</span>` +
+    `<span title="${tr('ck.t.chains')}">⛓${a.chains}</span>` +
+    (a.rereads ? `<span class="rr" title="${tr('ck.t.rereads')}">⟳${a.rereads}</span>` : '') +
+    (a.reedits ? `<span class="re" title="${tr('ck.a.reedits')}">✎${a.reedits}</span>` : '') +
+    `<span class="m" title="${tr('ck.a.span')}">${fmtDur(a.span)}</span></div>`).join('');
   const mx = d.top.length ? (d.top[0].n || 1) : 1;
-  html += '<div class="dash-h">Note truy xuất nhiều nhất</div><div id="dash-top">' +
+  html += `<div class="dash-h">${tr('ck.h.top')}</div><div id="dash-top">` +
     d.top.map(t => {
       const node = byId.get(t.file);
       const stem = stemOf(t.file);
       const col = node ? node.color : 'var(--faint)';
-      return `<div class="heatrow" data-file="${esc(t.file)}" title="${esc(stem)} · ${t.n} lượt` +
+      return `<div class="heatrow" data-file="${esc(t.file)}" title="${esc(stem)} · ${tr('ck.hits', { n: t.n })}` +
              ` (👁${t.types.read} 🔎${t.types.search} ✏️${t.types.edit})">` +
              `<span class="hn">${esc(stem)}</span><span class="hbar">` +
              `<span style="width:${Math.round(100 * t.n / mx)}%;background:${col}"></span></span>` +
@@ -210,13 +211,14 @@ export async function openDashboard(day) {
     populateDays(d.days, d.day);
     renderDash(d);
     $('dash').classList.add('show');
+    focusInto($('dash-box'), '#dash-x');
   } catch (e) {
     $('dash-day').textContent = '—';
-    $('dash-body').innerHTML = `<div class="dash-empty">Không tải được dashboard: ${esc(String(e))}</div>`;
+    $('dash-body').innerHTML = `<div class="dash-empty">${tr('ck.dash.err', { e: esc(String(e)) })}</div>`;
     $('dash').classList.add('show');
   }
 }
-export function closeDashboard() { $('dash').classList.remove('show'); }
+export function closeDashboard() { $('dash').classList.remove('show'); restoreFocus(); }
 
 /* ---------- init ---------- */
 export function initCockpit() {

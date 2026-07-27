@@ -936,7 +936,8 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 res = onboarding.install_starter(VAULT)
             except onboarding.OnboardingError as exc:
-                self._send(400, json.dumps({"error": str(exc)},
+                self._send(400, json.dumps({"error": str(exc),
+                                            "code": getattr(exc, "code", "")},
                                            ensure_ascii=False).encode("utf-8"))
                 return
             except OSError as exc:
@@ -955,7 +956,8 @@ class Handler(BaseHTTPRequestHandler):
             st = onboarding.state(VAULT)
             if not st["demo"]["available"]:
                 self._send(400, json.dumps(
-                    {"error": "bản cài này không kèm vault demo (%s)" % st["demo"]["path"]},
+                    {"error": "bản cài này không kèm vault demo (%s)" % st["demo"]["path"],
+                     "code": "demo_missing"},
                     ensure_ascii=False).encode("utf-8"))
                 return
             port = st["demo"]["port"]
