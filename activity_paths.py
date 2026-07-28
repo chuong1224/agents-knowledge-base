@@ -165,7 +165,7 @@ APP_DIRS = ("src", "vendor")
 # thẳng lệnh import trong serve.py) — thiếu thì sửa module xong server vẫn phục vụ
 # bản cũ, lặng thinh (bug integrity.py, đợt 8 repo public).
 _VERSION_FILES = ("serve.py", "index.html", "activity_paths.py", "log_activity.py",
-                  "insight.py", "integrity.py", "onboarding.py")
+                  "insight.py", "integrity.py", "onboarding.py", "install_launcher.py")
 
 
 def restart_py_files():

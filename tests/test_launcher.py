@@ -14,7 +14,7 @@
 Windows-only (shortcut .lnk): may khac -> in SKIP va PASS, de selfcheck ban public
 tren Linux khong do oan.
 """
-import os, struct, sys
+import os, re, struct, sys
 sys.dont_write_bytecode = True   # khong sinh __pycache__ trong vault
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # console cp1252
@@ -69,7 +69,7 @@ def test_spec():
 
 
 def test_icon():
-    path = IL.write_icon(os.path.join(ROOT, "icon", "graph3d.ico"), sizes=(16, 32))
+    path = IL.write_icon(os.path.join(ROOT, "icon"), sizes=(16, 32))
     with open(path, "rb") as f:
         raw = f.read()
     rsv, typ, cnt = struct.unpack("<HHH", raw[:6])
@@ -86,9 +86,25 @@ def test_icon():
             ok = False
     check("ico moi anh: entry tro dung, BITMAPINFOHEADER hop le", ok, dims)
     check("ico dung kich thuoc da yeu cau", dims == [16, 32], dims)
-    check("ico icon_path theo GRAPH3D_ICON_DIR",
-          os.path.normcase(IL.icon_path()).startswith(os.path.normcase(os.path.join(ROOT, "icon"))),
-          IL.icon_path())
+    check("ico icon_dir theo GRAPH3D_ICON_DIR",
+          os.path.normcase(IL.icon_dir()) == os.path.normcase(os.path.join(ROOT, "icon")),
+          IL.icon_dir())
+
+    # Cache icon cua Explorer bam theo DUONG DAN -> ten phai mang hash noi dung, khong
+    # duoc co dinh (bug "icon to giay trang" 28/07: ghi de cung ten = van ve ban cu).
+    d = os.path.join(ROOT, "icon")
+    check("ten icon mang hash noi dung", re.match(r"graph3d-[0-9a-f]{8}\.ico$",
+                                                  os.path.basename(path)) is not None,
+          os.path.basename(path))
+    check("cung noi dung -> cung ten (khong de rac moi lan cai)",
+          IL.write_icon(d, sizes=(16, 32)) == path)
+    other = IL.write_icon(d, sizes=(16, 32, 48))
+    check("khac noi dung -> khac ten", other != path, (path, other))
+    check("ban cu bi don, chi con dung 1 icon", IL.icon_files(d) == [other], IL.icon_files(d))
+    stale = os.path.join(d, "graph3d.ico")         # ten co dinh cua v1.48.0/.1
+    open(stale, "wb").write(b"x")
+    IL.write_icon(d, sizes=(16, 32, 48))
+    check("icon ten co dinh cua ban cu cung bi don", not os.path.isfile(stale))
 
 
 def test_shortcut_roundtrip():
@@ -97,6 +113,10 @@ def test_shortcut_roundtrip():
     paths = [p for _l, p in res["paths"]]
     check("install tao dung 1 .lnk trong --dir", len(paths) == 1 and os.path.isfile(paths[0]), paths)
     info = IL.read_shortcut(paths[0])
+    check("lnk tro dung file icon vua sinh (khong phai ten co dinh)",
+          res["icon"] and os.path.isfile(res["icon"])
+          and os.path.basename(res["icon"]) in (info.get("icon") or ""),
+          (res["icon"], info.get("icon")))
     check("lnk doc lai: target khop", os.path.normcase(info["target"]) ==
           os.path.normcase(res["spec"]["target"]), info)
     check("lnk doc lai: args giu nguyen duong dan co dau cach",
@@ -118,6 +138,27 @@ def test_shortcut_roundtrip():
     res3 = IL.uninstall(name="KB Graph 3D TEST", dest_dir=dest)
     check("uninstall xoa .lnk cua minh",
           res3["removed"] == [other] and not os.path.isfile(other), res3)
+
+
+def test_favicon():
+    # Cua so app (--app) lay icon tu FAVICON cua trang. Chromium BO QUA favicon dang
+    # data: URI -> cua so roi ve icon Edge/Chrome (bug bao 28/07). Phai la file that
+    # do server sinh, va dung CHUNG nguon ve voi icon shortcut.
+    idx = open(os.path.join(G3D, "index.html"), encoding="utf-8").read()
+    link = re.search(r"<link[^>]+rel=[\"']icon[\"'][^>]*>", idx)
+    check("index.html co the <link rel=icon>", link is not None)
+    if link:
+        check("favicon KHONG dung data: URI", "data:" not in link.group(0), link.group(0)[:90])
+        check("favicon tro /favicon.ico", "/favicon.ico" in link.group(0), link.group(0)[:90])
+    sv = open(os.path.join(G3D, "serve.py"), encoding="utf-8").read()
+    check("serve.py phuc vu /favicon.ico bang icon that",
+          "def favicon_bytes" in sv and "install_launcher.icon_bytes" in sv
+          and "favicon_bytes()" in sv)
+    raw = IL.icon_bytes((16, 32))
+    check("icon_bytes tra ICO hop le", raw[:4] == b"\x00\x00\x01\x00" and len(raw) > 100, raw[:8])
+    import activity_paths as AP
+    check("install_launcher nam trong _VERSION_FILES (doi icon -> server restart)",
+          "install_launcher.py" in AP._VERSION_FILES, AP._VERSION_FILES)
 
 
 def test_refresh_shell():
@@ -161,6 +202,7 @@ if __name__ == "__main__":
     test_spec()
     test_icon()
     test_shortcut_roundtrip()
+    test_favicon()
     test_refresh_shell()
     test_ensure_app()
     print("\nTONG KET test_launcher: %s" % (("FAIL %d: %s" % (len(fails), ", ".join(fails)))

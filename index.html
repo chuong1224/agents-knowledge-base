@@ -4,9 +4,10 @@
 <meta charset="utf-8">
 <title>KB Graph 3D — Knowledge Base</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- Favicon inline (không thêm file nhị phân vào repo). Cửa sổ app của Edge/Chrome
-     (ensure_graph3d.py --app) lấy CHÍNH favicon này làm icon cửa sổ + taskbar. -->
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='31' fill='%230d0722'/%3E%3Ccircle cx='32' cy='32' r='29.5' fill='none' stroke='%2338f2ff' stroke-opacity='.5' stroke-width='2'/%3E%3Cg stroke='%238b6bff' stroke-width='2.5' stroke-opacity='.75'%3E%3Cpath d='M32 29 L18 44'/%3E%3Cpath d='M32 29 L47 41'/%3E%3Cpath d='M32 29 L41 15'/%3E%3C/g%3E%3Ccircle cx='32' cy='29' r='8' fill='%2338f2ff'/%3E%3Ccircle cx='18' cy='44' r='5' fill='%23ff4fd8'/%3E%3Ccircle cx='47' cy='41' r='4.5' fill='%23ffd85a'/%3E%3Ccircle cx='41' cy='15' r='4' fill='%239b7bff'/%3E%3C/svg%3E">
+<!-- Favicon do SERVER sinh (/favicon.ico, cùng nguồn vẽ với icon shortcut). KHÔNG
+     dùng data: URI: Chromium bỏ qua favicon data: URI ⇒ cửa sổ app của Edge/Chrome
+     (ensure_graph3d.py --app) mất icon và rơi về icon trình duyệt (lỗi 28/07). -->
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
 <link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
@@ -14,7 +15,7 @@
 
 <div id="brand">
   <h1>KB GRAPH 3D</h1>
-  <div class="sub">KNOWLEDGE BASE · SYNTHWAVE · <span style="color:var(--cyan)">v1.48.1</span><span id="lang-sw" role="group" data-i18n-aria="lang.switch" aria-label="Ngôn ngữ giao diện"></span></div>
+  <div class="sub">KNOWLEDGE BASE · SYNTHWAVE · <span style="color:var(--cyan)">v1.48.2</span><span id="lang-sw" role="group" data-i18n-aria="lang.switch" aria-label="Ngôn ngữ giao diện"></span></div>
 </div>
 
 <div id="sidebar">

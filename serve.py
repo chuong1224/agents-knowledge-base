@@ -612,6 +612,27 @@ def build_dashboard(events, day=None, gap=CHAIN_GAP, top_n=10):
                      "types": {t: r[t] for t in DASH_TYPES}} for f, r in top]}
 
 
+_FAVICON = {"raw": None}
+
+
+def favicon_bytes():
+    """Icon app dạng `.ico` — CÙNG nguồn vẽ với icon shortcut (`install_launcher`),
+    không có bản vẽ thứ hai để lệch nhau.
+
+    Vì sao phải phục vụ file thật thay vì `<link rel=icon href="data:…">`: Chromium
+    **bỏ qua favicon dạng data: URI**, nên cửa sổ app (`ensure --app`) không có icon
+    nào và rơi về icon Edge/Chrome — đúng triệu chứng báo 28/07. Vẽ ~0.3s nên cache
+    lại; server tự restart khi `install_launcher.py` đổi (nằm trong _VERSION_FILES)."""
+    if _FAVICON["raw"] is None:
+        try:
+            import install_launcher
+            _FAVICON["raw"] = install_launcher.icon_bytes((16, 32, 48, 64))
+        except Exception as exc:                   # noqa: BLE001
+            print("favicon: khong ve duoc (%s)" % exc)
+            _FAVICON["raw"] = b""
+    return _FAVICON["raw"]
+
+
 class Handler(BaseHTTPRequestHandler):
     # HTTP/1.1 keep-alive: 3 vòng poll của UI (800ms + 4s + 4s) tái dùng kết nối
     # thay vì bắt tay TCP mới mỗi request (mọi response đều kèm Content-Length nên
@@ -632,9 +653,12 @@ class Handler(BaseHTTPRequestHandler):
         path = parsed.path
 
         if path == "/favicon.ico":
-            # Tránh spam lỗi 404 ở console trình duyệt (không ảnh hưởng gì)
-            self.send_response(204)
-            self.end_headers()
+            raw = favicon_bytes()
+            if raw:
+                self._send(200, raw, "image/x-icon")
+            else:                                  # không vẽ được icon: im lặng như cũ
+                self.send_response(204)
+                self.end_headers()
             return
 
         if path in ("/", "/index.html"):

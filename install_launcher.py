@@ -20,6 +20,8 @@ Shortcut LUÔN trỏ điểm vào idempotent `ensure_graph3d.py`, không bao gi�
 server (luật: mọi launcher đi qua ensure) — test_launcher.py gác điều này.
 """
 import argparse
+import glob
+import hashlib
 import json
 import math
 import os
@@ -111,11 +113,20 @@ def pythonw_exe(override=None):
     return sys.executable or "pythonw.exe"
 
 
-def icon_path():
-    """Icon sinh tại chỗ vào thư mục dữ liệu local — KHÔNG commit file nhị phân vào
-    vault/repo. Env GRAPH3D_ICON_DIR để test không đụng %LOCALAPPDATA% thật."""
-    d = os.environ.get("GRAPH3D_ICON_DIR", "").strip() or local_data_dir()
-    return os.path.join(os.path.normpath(d), "graph3d.ico")
+def icon_dir():
+    """Nơi sinh icon = THƯ MỤC APP, tuyệt đối KHÔNG phải %LOCALAPPDATA%.
+
+    Lý do (bug 28/07, mất mấy vòng mới ra): agent có thể chạy trong sandbox MSIX của
+    Claude Desktop, mà MSIX **ảo hoá %LOCALAPPDATA%** — file ghi ra đó thật sự nằm
+    trong `Packages\\Claude_*\\LocalCache\\Local\\…`. Tiến trình TRONG sandbox đọc
+    đường "thật" vẫn thấy file (merged view) nên mọi phép đo đều báo OK, nhưng
+    **Explorer chạy NGOÀI sandbox thì không thấy gì** ⇒ shortcut mất icon và hiện
+    biểu tượng tờ giấy trắng. Cùng họ với gotcha #19 (activity.jsonl của Cowork).
+    Thư mục app nằm trên ổ thật, mọi tiến trình đều thấy như nhau.
+
+    Env GRAPH3D_ICON_DIR: cho test (và cho ai muốn để icon chỗ khác)."""
+    d = os.environ.get("GRAPH3D_ICON_DIR", "").strip() or HERE
+    return os.path.normpath(d)
 
 
 def shell_folders():
@@ -134,7 +145,7 @@ def shell_folders():
             "programs": os.path.join(appdata, "Microsoft", "Windows", "Start Menu", "Programs")}
 
 
-def shortcut_spec(port=8321, app_mode=True, name=APP_NAME, python=None):
+def shortcut_spec(port=8321, app_mode=True, name=APP_NAME, python=None, icon=None):
     """Mô tả shortcut sẽ tạo — tách khỏi việc GHI để test soi được nội dung mà không
     phải đẻ file .lnk thật."""
     args = ['"%s"' % os.path.join(HERE, ENSURE)]
@@ -146,7 +157,7 @@ def shortcut_spec(port=8321, app_mode=True, name=APP_NAME, python=None):
             "args": " ".join(args),
             "workdir": HERE,
             "desc": "%s — cockpit vault (local, port %d)" % (name, port),
-            "icon": icon_path()}
+            "icon": icon or ""}
 
 
 def shortcut_paths(name=APP_NAME, desktop=True, start_menu=True, dest_dir=None):
@@ -166,11 +177,19 @@ def shortcut_paths(name=APP_NAME, desktop=True, start_menu=True, dest_dir=None):
 # ---------------------------------------------------------------- .lnk
 
 def write_shortcut(path, spec, hotkey=None):
+    """Ghi .lnk. MỌI đường dẫn phải chuẩn hoá về dấu `\\` của Windows: `CreateProcess`
+    chấp nhận `C:/…/pythonw.exe` nên shortcut vẫn CHẠY, nhưng shell resolve link khắt
+    khe hơn — link "không hợp lệ" thì Explorer vẽ **biểu tượng file generic (tờ giấy
+    trắng)** và bỏ qua cả IconLocation. Bug 28/07: `--python` nhận đường dẫn kiểu Unix."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    icon = spec.get("icon") or ""
     _powershell(_PS_WRITE, {
-        "G3D_LNK": path, "G3D_TARGET": spec["target"], "G3D_ARGS": spec["args"],
-        "G3D_WORKDIR": spec["workdir"], "G3D_DESC": spec["desc"],
-        "G3D_ICON": spec.get("icon") if os.path.isfile(spec.get("icon") or "") else "",
+        "G3D_LNK": os.path.normpath(path),
+        "G3D_TARGET": os.path.normpath(spec["target"]),
+        "G3D_ARGS": spec["args"],
+        "G3D_WORKDIR": os.path.normpath(spec["workdir"]),
+        "G3D_DESC": spec["desc"],
+        "G3D_ICON": os.path.normpath(icon) if os.path.isfile(icon) else "",
         "G3D_HOTKEY": hotkey or ""})
     return path
 
@@ -180,11 +199,11 @@ def read_shortcut(path):
 
 
 def refresh_shell():
-    """Bảo Explorer VỨT cache icon. Bắt buộc, không phải cho đẹp: icon cache bám theo
-    ĐƯỜNG DẪN file .ico, nên ghi đè `graph3d.ico` bằng nội dung mới mà giữ nguyên tên
-    thì Explorer vẫn vẽ bản cũ — cài lại lần hai trở đi là thấy **icon tờ giấy trắng**
-    trong khi API shell trả đúng icon (đã đo). SHCNE_ASSOCCHANGED (0x08000000) là cách
-    nhẹ nhất — không phải giết explorer.exe. Trả False nếu gọi không được (không sao)."""
+    """Xin Explorer làm mới icon — LỚP PHỤ. Lớp chính là tên icon mang hash nội dung
+    (xem `write_icon`): cache bám theo đường dẫn, nên đổi nội dung là đổi luôn tên.
+    Hàm này chỉ để Explorer vẽ lại ngay thay vì đợi lần refresh sau; nó KHÔNG đủ để
+    cứu một tên file cố định đã bị cache (đo thật 28/07: gọi xong vẫn trắng).
+    SHCNE_ASSOCCHANGED (0x08000000) — nhẹ, không phải giết explorer.exe."""
     if os.name != "nt":
         return False
     ok = False
@@ -271,12 +290,16 @@ def _bmp(size, ss=3):
         rows.append(bytes(row))
     pix = b"".join(rows)
     mask = b"\x00" * (((size + 31) // 32) * 4 * size)
+    # biSizeImage = kích thước ẢNH XOR, KHÔNG gồm AND mask. GDI+/System.Drawing bỏ qua
+    # field này (đo bằng chúng thì file nào cũng "hợp lệ"), nhưng đường vẽ icon của
+    # Explorer dùng nó để tìm mask — ghi dư mask vào đây là icon hỏng và shell rơi về
+    # biểu tượng tờ giấy trắng. Đúng bug 28/07: mọi API đọc được, riêng Explorer trắng.
     hdr = struct.pack("<IiiHHIIiiII", 40, size, size * 2, 1, 32, 0,
-                      len(pix) + len(mask), 0, 0, 0, 0)
+                      len(pix), 0, 0, 0, 0)
     return hdr + pix + mask
 
 
-def write_icon(path, sizes=(16, 32, 48, 64, 128)):
+def icon_bytes(sizes=(16, 32, 48, 64, 128)):
     imgs = [(s, _bmp(s)) for s in sizes]
     entries, data = b"", b""
     offset = 6 + 16 * len(imgs)
@@ -285,10 +308,39 @@ def write_icon(path, sizes=(16, 32, 48, 64, 128)):
         entries += struct.pack("<BBBBHHII", dim, dim, 0, 0, 1, 32, len(blob), offset)
         offset += len(blob)
         data += blob
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "wb") as f:
-        f.write(struct.pack("<HHH", 0, 1, len(imgs)) + entries + data)
+    return struct.pack("<HHH", 0, 1, len(imgs)) + entries + data
+
+
+def write_icon(directory=None, sizes=(16, 32, 48, 64)):
+    """Ghi icon ra đĩa với TÊN MANG HASH NỘI DUNG (`graph3d-<hash8>.ico`) và dọn các
+    bản cũ.
+
+    Vì sao không dùng một tên cố định: icon cache của Explorer bám theo **đường dẫn**.
+    Ghi đè cùng tên bằng nội dung mới thì Explorer vẫn vẽ bản đã cache — đúng triệu
+    chứng "icon tờ giấy trắng" báo 28/07, và dọn cache (SHChangeNotify / ie4uinit)
+    KHÔNG phải lúc nào cũng ăn. Đổi nội dung ⇒ đổi tên ⇒ cache cũ không còn dính vào
+    đâu; cùng nội dung thì tên không đổi nên chạy lại không rác thêm file."""
+    directory = directory or icon_dir()
+    raw = icon_bytes(sizes)
+    name = "graph3d-%s.ico" % hashlib.sha1(raw).hexdigest()[:8]
+    path = os.path.join(directory, name)
+    os.makedirs(directory, exist_ok=True)
+    if not os.path.isfile(path) or open(path, "rb").read() != raw:
+        with open(path, "wb") as f:
+            f.write(raw)
+    for old in icon_files(directory):
+        if os.path.normcase(old) != os.path.normcase(path):
+            try:
+                os.remove(old)                     # bản cũ: shortcut trỏ tên mới rồi
+            except OSError:
+                pass
     return path
+
+
+def icon_files(directory=None):
+    """Mọi icon do app sinh (kể cả tên cố định của bản v1.48.0/.1) — để dọn/gỡ."""
+    directory = directory or icon_dir()
+    return sorted(glob.glob(os.path.join(directory, "graph3d*.ico")))
 
 
 # ---------------------------------------------------------------- lệnh
@@ -298,20 +350,19 @@ def install(name=APP_NAME, desktop=True, start_menu=True, hotkey=None, port=8321
     paths = shortcut_paths(name, desktop, start_menu, dest_dir)
     if not paths:
         raise LauncherError("khong chon dich nao (--no-desktop lan --no-start-menu?)")
-    icon = icon_path()
     try:
-        write_icon(icon)
+        icon = write_icon()
     except Exception as exc:                       # noqa: BLE001
         print("  ! khong tao duoc icon (%s) — shortcut dung icon mac dinh" % exc)
-    spec = shortcut_spec(port, app_mode, name, python)
+        icon = None
+    spec = shortcut_spec(port, app_mode, name, python, icon)
     made = []
     for label, p in paths:
         # Hotkey chỉ gán cho MỘT shortcut: hai .lnk cùng hotkey thì Windows chọn bừa.
         write_shortcut(p, spec, hotkey if (hotkey and not made) else None)
         made.append((label, p))
     refresh_shell()
-    return {"paths": made, "spec": spec, "icon": icon if os.path.isfile(icon) else None,
-            "hotkey": hotkey}
+    return {"paths": made, "spec": spec, "icon": icon, "hotkey": hotkey}
 
 
 def uninstall(name=APP_NAME, dest_dir=None):
@@ -330,12 +381,12 @@ def uninstall(name=APP_NAME, dest_dir=None):
             removed.append(p)
         else:
             kept.append(p)
-    icon = icon_path()
-    if os.path.isfile(icon):
+    for icon in icon_files():                      # gồm cả tên cố định của bản cũ
         try:
             os.remove(icon)
         except OSError:
             pass
+    refresh_shell()
     return {"removed": removed, "kept": kept}
 
 
