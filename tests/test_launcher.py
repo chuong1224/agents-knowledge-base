@@ -120,6 +120,15 @@ def test_shortcut_roundtrip():
           res3["removed"] == [other] and not os.path.isfile(other), res3)
 
 
+def test_refresh_shell():
+    # Icon cache bam theo DUONG DAN .ico: ghi de cung ten = Explorer van ve ban cu
+    # (icon "to giay trang" bao 28/07) -> install PHAI bao shell vut cache.
+    check("refresh_shell chay duoc, khong nem", IL.refresh_shell() in (True, False))
+    src = open(os.path.join(G3D, "install_launcher.py"), encoding="utf-8").read()
+    body = src[src.index("def install("):src.index("def uninstall(")]
+    check("install() co goi refresh_shell", "refresh_shell()" in body)
+
+
 def test_ensure_app():
     exe = ENS.browser_exe()
     check("browser_exe: None hoac file CO THAT", exe is None or os.path.isfile(exe), exe)
@@ -152,6 +161,7 @@ if __name__ == "__main__":
     test_spec()
     test_icon()
     test_shortcut_roundtrip()
+    test_refresh_shell()
     test_ensure_app()
     print("\nTONG KET test_launcher: %s" % (("FAIL %d: %s" % (len(fails), ", ".join(fails)))
                                             if fails else "ALL PASS"))

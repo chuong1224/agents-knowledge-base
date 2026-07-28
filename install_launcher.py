@@ -179,6 +179,32 @@ def read_shortcut(path):
     return json.loads(_powershell(_PS_READ, {"G3D_LNK": path}))
 
 
+def refresh_shell():
+    """Bảo Explorer VỨT cache icon. Bắt buộc, không phải cho đẹp: icon cache bám theo
+    ĐƯỜNG DẪN file .ico, nên ghi đè `graph3d.ico` bằng nội dung mới mà giữ nguyên tên
+    thì Explorer vẫn vẽ bản cũ — cài lại lần hai trở đi là thấy **icon tờ giấy trắng**
+    trong khi API shell trả đúng icon (đã đo). SHCNE_ASSOCCHANGED (0x08000000) là cách
+    nhẹ nhất — không phải giết explorer.exe. Trả False nếu gọi không được (không sao)."""
+    if os.name != "nt":
+        return False
+    ok = False
+    try:
+        import ctypes
+        ctypes.windll.shell32.SHChangeNotify(0x08000000, 0x0000, None, None)
+        ok = True
+    except Exception:                              # noqa: BLE001
+        pass
+    try:
+        # Cache icon còn có phần GHI RA ĐĨA (iconcache_*.db) mà SHChangeNotify không
+        # phải lúc nào cũng dọn; ie4uinit là tiện ích sẵn của Windows làm đúng việc đó.
+        subprocess.run([os.path.join(os.environ.get("WINDIR", r"C:\Windows"),
+                                     "System32", "ie4uinit.exe"), "-show"],
+                       capture_output=True, timeout=15)
+    except Exception:                              # noqa: BLE001
+        pass
+    return ok
+
+
 # ---------------------------------------------------------------- icon
 
 # Node + link của icon: một mảnh graph neon — cùng bảng màu synthwave với app.
@@ -283,6 +309,7 @@ def install(name=APP_NAME, desktop=True, start_menu=True, hotkey=None, port=8321
         # Hotkey chỉ gán cho MỘT shortcut: hai .lnk cùng hotkey thì Windows chọn bừa.
         write_shortcut(p, spec, hotkey if (hotkey and not made) else None)
         made.append((label, p))
+    refresh_shell()
     return {"paths": made, "spec": spec, "icon": icon if os.path.isfile(icon) else None,
             "hotkey": hotkey}
 
