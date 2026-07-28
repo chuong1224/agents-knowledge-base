@@ -103,6 +103,16 @@ python ensure_graph3d.py
 
 That's it — the app opens at `http://127.0.0.1:8321`. The vault root is simply the parent folder of `.graph3d/`. Re-running `ensure_graph3d.py` is idempotent (reuses a healthy server, replaces a stale one). On Windows you can also double-click `Start-Graph3D.bat`.
 
+**Give it a real launcher (Windows).** Once per machine:
+
+```bash
+python install_launcher.py --hotkey "CTRL+ALT+G"
+```
+
+You get a Start Menu + Desktop shortcut with its own icon (right-click → *Pin to taskbar*) that runs `pythonw ensure_graph3d.py --app` — so a click opens the cockpit in **its own app window**: no address bar, no tab lost among twenty others. `--status` shows what is installed, `--uninstall` removes it, `--python` pins a specific interpreter (by default it avoids a virtualenv's python — delete the venv and the shortcut would die). Because there is no console, everything `ensure` prints goes to `%LOCALAPPDATA%\claude-graph3d\launcher.log`.
+
+The point isn't the icon — it's that the path to your vault belongs to the *machine*, so it lives in the shortcut instead of in a note you have to open first.
+
 ### 🌱 No vault yet? Start from zero
 
 Here's the secret: **a vault is just a folder of markdown files.** You don't need Obsidian or any special app to start one — any text editor works, and an AI agent can do the writing for you. ([Obsidian](https://obsidian.md) is a great *editor* to adopt later; it opens the exact same folder.)
@@ -211,6 +221,7 @@ Trỏ vào một thư mục note markdown (vault kiểu Obsidian), app phục v�
 
 - **Chạy thử 60 giây (không cần vault):** clone repo → `python try_demo.py` → mở ngay demo vault 120 note (nguồn của mọi ảnh/GIF phía trên).
 - **Cài đặt vào vault của bạn:** chỉ cần Python 3.9+ — clone vào vault thành thư mục `.graph3d` (trong lệnh mẫu, thay `YourVault` bằng **đường dẫn thư mục vault của bạn** — thư mục chứa các note markdown, ví dụ `D:/Notes`), chạy `python ensure_graph3d.py`, app mở tại `http://127.0.0.1:8321`. Không pip, không npm, không build. Windows có thể double-click `Start-Graph3D.bat`.
+- **Lối vào đàng hoàng (Windows):** chạy MỘT lần mỗi máy `python install_launcher.py --hotkey "CTRL+ALT+G"` → shortcut Start Menu + Desktop có icon riêng (chuột phải để ghim Taskbar) chạy `pythonw ensure_graph3d.py --app`: click là ra **cửa sổ app riêng**, không thanh địa chỉ, không lẫn giữa hai chục tab. `--status` xem đang cài gì · `--uninstall` gỡ · `--python` ghim interpreter cụ thể (mặc định tránh python của venv — xoá venv là shortcut chết). Không có console nên thông báo của ensure nằm ở `%LOCALAPPDATA%\claude-graph3d\launcher.log`. Ý nghĩa thật: đường dẫn vault là thuộc tính của **máy**, nên nó nằm trong shortcut chứ không nằm trong một note mà bạn phải mở ra trước.
 - **Chưa có vault? KHÔNG cần Obsidian trước.** Vault chỉ là một thư mục chứa file `.md` — soạn bằng Notepad cũng được. Obsidian là editor tuỳ chọn về sau, dùng chung đúng thư mục này.
 - **Mở app trên thư mục chưa có note nào → app tự mời 3 lối đi** thay vì graph rỗng: **🌌 xem demo** 120 note (server riêng cổng 8322, server trên vault thật của bạn vẫn chạy nguyên), **🌱 tạo vault đầu tiên ngay tại đó** (chép [`starter-vault/`](starter-vault/) 9 note — dạy note/wikilink/tag/hub ngay trong app, có bản tiếng Việt; **không bao giờ đè file đã có**), **📖 tự làm 1 phút** + nút quét lại. Bằng terminal: `python ensure_graph3d.py --demo` hoặc `--init-starter "đường/dẫn/VaultCuaBan"`.
 - **Cài nhầm chỗ app cũng nói:** nếu thư mục app không tên `.graph3d` thì app đang đọc **thư mục cha của bản clone** làm vault — app chỉ rõ thư mục đó, đưa lệnh clone đúng, và có nút "đây đúng là vault của tôi" nếu bạn cố ý. Tạo starter vault xong app mở luôn note đầu tiên; lời mời vẫn nằm sẵn một nút ở đáy màn hình chừng nào vault còn trống.

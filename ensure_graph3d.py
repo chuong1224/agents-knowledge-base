@@ -14,9 +14,13 @@ Hai cờ onboarding cho người CHƯA có vault (W13 — logic ở onboarding.p
   --demo              mở cockpit trên vault demo bundled (port riêng 8322, không đụng
                       server đang chạy trên vault thật)
   --init-starter DIR  dựng vault đầu tiên tại DIR từ starter-vault/ rồi thoát
+
+Cờ --app (W58): mở bằng CỬA SỔ APP của Edge/Chrome (không thanh địa chỉ, không lẫn
+giữa 20 tab khác) — shortcut do install_launcher.py tạo chạy đúng dòng này.
 """
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -24,9 +28,73 @@ import webbrowser
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from activity_paths import source_version   # noqa: E402
+from activity_paths import local_data_dir, source_version   # noqa: E402
 import onboarding as onb                     # noqa: E402  (W13 — demo / starter vault)
 import run_graph3d as sup                    # noqa: E402  (health/port_pid/kill_pid/flags)
+
+
+def bind_console():
+    """pythonw.exe — shortcut dùng nó để click không loé cửa sổ CMD đen — KHÔNG có
+    console: `sys.stdout is None`, và print() đầu tiên nổ AttributeError giữa chừng,
+    lặng thinh. Trói stdout vào file log: vừa cứu print, vừa cho người dùng CHỖ XEM
+    khi app không chịu mở (port bị chiếm, python hỏng…). Trả file để caller đóng."""
+    if sys.stdout is not None:
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:                    # noqa: BLE001
+            pass
+        return None
+    path = os.path.join(local_data_dir(), "launcher.log")
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        f = open(path, "a", encoding="utf-8", errors="replace", buffering=1)
+    except OSError:
+        f = open(os.devnull, "w")
+    f.write("\n=== %s ===\n" % time.strftime("%Y-%m-%d %H:%M:%S"))
+    sys.stdout = sys.stderr = f
+    return f
+
+
+def browser_exe():
+    """Edge/Chrome để mở chế độ app. KHÔNG dùng --user-data-dir riêng: app lưu mọi
+    tuỳ chọn trong localStorage của origin 127.0.0.1:8321, profile riêng = mất sạch
+    ghim/lịch sử/bộ lọc đã chọn."""
+    cands = []
+    for var in ("PROGRAMFILES(X86)", "PROGRAMFILES", "LOCALAPPDATA"):
+        base = os.environ.get(var)
+        if base:
+            cands.append(os.path.join(base, "Microsoft", "Edge", "Application", "msedge.exe"))
+            cands.append(os.path.join(base, "Google", "Chrome", "Application", "chrome.exe"))
+    for p in cands:
+        if os.path.isfile(p):
+            return p
+    for name in ("msedge", "chrome"):
+        p = shutil.which(name)
+        if p:
+            return p
+    return None
+
+
+def open_app_window(url):
+    """Cửa sổ app riêng. False = không mở được -> caller lùi về trình duyệt mặc định."""
+    exe = browser_exe()
+    if not exe:
+        return False
+    try:
+        subprocess.Popen([exe, "--app=" + url], close_fds=True,
+                         creationflags=sup.DETACHED | sup.NO_WINDOW)
+        return True
+    except Exception as exc:                 # noqa: BLE001
+        print("KB Graph 3D: mo cua so app that bai (%s)" % exc)
+        return False
+
+
+def open_ui(url, app_mode):
+    if app_mode:
+        if open_app_window(url):
+            return
+        print("KB Graph 3D: khong thay Edge/Chrome -> mo trinh duyet mac dinh")
+    webbrowser.open(url)
 
 
 def init_starter(target):
@@ -47,7 +115,7 @@ def init_starter(target):
     return 0
 
 
-def run_demo(port, open_browser):
+def run_demo(port, open_browser, app_mode=False):
     """--demo: mirror app sang demo/vault/.graph3d rồi gọi LẠI chính ensure ở bản sao đó.
 
     Vì "vault = thư mục cha của .graph3d", chỉ cần đặt bản sao app cạnh vault demo là
@@ -71,6 +139,8 @@ def run_demo(port, open_browser):
     cmd = [sys.executable, os.path.join(app, "ensure_graph3d.py"), "--port", str(port)]
     if not open_browser:
         cmd.append("--no-open")
+    if app_mode:
+        cmd.append("--app")
     # env cách ly: log/journal/heat của demo KHÔNG rơi vào thư mục demo (tên file mang
     # tên máy — đã 2 lần suýt lọt lên repo public), và feed demo không trộn vault thật.
     return subprocess.call(cmd, cwd=app, env=onb.demo_env())
@@ -85,16 +155,15 @@ def main():
                     help="mo cockpit tren vault demo bundled (khong can vault cua ban)")
     ap.add_argument("--init-starter", metavar="DIR",
                     help="tao vault dau tien tai DIR tu starter-vault/ roi thoat")
+    ap.add_argument("--app", action="store_true",
+                    help="mo bang cua so app cua Edge/Chrome thay vi tab trinh duyet")
     args = ap.parse_args()
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
+    log = bind_console()
 
     if args.init_starter:
         sys.exit(init_starter(args.init_starter))
     if args.demo:
-        sys.exit(run_demo(args.port or onb.DEMO_PORT, not args.no_open))
+        sys.exit(run_demo(args.port or onb.DEMO_PORT, not args.no_open, args.app))
     args.port = args.port or 8321
 
     want = source_version(HERE)
@@ -137,7 +206,9 @@ def main():
                 print("KB Graph 3D: CANH BAO - server chua bao khoe sau ~10s, kiem tra thu cong")
 
     if not args.no_open:
-        webbrowser.open(url)
+        open_ui(url, args.app)
+    if log is not None:
+        log.close()
 
 
 if __name__ == "__main__":

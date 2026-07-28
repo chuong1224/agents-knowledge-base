@@ -28,12 +28,19 @@ def parse_jsonl(text):
     return out
 
 
+def local_data_dir():
+    """Thư mục dữ liệu local của app — NGOÀI OneDrive (%LOCALAPPDATA%): log realtime,
+    icon + log của launcher. Thứ gì ghi liên tục hoặc mang tính máy-này thì để đây,
+    thứ gì cần máy KHÁC đọc được thì vào vault (journal/heat per-máy)."""
+    base = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+    return os.path.join(base, "claude-graph3d")
+
+
 def activity_log_path():
     env = os.environ.get("GRAPH3D_ACTIVITY_FILE", "").strip()
     if env:
         return os.path.normpath(env)
-    base = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-    return os.path.join(base, "claude-graph3d", "activity.jsonl")
+    return os.path.join(local_data_dir(), "activity.jsonl")
 
 
 # Claude Desktop (Cowork) là app đóng gói MSIX: Windows ẢO HÓA mọi ghi vào %LOCALAPPDATA%
@@ -57,7 +64,7 @@ def activity_log_candidates():
     if _cand_cache["paths"] is not None and now - _cand_cache["ts"] < 30:
         return list(_cand_cache["paths"])
     base = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-    cands = [os.path.join(base, "claude-graph3d", "activity.jsonl")]
+    cands = [os.path.join(local_data_dir(), "activity.jsonl")]
     cands.extend(sorted(glob.glob(os.path.join(
         base, "Packages", "Claude_*", "LocalCache", "Local",
         "claude-graph3d", "activity.jsonl"))))
@@ -144,8 +151,8 @@ def journal_host(path):
 # đối chiếu danh sách này với *.py thật trong thư mục — quên khai là FAIL ngay.
 # backup_graph3d.py KHÔNG nằm đây: file vận hành riêng bản private, không publish.
 APP_PY = ("activity_paths.py", "build_graph_data.py", "ensure_graph3d.py",
-          "insight.py", "integrity.py", "log_activity.py", "onboarding.py",
-          "run_graph3d.py", "serve.py")
+          "insight.py", "install_launcher.py", "integrity.py", "log_activity.py",
+          "onboarding.py", "run_graph3d.py", "serve.py")
 APP_TOP = APP_PY + ("index.html", "Start-Graph3D.bat")
 APP_DIRS = ("src", "vendor")
 

@@ -18,7 +18,9 @@
        anh mo coi, frontmatter, "mo nilon"; W11)
      + test_onboarding (vault trong: state/install_starter/mirror_app, W13)
      + test_i18n (song ngu VI/EN: 2 ngon ngu cung tap khoa, khoa dung deu co that,
-       bien {x} khop, src/*.js het chuoi giao dien tieng Viet; W43);
+       bien {x} khop, src/*.js het chuoi giao dien tieng Viet; W43)
+     + test_launcher (loi vao he dieu hanh: shortcut .lnk goi ensure --app, icon .ico,
+       uninstall khong dung .lnk nguoi khac, bind_console cho pythonw; W58);
      test_p2 (~15s, spawn process that + chiem port 8397) chi chay khi --slow.
 
 Chay:  python .graph3d/tests/selfcheck.py [--slow]
@@ -221,7 +223,8 @@ def lop2_contract():
 def lop3_unit(slow):
     files = ["test_p1.py", "test_p3.py", "test_p4.py", "test_p5.py", "test_reader.py",
              "test_finder.py", "test_cockpit.py", "test_journal.py", "test_insight.py",
-             "test_integrity.py", "test_onboarding.py", "test_i18n.py"]
+             "test_integrity.py", "test_onboarding.py", "test_i18n.py",
+             "test_launcher.py"]
     if slow:
         files.append("test_p2.py")
     for name in files:
