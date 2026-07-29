@@ -670,6 +670,24 @@ select#ck-day:focus { border-color: var(--cyan); }
 /* ---------- W69: báo có bản mới trên repo ---------- */
 /* Badge "thiếu N bản" bám ngay sau số version — cùng dòng, vì dòng dưới là vùng
    #sidebar và mọi thứ rơi xuống đó mất click (bài học W43, xem thêm W65). */
+/* Số version bấm được = LỐI VÀO DUY NHẤT luôn có mặt để đổi ý về việc kiểm cập nhật.
+   Bản v1.50.x hỏi đồng ý đúng một lần rồi không còn đường nào đổi: bật rồi không tắt
+   được, lỡ bấm Không thì vĩnh viễn không bật lại. Consent không rút lại được thì không
+   phải consent tử tế — badge "thiếu N bản" không thay được vai này vì nó chỉ hiện khi
+   đang thiếu bản. */
+/* `pointer-events: auto` BẮT BUỘC: `#brand` đặt `pointer-events: none` để không chắn
+   thao tác xoay graph, nên mọi thứ bấm được bên trong nó phải tự bật lại — `#lang-sw`
+   và `#reload-b` đều có. Thiếu dòng này thì nút vẫn vẽ ra, vẫn có con trỏ bàn tay, mà
+   click xuyên thẳng xuống graph: `element.click()` trong test vẫn chạy, chỉ
+   `elementFromPoint` mới lộ (đúng bài học W43). */
+#app-ver { color: var(--cyan); cursor: pointer; pointer-events: auto;
+  border-bottom: 1px dotted transparent; }
+#app-ver:hover, #app-ver:focus-visible { border-bottom-color: var(--cyan); outline: none; }
+
+#upd-consent { padding: 3px 9px; border-radius: 7px; cursor: pointer; font-size: 11px;
+  border: 1px solid var(--border); background: rgba(20,18,31,.7); color: var(--faint); }
+#upd-consent:hover { color: var(--text); border-color: var(--faint); }
+
 #update-badge { margin-left: 7px; padding: 1px 6px; border-radius: 6px; font-size: 10px;
   letter-spacing: .4px; border: 1px solid var(--magenta); background: rgba(255,46,151,.12);
   color: var(--magenta); cursor: pointer; vertical-align: middle; pointer-events: auto; }

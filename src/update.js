@@ -29,10 +29,21 @@ function render() {
   const body = $('upd-body'), sum = $('upd-sum'), note = $('upd-note'), pull = $('upd-pull');
   if (!ST) return;
   sum.innerHTML = tr('upd.sum', { local: esc(ST.local || '?'), latest: esc(ST.latest || '?') });
-  body.innerHTML = (ST.versions || []).map(v =>
-    `<div class="upd-row"><span class="v">${esc(v.tag)}</span>` +
-    `<span class="s">${esc(v.summary || tr('upd.nosummary'))}</span></div>`).join('')
-    || `<div class="dash-empty">${tr('upd.uptodate')}</div>`;
+
+  /* Nút đổi ý — nhãn là HÀNH ĐỘNG sắp làm, không phải trạng thái hiện tại. Đây là lối
+     duy nhất luôn có mặt để bật/tắt: badge chỉ hiện khi đang thiếu bản, còn dải hỏi thì
+     hỏi đúng một lần. Thiếu nó thì trả lời xong là khoá cứng lựa chọn — lỗ của v1.50.x. */
+  // Hai nhánh tường minh chứ không nhét ba ngôi VÀO TRONG lời gọi dịch: bộ gác i18n
+  // chỉ nhận ra khoá khi nó là chuỗi đứng ngay sau dấu mở ngoặc, nên kiểu kia làm cả
+  // hai khoá bị coi là "khoá chết" dù đang dùng thật.
+  $('upd-consent').textContent = ST.consent ? tr('upd.consent.off') : tr('upd.consent.on');
+
+  body.innerHTML = !ST.consent
+    ? `<div class="dash-empty">${tr('upd.disabled')}</div>`
+    : ((ST.versions || []).map(v =>
+        `<div class="upd-row"><span class="v">${esc(v.tag)}</span>` +
+        `<span class="s">${esc(v.summary || tr('upd.nosummary'))}</span></div>`).join('')
+       || `<div class="dash-empty">${tr('upd.uptodate')}</div>`);
 
   /* Nút cập nhật chỉ sáng khi server nói CHẮC CHẮN an toàn (là clone, có origin,
      không detached, tree sạch). Không đủ điều kiện thì nói rõ VÌ SAO và đưa lệnh tay
@@ -58,13 +69,19 @@ export async function pollUpdate(refresh) {
   paintBadge();
 }
 
-export function openUpdate() {
+export async function openUpdate() {
   $('update').classList.add('show');
   focusInto($('upd-box'), '#upd-x');
+  if (!ST) await pollUpdate(false);   // lượt boot có thể đã hỏng (offline) — đừng mở panel rỗng
   render();
 }
 
 export function closeUpdate() { $('update').classList.remove('show'); restoreFocus(); }
+
+export async function toggleConsent() {
+  await answer(!(ST && ST.consent));
+  render();                                    // panel đang mở -> phản hồi ngay tại chỗ
+}
 
 async function answer(yes) {
   $('upd-ask').classList.remove('show');
@@ -101,11 +118,16 @@ async function doPull() {
 }
 
 export function initUpdate() {
-  const b = $('update-badge');
-  if (b) {
+  /* Cả badge lẫn SỐ VERSION đều mở panel. Số version là lối vào luôn có mặt — badge
+     chỉ xuất hiện khi đang thiếu bản, nên nếu chỉ có badge thì người đã tắt kiểm tra
+     (hoặc đang ở bản mới nhất) không còn cửa nào để đổi ý. */
+  for (const id of ['update-badge', 'app-ver']) {
+    const b = $(id);
+    if (!b) continue;
     b.onclick = openUpdate;
     b.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openUpdate(); } };
   }
+  $('upd-consent').onclick = toggleConsent;
   $('upd-ask-y').onclick = () => answer(true);
   $('upd-ask-n').onclick = () => answer(false);
   $('upd-x').onclick = closeUpdate;

@@ -187,6 +187,17 @@ check("9 GET /update chi hoi mang khi co ?refresh=1", 'qs.get("refresh"' in serv
 # --- 10: TTL khong duoc ha xuong duoi 1 ngay (quota 60 req/gio theo IP) ---
 check("10 TTL >= 1 ngay", U.TTL >= 24 * 3600, U.TTL)
 
+# --- 10b: PHAI co duong DOI Y luon co mat ---
+# Ban v1.50.x hoi dong y dung mot lan roi khoa cung lua chon: bat roi khong tat duoc, lo
+# bam Khong thi vinh vien khong bat lai. Badge KHONG thay duoc vai nay vi no chi hien khi
+# dang thieu ban. Nen so version phai bam duoc, va panel phai co nut doi y.
+check("10b so version bam duoc (id=app-ver)", 'id="app-ver"' in html)
+check("10b app-ver mo panel update", "'app-ver'" in upd_js)
+check("10b panel co nut doi y consent", 'id="upd-consent"' in html and "toggleConsent" in upd_js)
+check("10b nhan nut la HANH DONG (2 chieu bat/tat)",
+      "'upd.consent.on'" in i18n and "'upd.consent.off'" in i18n)
+check("10b tat kiem tra thi panel noi ro khong goi internet", "'upd.disabled'" in i18n)
+
 # --- 11: badge nam CUNG DONG voi so version (bai hoc W43/W65) ---
 m = re.search(r'<div class="sub">(.*?)</div>', html, re.S)
 check("11 badge update nam trong div.sub", bool(m) and 'id="update-badge"' in m.group(1))

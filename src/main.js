@@ -18,7 +18,7 @@ import { initWorkMap, openWorkMap, closeWorkMap, pollWorkCount } from './work.js
 import { initInsight, openInsight, closeInsight, pollInsight } from './insight.js';
 import { initIntegrity, openIntegrity, closeIntegrity, pollIntegrity } from './integrity.js';
 import { initOnboarding, openOnboarding, closeOnboarding, syncOnbFab } from './onboarding.js';
-import { initUpdate, pollUpdate, openUpdate, closeUpdate } from './update.js';
+import { initUpdate, pollUpdate, openUpdate, closeUpdate, toggleConsent } from './update.js';
 import { initWorkspace, WS, wsOpen, wsSwitch, wsCloseTab, wsSplit, wsBack,
          togglePin, pushRecent, renderSbSections } from './workspace.js';
 
@@ -40,7 +40,7 @@ async function boot() {
 
   initGraph();                           // ForceGraph3D + orphanPull + controls + trailGroup
   window.__G = S.Graph; // debug hook: truy cập Graph từ DevTools console
-  window.__fx = { nodeOnScreen, followFlyTo, agentTrails, agentFlow, replayFlow, buildUI, updateTrails, updateWarps, spawnWarp, warps, openReader, closeReader, openSwitcher, closeSwitcher, buildTree, openTimeline, closeTimeline, openDashboard, closeDashboard, openWorkMap, closeWorkMap, openInsight, closeInsight, pollInsight, openIntegrity, closeIntegrity, pollIntegrity, openOnboarding, closeOnboarding, WS, wsOpen, wsSwitch, wsCloseTab, wsSplit, wsBack, togglePin, pushRecent, renderSbSections, pollActivity, openUpdate, closeUpdate, pollUpdate }; // debug hook nghiệm thu (Ư1/Ư4/Ư6/Reader/Finder/Cockpit/Workspace/Insight — tab ẩn không có rAF, phải gọi tay; pollActivity thêm ở W64 để nghiệm thu nhánh boot_id đổi mà không cần tab hiện)
+  window.__fx = { nodeOnScreen, followFlyTo, agentTrails, agentFlow, replayFlow, buildUI, updateTrails, updateWarps, spawnWarp, warps, openReader, closeReader, openSwitcher, closeSwitcher, buildTree, openTimeline, closeTimeline, openDashboard, closeDashboard, openWorkMap, closeWorkMap, openInsight, closeInsight, pollInsight, openIntegrity, closeIntegrity, pollIntegrity, openOnboarding, closeOnboarding, WS, wsOpen, wsSwitch, wsCloseTab, wsSplit, wsBack, togglePin, pushRecent, renderSbSections, pollActivity, openUpdate, closeUpdate, pollUpdate, toggleConsent }; // debug hook nghiệm thu (Ư1/Ư4/Ư6/Reader/Finder/Cockpit/Workspace/Insight — tab ẩn không có rAF, phải gọi tay; pollActivity thêm ở W64 để nghiệm thu nhánh boot_id đổi mà không cần tab hiện)
 
   // W43: dich markup tinh TRUOC khi cac module doc/dung UI — chay mot lan, khong ton kem
   applyI18n();
