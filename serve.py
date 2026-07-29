@@ -64,7 +64,8 @@ VAULT = os.path.dirname(HERE)
 from activity_paths import (active_activity_log_path,  # noqa: E402
                             activity_log_candidates, source_version,
                             cumulative_heat_files, parse_jsonl, restart_py_files,
-                            vault_journal_files, journal_host, host_name)
+                            vault_journal_files, journal_host, host_name,
+                            no_window_kwargs)
 
 # Danh tính process (browser dùng để phát hiện server vừa restart → tự resync,
 # ensure/run dùng version để biết server có "cũ" so với code trên đĩa không).
@@ -1007,7 +1008,7 @@ class Handler(BaseHTTPRequestHandler):
                      "--demo", "--no-open", "--port", str(port)],
                     cwd=HERE, env=onboarding.demo_env(), close_fds=True,
                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL)
+                    stderr=subprocess.DEVNULL, **no_window_kwargs())
             except OSError as exc:
                 self._send(500, json.dumps({"error": str(exc)},
                                            ensure_ascii=False).encode("utf-8"))

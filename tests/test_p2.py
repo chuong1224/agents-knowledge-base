@@ -55,8 +55,14 @@ holder = subprocess.Popen([sys.executable, "-c",
     "import socket, time; s = socket.socket(); s.bind(('127.0.0.1', %d)); s.listen(1); time.sleep(120)" % PORT])
 try:
     time.sleep(1.0)
+    # encoding PHAI khai tuong minh: supervisor tu reconfigure stdout sang UTF-8, con
+    # text=True tran thi giai ma bang locale cua may. Tren may co locale gbk chang han,
+    # dau '—' trong thong diep cua supervisor la E2 80 94 -> UnicodeDecodeError, run.stdout
+    # thanh None va test no TypeError o dong duoi. Loi CO SAN, chi lo ra khi chay --slow
+    # tren may co locale KHONG phai UTF-8.
     run = subprocess.run([sys.executable, os.path.join(G3D, "run_graph3d.py"), "--port", str(PORT)],
-                         capture_output=True, text=True, timeout=60)
+                         capture_output=True, text=True, timeout=60,
+                         encoding="utf-8", errors="replace")
     check("t5a supervisor bo cuoc voi exit code 2", run.returncode == 2, run.returncode)
     check("t5b co thong diep 'process KHAC'", "process KHAC" in run.stdout, run.stdout[-300:])
     check("t5c app la VAN SONG sau khi supervisor bo cuoc", alive(holder))

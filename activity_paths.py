@@ -98,6 +98,19 @@ def host_name():
     return (os.environ.get("COMPUTERNAME") or socket.gethostname() or "unknown").strip() or "unknown"
 
 
+def no_window_kwargs():
+    """kwargs cho `subprocess` để tiến trình con KHÔNG loé cửa sổ console đen.
+
+    Bắt buộc cho MỌI lần gọi công cụ dòng lệnh lúc app đang chạy: server chạy bằng
+    `pythonw.exe` (không console), nên mỗi lần spawn một chương trình console —
+    `git`, `netstat`, `taskkill` — Windows sẽ **cấp cho nó một cửa sổ mới**. Người dùng
+    thấy khung đen nhấp nháy rồi tắt, và cảm giác đầu tiên là "app này có gì đó không
+    ổn" — đúng phản hồi nhận được ngay sau khi phát hành tính năng kiểm bản mới.
+
+    Trả dict rỗng ngoài Windows để chỗ gọi không phải rẽ nhánh theo hệ điều hành."""
+    return {"creationflags": 0x08000000} if os.name == "nt" else {}   # CREATE_NO_WINDOW
+
+
 SEMVER_RE = re.compile(r"v(\d+)\.(\d+)\.(\d+)")
 
 

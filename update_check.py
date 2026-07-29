@@ -38,7 +38,8 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from activity_paths import app_version, local_data_dir, parse_semver   # noqa: E402
+from activity_paths import (app_version, local_data_dir,   # noqa: E402
+                            no_window_kwargs, parse_semver)
 
 # Repo gốc — chỉ dùng khi bản cài KHÔNG phải một clone (ví dụ working tree private của
 # người bảo trì, vốn có git dir riêng và không có remote nào).
@@ -75,10 +76,18 @@ def save_state(st):
 # ---------------------------------------------------------------- repo đang dùng
 
 def _git(args, cwd=HERE):
-    """Chạy git, trả stdout đã strip hoặc None. Máy không có git cũng phải sống được."""
+    """Chạy git, trả stdout đã strip hoặc None. Máy không có git cũng phải sống được.
+
+    `no_window_kwargs()` là BẮT BUỘC, không phải trang trí: server chạy bằng `pythonw`
+    (không console) nên mỗi lần spawn `git` mà thiếu cờ đó là Windows loé một khung
+    console đen rồi tắt. Bản đầu của đợt W69 quên, và vì `status()` gọi **tới 5** lệnh
+    git mỗi request nên người dùng thấy nhấp nháy mấy lần quanh lúc bấm Cho phép —
+    đó là phản hồi đầu tiên nhận được sau khi phát hành. Đo lại sau khi vá + cache: lượt đầu 3
+    lệnh (precheck dừng sớm ở `no_remote`), các lượt trong 30s kế tiếp **0 lệnh**."""
     try:
         r = subprocess.run(["git"] + args, cwd=cwd, capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=10)
+                           encoding="utf-8", errors="replace", timeout=10,
+                           **no_window_kwargs())
     except (OSError, subprocess.SubprocessError):
         return None
     return r.stdout.strip() if r.returncode == 0 else None
@@ -239,7 +248,8 @@ def pull(here=HERE):
         return {"ok": False, "reason": why}
     try:
         r = subprocess.run(["git", "pull", "--ff-only"], cwd=here, capture_output=True,
-                           text=True, encoding="utf-8", errors="replace", timeout=120)
+                           text=True, encoding="utf-8", errors="replace", timeout=120,
+                           **no_window_kwargs())
     except (OSError, subprocess.SubprocessError) as exc:
         return {"ok": False, "reason": "git_failed", "detail": str(exc)}
     if r.returncode != 0:
@@ -261,16 +271,35 @@ def set_consent(value, here=HERE):
     return refresh(force=bool(value), here=here) if value else st
 
 
+_probe_cache = {"ts": 0.0, "val": None}
+
+
+def _repo_probe(here):
+    """(slug, can_pull, lý_do) — gộp 5 lệnh git thành MỘT lượt và nhớ 30 giây.
+
+    Vì sao: `status()` chạy mỗi lần UI hỏi `/update`, mà mỗi lượt cũ tốn 1 lệnh cho
+    `repo_slug` + 4 lệnh cho `pull_precheck`. Năm tiến trình con cho một câu hỏi chỉ
+    đổi khi người dùng commit/checkout là quá phí — và trước khi có `no_window_kwargs`
+    thì đó cũng chính là năm lần loé cửa sổ đen. Nhịp 30s mượn đúng của
+    `activity_log_candidates`."""
+    now = time.time()
+    if _probe_cache["val"] is not None and now - _probe_cache["ts"] < 30:
+        return _probe_cache["val"]
+    val = (repo_slug(here),) + pull_precheck(here)
+    _probe_cache["ts"], _probe_cache["val"] = now, val
+    return val
+
+
 def status(here=HERE):
     """Trạng thái cho UI. KHÔNG tự đi hỏi mạng ở đây — `serve.py` gọi `refresh()`
     riêng, để một lần bấm F5 không bao giờ biến thành một lần gọi ra internet ngoài ý
     muốn người dùng."""
     st = load_state()
-    can, why = pull_precheck(here)
+    slug, can, why = _repo_probe(here)
     return {"asked": bool(st.get("asked")), "consent": bool(st.get("consent")),
             "local": app_version(here), "latest": st.get("latest"),
             "behind": int(st.get("behind") or 0), "versions": st.get("versions") or [],
-            "repo": st.get("repo") or repo_slug(here),
+            "repo": st.get("repo") or slug,
             "checked_at": st.get("checked_at") or 0, "error": st.get("error"),
             "can_pull": can, "pull_reason": why}
 

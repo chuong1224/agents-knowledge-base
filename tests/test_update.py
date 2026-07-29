@@ -136,6 +136,25 @@ _danger = [g.strip() for g in _git_calls
            if re.search(r'"(reset|clean|checkout|push|fetch\s*--force)"|--hard|--force', g)]
 check("7 khong lenh git nao pha huy (reset/clean/checkout/--hard)", not _danger, _danger)
 check("7 co doc duoc lenh git de kiem (may gac khong rong)", len(_git_calls) >= 3, len(_git_calls))
+
+# --- 7b: MOI lan spawn phai giau cua so console ---
+# Server chay bang pythonw (khong console) nen spawn mot chuong trinh console ma thieu
+# CREATE_NO_WINDOW la Windows cap cho no mot cua so moi -> nguoi dung thay khung den
+# nhap nhay roi tat, cam giac "app nay co gi do khong on". Anh Chuong bao dung trieu
+# chung do ngay 29/07: status() goi 5 lenh git moi request nen no loe may lan lien.
+# Phai soi TUNG CHO GOI, khong duoc dem chuoi toan file: ban dau kiem
+# mod.count("no_window_kwargs()") >= so_spawn thi go that mot cho van ALL PASS, vi
+# chinh docstring cua _git co nhac ten ham do nen dem bu vao. Day la lan thu BA trong
+# ngay mot may gac cua minh do sai — dung lan nao cung la "dem chuoi thay vi soi cau
+# truc". Nay cat dung than lenh goi roi moi kiem.
+_spans = []
+for _m in re.finditer(r"subprocess\.(?:run|Popen)\(", mod):
+    _tail = mod[_m.end():]
+    _stop = _tail.find("\n    except")
+    _spans.append(_tail[:_stop if _stop > 0 else 400])
+check("7b co spawn tien trinh trong module (may gac khong rong)", len(_spans) >= 2, len(_spans))
+_naked = [s.strip()[:60] for s in _spans if "no_window_kwargs()" not in s]
+check("7b moi cho spawn deu truyen no_window_kwargs()", not _naked, _naked)
 ok, why = U.pull_precheck(tempfile.mkdtemp())      # thu muc trong: khong phai repo
 check("7 thu muc khong phai repo thi tu choi", ok is False and why == "not_a_repo", (ok, why))
 res = U.pull(tempfile.mkdtemp())

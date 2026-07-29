@@ -27,7 +27,9 @@ sys.path.insert(0, HERE)
 from activity_paths import source_version  # noqa: E402
 
 DETACHED = 0x00000008     # DETACHED_PROCESS  (cho ensure spawn ngầm)
-NO_WINDOW = 0x08000000    # CREATE_NO_WINDOW
+# 0 ngoài Windows: `creationflags` khác 0 là ValueError trên POSIX, mà netstat/taskkill/
+# powershell dưới đây tuy chỉ có trên Windows vẫn được gọi không rào theo hệ điều hành.
+NO_WINDOW = 0x08000000 if os.name == "nt" else 0    # CREATE_NO_WINDOW
 
 
 def health(port, timeout=1.2):
@@ -62,7 +64,7 @@ def port_pid(port):
     """PID đang LISTEN trên port (Windows). Nhận diện dòng listening qua địa chỉ
     foreign là wildcard -> không phụ thuộc chữ 'LISTENING' (tránh lỗi locale)."""
     try:
-        out = subprocess.run(["netstat", "-ano", "-p", "TCP"],
+        out = subprocess.run(["netstat", "-ano", "-p", "TCP"], creationflags=NO_WINDOW,
                              capture_output=True, text=True, timeout=6).stdout
     except Exception:
         return None
@@ -83,7 +85,7 @@ def _pid_cmdline(pid):
         out = subprocess.run(
             ["powershell", "-NoProfile", "-Command",
              "(Get-CimInstance Win32_Process -Filter 'ProcessId=%d').CommandLine" % int(pid)],
-            capture_output=True, text=True, timeout=10).stdout.strip()
+            creationflags=NO_WINDOW, capture_output=True, text=True, timeout=10).stdout.strip()
         return out or None
     except Exception:
         return None
@@ -106,7 +108,7 @@ def kill_pid(pid):
         return False
     try:
         subprocess.run(["taskkill", "/PID", str(pid), "/F", "/T"],
-                       capture_output=True, timeout=8)
+                       creationflags=NO_WINDOW, capture_output=True, timeout=8)
     except Exception:
         try:
             os.kill(pid, 9)
