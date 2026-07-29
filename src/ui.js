@@ -373,3 +373,20 @@ export async function refreshData() {
     applyFilters();
   } catch (e) {}
 }
+
+/* ---------- nút ⟳ nạp lại giao diện (W64) ----------
+   Cửa sổ app (`--app=`, W58) không có thanh địa chỉ ⇒ không có nút reload của trình
+   duyệt. Phím tắt vẫn chạy, nhưng lối bấm được thì phải có.
+
+   Đây KHÔNG chỉ là tiện nghi: khi source đổi, server tự restart và activity.js gọi
+   `refreshData()` — thứ đó chỉ nạp lại DỮ LIỆU. Mã UI (`index.html` + `src/*`) vẫn là
+   bản đang chạy trong tab cho tới khi tải lại trang, nên người dùng có thể ngồi trên
+   bản cũ mà không biết. `activity.js` bật class `hot` đúng lúc đó để nút tự mời.
+
+   `location.reload()` là đủ, KHÔNG cần chiêu phá cache: serve.py trả `no-store` cho cả
+   `/` lẫn `/src/*`, nên lần tải lại nào cũng đọc thẳng từ đĩa. */
+export function initReload() {
+  const b = $('reload-b');
+  if (!b) return;
+  b.onclick = () => location.reload();
+}

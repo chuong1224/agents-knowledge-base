@@ -96,6 +96,9 @@ export const DICT = {
   vi: {
     /* --- khung chung --- */
     'lang.switch': 'Ngôn ngữ giao diện',
+    'reload.aria': 'Nạp lại giao diện',
+    'reload.tip': 'Nạp lại giao diện — lấy bản mã mới nhất',
+    'reload.tip.new': 'Server vừa nạp mã mới — bấm để chạy bản mới',
     'hint.controls': '<b>Kéo trái</b> xoay · <b>Lăn chuột</b> zoom · <b>Kéo phải</b> di chuyển · <b>Kéo node</b> sắp xếp (tự ghim) · <b>Click đúp</b> thả ghim · <b>Click</b> xem note · <b>Ctrl+P</b> tìm nhanh',
     'err.title': 'Không tải được graph',
 
@@ -435,6 +438,9 @@ export const DICT = {
 
   en: {
     'lang.switch': 'Interface language',
+    'reload.aria': 'Reload the interface',
+    'reload.tip': 'Reload the interface — fetch the latest code',
+    'reload.tip.new': 'The server just picked up new code — click to run it',
     'hint.controls': '<b>Left-drag</b> rotate · <b>Scroll</b> zoom · <b>Right-drag</b> pan · <b>Drag a node</b> to arrange (pins it) · <b>Double-click</b> unpin · <b>Click</b> read note · <b>Ctrl+P</b> quick find',
     'err.title': 'Could not load the graph',
 

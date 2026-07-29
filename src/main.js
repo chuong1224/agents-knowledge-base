@@ -9,7 +9,8 @@ import { fxLoop, scheduleAmbient, agentTrails, agentFlow, replayFlow,
 import { pollActivity, pollChains } from './activity.js';
 import { pollHeat } from './heat.js';
 import { buildUI, initSections, initDemo, restoreExtOnFromStorage, restoreTagOffFromStorage,
-         restoreGroupFromStorage, restoreClusterFromStorage, sectOpen, refreshData } from './ui.js';
+         restoreGroupFromStorage, restoreClusterFromStorage, sectOpen, refreshData,
+         initReload } from './ui.js';
 import { initReader, openReader, closeReader } from './reader.js';
 import { initFinder, openSwitcher, closeSwitcher, buildTree } from './finder.js';
 import { initCockpit, openTimeline, closeTimeline, openDashboard, closeDashboard } from './cockpit.js';
@@ -38,11 +39,12 @@ async function boot() {
 
   initGraph();                           // ForceGraph3D + orphanPull + controls + trailGroup
   window.__G = S.Graph; // debug hook: truy cập Graph từ DevTools console
-  window.__fx = { nodeOnScreen, followFlyTo, agentTrails, agentFlow, replayFlow, buildUI, updateTrails, updateWarps, spawnWarp, warps, openReader, closeReader, openSwitcher, closeSwitcher, buildTree, openTimeline, closeTimeline, openDashboard, closeDashboard, openWorkMap, closeWorkMap, openInsight, closeInsight, pollInsight, openIntegrity, closeIntegrity, pollIntegrity, openOnboarding, closeOnboarding, WS, wsOpen, wsSwitch, wsCloseTab, wsSplit, wsBack, togglePin, pushRecent, renderSbSections }; // debug hook nghiệm thu (Ư1/Ư4/Ư6/Reader/Finder/Cockpit/Workspace/Insight — tab ẩn không có rAF, phải gọi tay)
+  window.__fx = { nodeOnScreen, followFlyTo, agentTrails, agentFlow, replayFlow, buildUI, updateTrails, updateWarps, spawnWarp, warps, openReader, closeReader, openSwitcher, closeSwitcher, buildTree, openTimeline, closeTimeline, openDashboard, closeDashboard, openWorkMap, closeWorkMap, openInsight, closeInsight, pollInsight, openIntegrity, closeIntegrity, pollIntegrity, openOnboarding, closeOnboarding, WS, wsOpen, wsSwitch, wsCloseTab, wsSplit, wsBack, togglePin, pushRecent, renderSbSections, pollActivity }; // debug hook nghiệm thu (Ư1/Ư4/Ư6/Reader/Finder/Cockpit/Workspace/Insight — tab ẩn không có rAF, phải gọi tay; pollActivity thêm ở W64 để nghiệm thu nhánh boot_id đổi mà không cần tab hiện)
 
   // W43: dich markup tinh TRUOC khi cac module doc/dung UI — chay mot lan, khong ton kem
   applyI18n();
   initLangSwitch();
+  initReload();                   // W64: nút ⟳ — cửa sổ app không có nút reload của trình duyệt
 
   physics('bung', true);
   addStars();

@@ -23,6 +23,11 @@ export async function pollActivity() {
       serverBoot = data.boot_id;
       activityCursors = null;
       refreshData();
+      /* refreshData() nạp lại DỮ LIỆU thôi — mã UI trong tab vẫn là bản cũ. Mời nạp lại
+         bằng nút ⟳ (W64) thay vì tự reload: reload không hỏi sẽ cướp mất tab đang đọc,
+         ghim, bộ lọc và vị trí camera của người dùng ngay giữa chừng. */
+      const rb = $('reload-b');
+      if (rb) { rb.classList.add('hot'); rb.title = tr('reload.tip.new'); }
       $('agent-dot').classList.add('live');
       return;
     }
