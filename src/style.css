@@ -648,24 +648,61 @@ select#ck-day:focus { border-color: var(--cyan); }
 /* ---------- 🩺 Sức khoẻ vault: section + overlay (cùng khuôn #dash) ---------- */
 #ins-mini { color: var(--muted); font-size: 11.5px; line-height: 1.55; }
 #ins-mini b { color: var(--cyan); }
-#insight, #integ { position: absolute; inset: 0; z-index: 41; display: none; background: rgba(8,6,16,.6); }
-#insight.show, #integ.show { display: block; }
-#ins-box, #itg-box { position: absolute; top: 6vh; left: 50%; transform: translateX(-50%);
+#insight, #integ, #update { position: absolute; inset: 0; z-index: 41; display: none; background: rgba(8,6,16,.6); }
+#insight.show, #integ.show, #update.show { display: block; }
+#ins-box, #itg-box, #upd-box { position: absolute; top: 6vh; left: 50%; transform: translateX(-50%);
   width: min(700px, 95vw); max-height: 86vh; background: var(--panel);
   border: 1px solid var(--border); border-radius: 14px; backdrop-filter: blur(12px);
   overflow: hidden; display: flex; flex-direction: column;
   box-shadow: 0 0 34px rgba(255,46,151,.14), inset 0 0 40px rgba(4,217,255,.04); }
-#ins-head, #itg-head { display: flex; align-items: baseline; gap: 10px; padding: 12px 15px 10px;
+#ins-head, #itg-head, #upd-head { display: flex; align-items: baseline; gap: 10px; padding: 12px 15px 10px;
   border-bottom: 1px solid var(--border); flex: none; }
-#ins-head h3, #itg-head h3 { margin: 0; font-size: 12px; letter-spacing: 1.8px; text-transform: uppercase;
+#ins-head h3, #itg-head h3, #upd-head h3 { margin: 0; font-size: 12px; letter-spacing: 1.8px; text-transform: uppercase;
   color: var(--cyan); flex: none; }
-#ins-sum, #itg-sum { color: var(--faint); font-size: 11px; }
-#ins-sum b, #itg-sum b { color: var(--muted); }
-#ins-x, #itg-x { margin-left: auto; cursor: pointer; color: var(--faint); font-size: 15px; flex: none; }
-#ins-x:hover, #itg-x:hover { color: var(--magenta); }
-#ins-body, #itg-body { overflow-y: auto; padding: 12px 15px 16px; }
-#ins-body::-webkit-scrollbar, #itg-body::-webkit-scrollbar { width: 7px; }
-#ins-body::-webkit-scrollbar-thumb, #itg-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+#ins-sum, #itg-sum, #upd-sum { color: var(--faint); font-size: 11px; }
+#ins-sum b, #itg-sum b, #upd-sum b { color: var(--muted); }
+#ins-x, #itg-x, #upd-x { margin-left: auto; cursor: pointer; color: var(--faint); font-size: 15px; flex: none; }
+#ins-x:hover, #itg-x:hover, #upd-x:hover { color: var(--magenta); }
+#ins-body, #itg-body, #upd-body { overflow-y: auto; padding: 12px 15px 16px; }
+#ins-body::-webkit-scrollbar, #itg-body::-webkit-scrollbar, #upd-body::-webkit-scrollbar { width: 7px; }
+#ins-body::-webkit-scrollbar-thumb, #itg-body::-webkit-scrollbar-thumb, #upd-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ---------- W69: báo có bản mới trên repo ---------- */
+/* Badge "thiếu N bản" bám ngay sau số version — cùng dòng, vì dòng dưới là vùng
+   #sidebar và mọi thứ rơi xuống đó mất click (bài học W43, xem thêm W65). */
+#update-badge { margin-left: 7px; padding: 1px 6px; border-radius: 6px; font-size: 10px;
+  letter-spacing: .4px; border: 1px solid var(--magenta); background: rgba(255,46,151,.12);
+  color: var(--magenta); cursor: pointer; vertical-align: middle; pointer-events: auto; }
+#update-badge:hover { background: rgba(255,46,151,.22); }
+#update-badge[hidden] { display: none; }
+
+/* Dải hỏi đồng ý — hiện ĐÚNG MỘT LẦN, đáy giữa để không che graph lẫn panel. */
+#upd-ask { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+  z-index: 42; display: none; align-items: center; gap: 10px; max-width: min(560px, 92vw);
+  padding: 9px 13px; border-radius: 11px; border: 1px solid var(--border);
+  background: var(--panel); backdrop-filter: blur(10px); font-size: 11.5px;
+  color: var(--muted); box-shadow: 0 0 26px rgba(4,217,255,.10); }
+#upd-ask.show { display: flex; }
+#upd-ask .t { flex: 1; line-height: 1.5; }
+#upd-ask button { padding: 3px 10px; border-radius: 7px; font-size: 11px; cursor: pointer;
+  border: 1px solid var(--border); background: rgba(20,18,31,.7); color: var(--faint); }
+#upd-ask button.yes { color: var(--cyan); border-color: var(--cyan); }
+#upd-ask button:hover { color: var(--text); }
+
+.upd-row { display: flex; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--border);
+  font-size: 11.5px; line-height: 1.5; }
+.upd-row:last-child { border-bottom: 0; }
+.upd-row .v { flex: none; width: 72px; color: var(--cyan); font-weight: 600; }
+.upd-row .s { color: var(--muted); }
+#upd-foot { flex: none; padding: 11px 15px; border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--faint); }
+#upd-foot .grow { flex: 1; }
+#upd-pull { padding: 4px 12px; border-radius: 8px; cursor: pointer; font-size: 11.5px;
+  border: 1px solid var(--cyan); background: rgba(4,217,255,.10); color: var(--cyan); }
+#upd-pull:hover { background: rgba(4,217,255,.2); }
+#upd-pull:disabled { opacity: .45; cursor: not-allowed; border-color: var(--border); color: var(--faint); }
+#upd-body code { color: var(--yellow); background: rgba(249,248,113,.08);
+  padding: 1px 5px; border-radius: 4px; }
 #ins-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; }
 #ins-body .heatrow .hbar { width: 110px; }
 /* Note đã rename/xoá nhưng còn trong log/heat: hiện để biết, nhưng không mở được */

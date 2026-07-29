@@ -224,7 +224,7 @@ def lop3_unit(slow):
     files = ["test_p1.py", "test_p3.py", "test_p4.py", "test_p5.py", "test_reader.py",
              "test_finder.py", "test_cockpit.py", "test_journal.py", "test_insight.py",
              "test_integrity.py", "test_onboarding.py", "test_i18n.py",
-             "test_launcher.py", "test_reload.py"]
+             "test_launcher.py", "test_reload.py", "test_update.py"]
     if slow:
         files.append("test_p2.py")
     for name in files:

@@ -194,7 +194,7 @@ check("11 khong hardcode locale ngoai i18n.js (dung locale())", not hard_locale,
 # "thieu", khoa cu thi nam im). Khoa DONG do server gui id/code duoc mien.
 used = set(re.findall(r'data-i18n(?:-html|-title|-ph|-aria)?="([^"]+)"', html))
 used |= used_js
-DYNAMIC_PREFIX = ("itg.c.", "onb.e.")           # ghep tu id check / ma loi cua server
+DYNAMIC_PREFIX = ("itg.c.", "onb.e.", "upd.cant.")  # ghep tu id check / ma loi cua server / ly do khong pull duoc
 dead = sorted(k for k in vi - used if not k.startswith(DYNAMIC_PREFIX))
 check("12 tu dien khong con khoa chet", not dead, dead[:8])
 

@@ -7,6 +7,7 @@ import glob
 import hashlib
 import json
 import os
+import re
 import socket
 import time
 
@@ -97,6 +98,36 @@ def host_name():
     return (os.environ.get("COMPUTERNAME") or socket.gethostname() or "unknown").strip() or "unknown"
 
 
+SEMVER_RE = re.compile(r"v(\d+)\.(\d+)\.(\d+)")
+
+
+def app_version(here=None):
+    """Semver của app (`v1.49.0`) — ĐỌC TỪ BADGE trong `index.html`, tuyệt đối không
+    khai thành hằng số thứ hai ở đây.
+
+    Lý do: badge là nguồn duy nhất từ trước tới nay và contract 2i của selfcheck gác
+    cho nó chỉ xuất hiện ĐÚNG MỘT LẦN trong index+src. Thêm một hằng số Python nữa là
+    đẻ ra bản chép thứ hai — đúng lớp drift mà cả H1 (`vault-rules.json`) lẫn `APP_PY`
+    sinh ra để diệt. Trả None nếu không đọc được: caller phải chịu được chuyện đó chứ
+    không được đoán bừa một số."""
+    here = here or HERE
+    try:
+        with open(os.path.join(here, "index.html"), encoding="utf-8") as f:
+            m = SEMVER_RE.search(f.read())
+    except OSError:
+        return None
+    return m.group(0) if m else None
+
+
+def parse_semver(text):
+    """'v1.49.0' / '1.49.0' → (1, 49, 0); không phải semver → None (tag lạ trên repo
+    bị bỏ qua thay vì làm hỏng phép so sánh)."""
+    if not text:
+        return None
+    m = SEMVER_RE.search(text if text.startswith("v") else "v" + text.lstrip("v"))
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
+
+
 def cumulative_heat_dir():
     """Thư mục chứa store heat tích luỹ. Env GRAPH3D_HEAT_DIR là override cho TEST và
     cho server DEMO (W13) — file runtime mang TÊN MÁY không được rơi vào working tree
@@ -152,7 +183,7 @@ def journal_host(path):
 # backup_graph3d.py KHÔNG nằm đây: file vận hành riêng bản private, không publish.
 APP_PY = ("activity_paths.py", "build_graph_data.py", "ensure_graph3d.py",
           "insight.py", "install_launcher.py", "integrity.py", "log_activity.py",
-          "onboarding.py", "run_graph3d.py", "serve.py")
+          "onboarding.py", "run_graph3d.py", "serve.py", "update_check.py")
 APP_TOP = APP_PY + ("index.html", "Start-Graph3D.bat")
 APP_DIRS = ("src", "vendor")
 
@@ -165,7 +196,8 @@ APP_DIRS = ("src", "vendor")
 # thẳng lệnh import trong serve.py) — thiếu thì sửa module xong server vẫn phục vụ
 # bản cũ, lặng thinh (bug integrity.py, đợt 8 repo public).
 _VERSION_FILES = ("serve.py", "index.html", "activity_paths.py", "log_activity.py",
-                  "insight.py", "integrity.py", "onboarding.py", "install_launcher.py")
+                  "insight.py", "integrity.py", "onboarding.py", "install_launcher.py",
+                  "update_check.py")
 
 
 def restart_py_files():

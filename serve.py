@@ -79,6 +79,7 @@ import log_activity  # noqa: E402  (dùng append_events cho endpoint /ping)
 import insight  # noqa: E402  (tầng insight sức khoẻ vault — /insight)
 import integrity  # noqa: E402  (đèn báo toàn vẹn vault — /integrity)
 import onboarding  # noqa: E402  (vault trống: empty-state + starter vault — /onboarding)
+import update_check  # noqa: E402  (báo có bản mới trên repo — /update, W69)
 
 _cache = {"ts": 0.0, "data": None}
 _cache_lock = threading.Lock()
@@ -854,6 +855,21 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, json.dumps(rep, ensure_ascii=False).encode("utf-8"))
             return
 
+        if path == "/update":
+            # Bản mới trên repo (W69). `status()` KHÔNG bao giờ tự gọi ra internet —
+            # chỉ khi client hỏi kèm `?refresh=1` mới cân nhắc đi hỏi, và chính
+            # `update_check.refresh()` tự chặn theo consent + TTL 1 ngày + rate limit.
+            # Nhờ vậy một lần F5 không thể biến thành một lần gọi ra ngoài ngoài ý muốn.
+            qs = parse_qs(parsed.query)
+            if qs.get("refresh", ["0"])[0] == "1":
+                try:
+                    update_check.refresh(here=HERE)
+                except Exception:              # noqa: BLE001 — mạng hỏng KHÔNG phải lỗi app
+                    pass
+            body = json.dumps(update_check.status(HERE), ensure_ascii=False).encode("utf-8")
+            self._send(200, body)
+            return
+
         if path == "/onboarding":
             # Vault TRỐNG (W13): UI hỏi "có gì để mời user vào không" — số note lấy
             # từ cache graph (khỏi quét lần hai), phần còn lại là những lối đi có
@@ -1007,6 +1023,31 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, json.dumps({"url": "http://127.0.0.1:%d" % port,
                                         "port": port, "notes": st["demo"]["notes"]},
                                        ensure_ascii=False).encode("utf-8"))
+            return
+
+        if path == "/update-consent":
+            # Người dùng trả lời câu hỏi "cho phép kiểm tra bản mới?" — ĐÂY là chỗ duy
+            # nhất bật được việc gọi ra internet. Trả lời "không" cũng được ghi nhớ để
+            # không hỏi lại lần sau (`asked`).
+            qs = parse_qs(urlparse(self.path).query)
+            on = qs.get("value", ["off"])[0] == "on"
+            try:
+                update_check.set_consent(on, here=HERE)
+            except Exception as exc:           # noqa: BLE001
+                self._send(500, json.dumps({"error": str(exc)},
+                                           ensure_ascii=False).encode("utf-8"))
+                return
+            self._send(200, json.dumps(update_check.status(HERE),
+                                       ensure_ascii=False).encode("utf-8"))
+            return
+
+        if path == "/update-pull":
+            # Cập nhật tại chỗ = `git pull --ff-only`, và CHỈ khi 4 điều kiện của
+            # `pull_precheck` đạt (là repo · có origin · không detached · tree sạch).
+            # Không bao giờ đè lên thay đổi của người dùng; hoà giải được thì để họ tự.
+            res = update_check.pull(HERE)
+            self._send(200 if res.get("ok") else 400,
+                       json.dumps(res, ensure_ascii=False).encode("utf-8"))
             return
 
         self._send(404, b'{"error":"not found"}')
