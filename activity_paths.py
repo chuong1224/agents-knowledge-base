@@ -10,6 +10,7 @@ import os
 import re
 import socket
 import time
+from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -51,6 +52,7 @@ def activity_log_path():
 # Packages/Claude_*/ thay vì hardcode publisher hash: Anthropic đổi tên gói, lớp vá
 # vẫn sống (review P4.2). Glob quét folder Packages hơi tốn nên cache 30s.
 _cand_cache = {"ts": 0.0, "paths": None}
+_codex_cand_cache = {"ts": 0.0, "root": None, "paths": None}
 
 
 def activity_log_candidates():
@@ -77,6 +79,217 @@ def activity_log_candidates():
             out.append(p)
     _cand_cache["ts"], _cand_cache["paths"] = now, out
     return list(out)
+
+
+def codex_session_candidates():
+    """Rollout JSONL cua Codex Desktop co the chua thao tac vault.
+
+    Codex khong chay hook Claude ``PostToolUse`` nen day la nguon read-only de
+    serve.py doi thao tac tool thanh event ``agent=Codex``. Chi quet file rollout;
+    parser ben duoi khong dua prompt hay output tool vao Graph.
+
+    ``GRAPH3D_CODEX_SESSIONS`` co the tro thang vao thu muc ``sessions``; gia tri
+    ``off``/``0`` tat adapter. Khi test dat ``GRAPH3D_ACTIVITY_FILE`` ma khong dat
+    root Codex tuong minh, adapter cung tat de override giu tinh quyet dinh.
+    """
+    override = os.environ.get("GRAPH3D_CODEX_SESSIONS")
+    if override is not None and override.strip().casefold() in ("", "0", "off", "false", "none"):
+        return []
+    if override is None and os.environ.get("GRAPH3D_ACTIVITY_FILE", "").strip():
+        return []
+    if override is not None:
+        root = os.path.normpath(os.path.expandvars(os.path.expanduser(override.strip())))
+    else:
+        home = os.environ.get("CODEX_HOME", "").strip()
+        if not home:
+            home = os.path.join(os.path.expanduser("~"), ".codex")
+        root = os.path.join(home, "sessions")
+    now = time.time()
+    if (_codex_cand_cache["paths"] is not None
+            and _codex_cand_cache["root"] == root
+            and now - _codex_cand_cache["ts"] < 5):
+        return list(_codex_cand_cache["paths"])
+    cands = sorted(glob.glob(os.path.join(root, "*", "*", "*", "rollout-*.jsonl")))
+    # Bao ve app khoi vault Codex rat lau nam: Agent Activity la cua so van hanh,
+    # 200 session gan nhat du de giu lich su ma khong doc hang GB moi lan poll.
+    cands = cands[-200:]
+    _codex_cand_cache.update({"ts": now, "root": root, "paths": cands})
+    return list(cands)
+
+
+def is_codex_rollout(path):
+    name = os.path.basename(str(path)).casefold()
+    return name.startswith("rollout-") and name.endswith(".jsonl")
+
+
+_JS_DQ = r'"(?:\\.|[^"\\])*"'
+_JS_SQ = r"'(?:\\.|[^'\\])*'"
+_JS_BT = r"`(?:\\.|[^`\\])*`"
+_JS_STRING_RE = re.compile("(?:%s|%s|%s)" % (_JS_DQ, _JS_SQ, _JS_BT), re.DOTALL)
+_MD_QUOTED_RE = re.compile(r"(['\"])([^'\"\r\n]*?\.md(?::\d+)?)\1", re.IGNORECASE)
+_MD_BARE_RE = re.compile(
+    r"(?<![\w*?])((?:[A-Za-z]:[\\/]|\.{0,2}[\\/])?"
+    r"[A-Za-z0-9_.-]+(?:[\\/][A-Za-z0-9_.-]+)*\.md(?::\d+)?)"
+    r"(?=$|[\s,;)])", re.IGNORECASE)
+
+
+def _decode_js_string(token):
+    if not token:
+        return ""
+    if token[0] == '"':
+        try:
+            return json.loads(token)
+        except (ValueError, TypeError):
+            return ""
+    body = token[1:-1]
+    # Du cho command/template Codex: giai cac escape path/newline pho bien, khong
+    # danh gia JavaScript va khong noi suy ${...}.
+    return (body.replace(r"\\", "\\")
+                .replace(r"\'", "'")
+                .replace(r'\"', '"')
+                .replace(r"\n", "\n")
+                .replace(r"\r", "\r")
+                .replace(r"\t", "\t"))
+
+
+def _js_strings(source):
+    return [_decode_js_string(m.group(0)) for m in _JS_STRING_RE.finditer(source or "")]
+
+
+def _field_js_string(source, field):
+    m = re.search(r"\b%s\s*:\s*(%s|%s|%s)" %
+                  (re.escape(field), _JS_DQ, _JS_SQ, _JS_BT),
+                  source or "", re.DOTALL)
+    return _decode_js_string(m.group(1)) if m else ""
+
+
+def _codex_ts(value):
+    if isinstance(value, (int, float)):
+        return float(value)
+    if not isinstance(value, str) or not value.strip():
+        return 0.0
+    try:
+        return datetime.fromisoformat(value.strip().replace("Z", "+00:00")).timestamp()
+    except (ValueError, OverflowError):
+        return 0.0
+
+
+def _note_rel(path, vault, workdir=None):
+    path = str(path or "").strip().strip('"').strip("'")
+    path = re.sub(r":\d+$", "", path)
+    if not path or "*" in path or "?" in path or not path.casefold().endswith(".md"):
+        return None
+    # realpath ca hai dau de alias Windows 8.3 va ten user day du khong lam
+    # os.path.relpath sinh duong `../..` gia roi loai oan note hop le.
+    vault = os.path.realpath(os.path.abspath(vault))
+    base = os.path.realpath(os.path.abspath(workdir or vault))
+    ap = os.path.realpath(os.path.normpath(
+        path if os.path.isabs(path) else os.path.join(base, path)))
+    try:
+        if os.path.normcase(os.path.commonpath([ap, vault])) != os.path.normcase(vault):
+            return None
+    except ValueError:
+        return None
+    # Chi log note co that: day la lop chong false-positive khi command/prompt co
+    # chuoi ket thuc .md nhung khong he truy cap file nao.
+    if not os.path.isfile(ap):
+        return None
+    rel = os.path.relpath(ap, vault).replace("\\", "/")
+    if rel.split("/", 1)[0].startswith("."):
+        return None
+    return rel
+
+
+def _md_paths(text):
+    out = [m.group(2) for m in _MD_QUOTED_RE.finditer(text or "")]
+    out.extend(m.group(1) for m in _MD_BARE_RE.finditer(text or ""))
+    seen, uniq = set(), []
+    for path in out:
+        key = os.path.normcase(path)
+        if key not in seen:
+            seen.add(key)
+            uniq.append(path)
+    return uniq
+
+
+def _command_type(command):
+    low = (command or "").casefold()
+    if any(x in low for x in ("apply_patch", "set-content", "remove-item", "move-item")):
+        return "edit"
+    if re.search(r"(^|[\s;&|])(rg|grep|findstr)(?:\.exe)?([\s;&|]|$)", low) or "select-string" in low:
+        return "search"
+    return "read"
+
+
+def _codex_exec_events(source, ts, vault):
+    events, seen = [], set()
+
+    def add(ev_type, paths, workdir=None):
+        for path in paths:
+            rel = _note_rel(path, vault, workdir=workdir)
+            key = (ev_type, rel)
+            if rel and key not in seen:
+                seen.add(key)
+                events.append({"ts": ts, "type": ev_type, "file": rel, "agent": "Codex"})
+            if len(events) >= 40:
+                return
+
+    # apply_patch: chi marker dich, khong quet noi dung patch (noi dung co the nhac
+    # nhieu wikilink/.md khong duoc mo). Marker nam trong JS string da decode.
+    for text in _js_strings(source):
+        if "*** Begin Patch" not in text:
+            continue
+        paths = re.findall(r"^\*\*\* (?:Update|Add|Delete) File:\s*(.+?)\s*$",
+                           text, re.MULTILINE)
+        add("edit", paths)
+
+    workdir = _field_js_string(source, "workdir") or vault
+    # command truc tiep hoac template/variable literal co chua lenh. Khong dung
+    # custom_tool_call_output: output co the la toan bo noi dung note, quet no se
+    # bien moi wikilink trong bai thanh activity gia.
+    commands = []
+    direct = _field_js_string(source, "command")
+    if direct:
+        commands.append(direct)
+    for text in _js_strings(source):
+        low = text.casefold()
+        if ".md" in low and any(x in low for x in
+                                ("get-content", "select-string", "rg ", "rg.exe", "grep ",
+                                 "findstr", "test-path", "git diff")):
+            commands.append(text)
+    for command in commands:
+        if "*** Begin Patch" in command:
+            continue
+        add(_command_type(command), _md_paths(command), workdir=workdir)
+    return events
+
+
+def parse_codex_rollout(text, vault=None):
+    """Chuyen rollout JSONL Codex thanh event activity toi gian.
+
+    Dau ra CHI gom ``ts/type/file/agent``. Khong doc/giu prompt, reasoning, output
+    tool hay noi dung note. Moi path phai resolve thanh file ``.md`` co that nam
+    ben trong vault.
+    """
+    vault = os.path.abspath(vault or os.path.dirname(HERE))
+    out = []
+    for row in parse_jsonl(text):
+        payload = row.get("payload") if isinstance(row, dict) else None
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("type") not in ("custom_tool_call", "function_call"):
+            continue
+        if payload.get("name") != "exec":
+            continue
+        source = payload.get("input") or payload.get("arguments")
+        if not isinstance(source, str):
+            continue
+        ts = _codex_ts(row.get("timestamp"))
+        if not ts:
+            continue
+        out.extend(_codex_exec_events(source, ts, vault))
+    out.sort(key=lambda ev: ev["ts"])
+    return out
 
 
 def active_activity_log_path():

@@ -62,7 +62,8 @@ from urllib.parse import urlparse, parse_qs
 HERE = os.path.dirname(os.path.abspath(__file__))
 VAULT = os.path.dirname(HERE)
 from activity_paths import (active_activity_log_path,  # noqa: E402
-                            activity_log_candidates, source_version,
+                            activity_log_candidates, codex_session_candidates,
+                            is_codex_rollout, parse_codex_rollout, source_version,
                             cumulative_heat_files, parse_jsonl, restart_py_files,
                             vault_journal_files, journal_host, host_name,
                             no_window_kwargs)
@@ -259,6 +260,12 @@ def search_notes(q, limit=20, vault=None):
     return out[:max(1, limit)]
 
 
+def _parse_activity_source(act_path, text):
+    if is_codex_rollout(act_path):
+        return parse_codex_rollout(text, vault=VAULT)
+    return parse_jsonl(text)
+
+
 def _read_source(act_path, start):
     """Đọc JSONL một nguồn từ byte offset. Trả (events, cursor_mới).
     Cursor = vị trí SAU DÒNG HOÀN CHỈNH cuối cùng (f.tell() lùi về sau ký tự \\n
@@ -273,7 +280,19 @@ def _read_source(act_path, start):
     if nl < 0:
         return [], start                  # chưa có dòng hoàn chỉnh mới nào
     end -= len(chunk) - (nl + 1)
-    return parse_jsonl(chunk[:nl].decode("utf-8", errors="replace")), end
+    text = chunk[:nl].decode("utf-8", errors="replace")
+    return _parse_activity_source(act_path, text), end
+
+
+def _realtime_sources():
+    """Nguon live local: hook Claude/Hermes va rollout Codex Desktop."""
+    out, seen = [], set()
+    for path in activity_log_candidates() + codex_session_candidates():
+        key = os.path.normcase(os.path.normpath(path))
+        if key not in seen:
+            seen.add(key)
+            out.append(path)
+    return out
 
 
 def read_activity_all(cursors, replay=False):
@@ -285,7 +304,7 @@ def read_activity_all(cursors, replay=False):
     out, events, forced = {}, [], False
     now = time.time()
     seen_src = set()
-    for act in activity_log_candidates():
+    for act in _realtime_sources():
         try:
             st = os.stat(act)
         except OSError:
@@ -305,7 +324,8 @@ def read_activity_all(cursors, replay=False):
             # boot / nguồn mới giữa phiên / file co lại (rotate): đọc tail để mồi cursor
             if not replay and not fresh:
                 forced = True              # rotate → client không được bắn lại hiệu ứng
-            evs, end = _read_source(act, max(0, size - 65536))
+            tail_bytes = 1048576 if is_codex_rollout(act) else 65536
+            evs, end = _read_source(act, max(0, size - tail_bytes))
             if fresh and not replay:
                 # Nguồn mới xuất hiện giữa phiên (Cowork vừa chạy hook lần đầu): chỉ
                 # nhận event thật sự mới — nội dung cũ trong file không phải hoạt động mới.
@@ -343,7 +363,7 @@ def _event_sources():
     + journal per-máy TRONG vault (activity-<HOST>.jsonl — v1.25.0, sync OneDrive để
     laptop thấy event máy cty và ngược lại). Local đứng TRƯỚC: bản trùng log↔journal
     của chính máy này dedup giữ bản local (không host)."""
-    out = [(p, None) for p in activity_log_candidates()]
+    out = [(p, None) for p in _realtime_sources()]
     out += [(p, journal_host(p)) for p in vault_journal_files()]
     return out
 
@@ -376,7 +396,7 @@ def read_all_events():
                 data = f.read().decode("utf-8", "replace")
         except OSError:
             continue
-        for ev in parse_jsonl(data):
+        for ev in _parse_activity_source(act, data):
             if "ts" in ev and "file" in ev:
                 key = (ev.get("ts"), ev.get("file"), ev.get("type"), ev.get("agent"))
                 if key in seen:

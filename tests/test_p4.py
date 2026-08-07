@@ -67,9 +67,64 @@ check("t4b glob bat package hash BAT KY (Claude_ZZTESTHASH)",
 c2 = AP.activity_log_candidates()
 check("t4c cache tra cung ket qua", c2 == c)
 
-for f in (LOG, fixed_name, hits, LOG + ".lock"):
+# t5: Codex Desktop khong co Claude hook; doc rollout JSONL va chi phat event note
+# trong vault. Adapter TUYET DOI khong dua prompt/noi dung note vao event.
+codex_vault = os.path.join(SCRATCH, "codex-vault")
+note_rel = "Area/Note.md"
+note_abs = os.path.join(codex_vault, *note_rel.split("/"))
+outside = os.path.join(SCRATCH, "outside.md")
+os.makedirs(os.path.dirname(note_abs), exist_ok=True)
+open(note_abs, "w").close()
+open(outside, "w").close()
+
+def rollout(ts, source):
+    return json.dumps({"timestamp": ts, "type": "response_item", "payload": {
+        "type": "custom_tool_call", "name": "exec", "input": source,
+    }}, ensure_ascii=False)
+
+read_cmd = "Get-Content -Raw 'Area\\Note.md'"
+read_js = "const r = await tools.shell_command({command: %s, workdir: %s});" % (
+    json.dumps(read_cmd), json.dumps(codex_vault))
+search_cmd = "rg -n 'needle' 'Area\\Note.md'"
+search_js = "const r = await tools.shell_command({command: %s, workdir: %s});" % (
+    json.dumps(search_cmd), json.dumps(codex_vault))
+patch = "*** Begin Patch\n*** Update File: %s\n@@\n-old\n+new\n*** End Patch" % note_abs
+edit_js = "const patch = %s; text(await tools.apply_patch(patch));" % json.dumps(patch)
+outside_cmd = "Get-Content -Raw %s" % json.dumps(outside)
+outside_js = "const r = await tools.shell_command({command: %s, workdir: %s});" % (
+    json.dumps(outside_cmd), json.dumps(codex_vault))
+rollout_text = "\n".join([
+    rollout("2026-08-07T04:00:00Z", read_js),
+    rollout("2026-08-07T04:00:01Z", search_js),
+    rollout("2026-08-07T04:00:02Z", edit_js),
+    rollout("2026-08-07T04:00:03Z", outside_js),
+])
+codex_events = AP.parse_codex_rollout(rollout_text, vault=codex_vault)
+check("t5a Codex rollout map read/search/edit dung note trong vault",
+      [(e["type"], e["file"], e["agent"]) for e in codex_events]
+      == [("read", note_rel, "Codex"), ("search", note_rel, "Codex"),
+          ("edit", note_rel, "Codex")], codex_events)
+check("t5b event Codex chi co metadata, khong lo prompt/noi dung",
+      all(set(e) == {"ts", "type", "file", "agent"} for e in codex_events),
+      codex_events)
+
+codex_root = os.path.join(SCRATCH, "codex-home", "sessions")
+codex_day = os.path.join(codex_root, "2026", "08", "07")
+os.makedirs(codex_day, exist_ok=True)
+rollout_path = os.path.join(codex_day, "rollout-2026-08-07T04-00-00-test.jsonl")
+open(rollout_path, "w").close()
+os.environ["GRAPH3D_CODEX_SESSIONS"] = codex_root
+AP._codex_cand_cache["paths"] = None
+check("t5c discovery bat rollout Codex khi khai root tuong minh",
+      AP.codex_session_candidates() == [rollout_path],
+      AP.codex_session_candidates())
+del os.environ["GRAPH3D_CODEX_SESSIONS"]
+
+for f in (LOG, fixed_name, hits, LOG + ".lock", outside):
     try: os.remove(f)
     except OSError: pass
-import shutil; shutil.rmtree(fake, ignore_errors=True)
+import shutil
+for d in (fake, codex_vault, os.path.dirname(codex_root)):
+    shutil.rmtree(d, ignore_errors=True)
 print("\nTONG KET:", ("FAIL %d muc" % len(fails)) if fails else "ALL PASS")
 sys.exit(1 if fails else 0)
