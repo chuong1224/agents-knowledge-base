@@ -11,6 +11,20 @@ sys.path.insert(0, G3D)
 import log_activity as LA
 import serve as SV
 
+# Public clone khong nhat thiet nam trong `<vault>/.graph3d`. Dung vault gia nho
+# trong %TEMP% de test contract path thay vi vo tinh quet thu muc cha cua clone.
+VAULT = os.path.join(SCRATCH, "vault-p1-portable")
+os.makedirs(os.path.join(VAULT, "Projects"), exist_ok=True)
+# `%TEMP%` co the tra ve ten 8.3 (CPU129~1) trong khi realpath mo rong ten day du;
+# chuan hoa goc truoc khi test containment de hai ve dung cung mot bieu dien.
+VAULT = os.path.realpath(VAULT)
+with open(os.path.join(VAULT, "Index.md"), "w", encoding="utf-8") as f:
+    f.write("# Index\n")
+with open(os.path.join(VAULT, "Projects", "DemoNote.md"), "w", encoding="utf-8") as f:
+    f.write("# Demo Note\n")
+LA.VAULT = VAULT
+SV.VAULT = VAULT
+
 fails = []
 def check(name, cond, info=""):
     print(("PASS " if cond else "FAIL ") + name + (("  ->  " + repr(info)) if not cond else ""))
