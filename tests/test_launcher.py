@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Test loi vao he dieu hanh (W58/W61) — install_launcher.py + ensure --app:
+"""Test loi vao he dieu hanh (W58/W60/W61) — install_launcher.py + ensure --app:
 
   - shortcut_spec: chay pythonw(python).exe voi ensure_graph3d.py, co --app, KHONG
     bao gio serve.py (luat "moi launcher goi ensure"); --port chi hien khi khac 8321
@@ -12,6 +12,8 @@
     vao launcher.log (bug that neu quen: shortcut chay im lang, khong dau vet)
   - pythonw: uu tien ban cai trong Registry truoc base_prefix; bo entry stale; canh
     bao ca runtime generation-* do tooling quan ly chu khong chi venv/uv
+  - W60: shortcut PWA co --app-id duoc uu tien de Windows dung AUMID/icon rieng;
+    shortcut Python cua launcher khong duoc nhan nham la PWA
 
 Windows-only (shortcut .lnk): may khac -> in SKIP va PASS, de selfcheck ban public
 tren Linux khong do oan.
@@ -283,6 +285,57 @@ def test_ensure_app():
         check("launcher.log co dong vua in", "thu ghi mot dong" in txt, txt[-120:])
 
 
+def test_pwa_app_id():
+    pwa = os.path.join(ROOT, "KB Graph 3D — Knowledge Base.lnk")
+    edge = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge_proxy.exe"
+    info = {"target": edge,
+            "args": ' --profile-directory="Profile 2" --app-id=abcdefghijklmnop',
+            "icon": r"C:\Users\Tester\AppData\Local\Microsoft\Edge\app.ico,0"}
+    got = ENS.installed_app_spec(
+        candidates=[pwa], read_shortcut_fn=lambda _p: info, isfile=lambda _p: True)
+    check("PWA: doc --app-id tu shortcut Edge", got and got["app_id"] == "abcdefghijklmnop", got)
+    check("PWA: giu profile khi mo app-id",
+          got and got["args"] == ["--profile-directory=Profile 2",
+                                  "--app-id=abcdefghijklmnop"], got)
+    check("PWA: dung target proxy cua shortcut cai boi Edge",
+          got and got["target"] == edge, got)
+
+    launcher = {"target": r"C:\Python313\pythonw.exe",
+                "args": r'"D:\Vault\.graph3d\ensure_graph3d.py" --app'}
+    miss = ENS.installed_app_spec(
+        candidates=[pwa], read_shortcut_fn=lambda _p: launcher, isfile=lambda _p: True)
+    check("PWA: khong nhan nham shortcut launcher Python", miss is None, miss)
+
+    bad = dict(info, args="--profile-directory=Default --app=https://127.0.0.1:8321")
+    miss = ENS.installed_app_spec(
+        candidates=[pwa], read_shortcut_fn=lambda _p: bad, isfile=lambda _p: True)
+    check("PWA: --app URL khong thay the duoc AUMID rieng", miss is None, miss)
+
+    live = ENS.installed_app_spec()
+    check("PWA that: None hoac shortcut --app-id hop le",
+          live is None or (os.path.isfile(live["shortcut"])
+                           and re.match(r"^[a-z0-9_-]+$", live["app_id"], re.I)), live)
+
+    old_spec, old_browser, old_popen = ENS.installed_app_spec, ENS.browser_exe, ENS.subprocess.Popen
+    calls = []
+    try:
+        ENS.installed_app_spec = lambda: {
+            "shortcut": pwa, "target": edge,
+            "args": ["--profile-directory=Profile 2", "--app-id=abcdefghijklmnop"],
+            "app_id": "abcdefghijklmnop"}
+        ENS.browser_exe = lambda: calls.append("browser_exe-khong-duoc-goi")
+        ENS.subprocess.Popen = lambda argv, **kwargs: calls.append((argv, kwargs))
+        opened = ENS.open_app_window("http://127.0.0.1:8321")
+    finally:
+        ENS.installed_app_spec, ENS.browser_exe, ENS.subprocess.Popen = old_spec, old_browser, old_popen
+    check("PWA: open_app_window uu tien app-id truoc --app URL", opened is True, calls)
+    check("PWA: khong hoi browser_exe khi da co app cai",
+          "browser_exe-khong-duoc-goi" not in calls, calls)
+    check("PWA: lenh mo dung target + hai switch",
+          calls and calls[0][0] == [edge, "--profile-directory=Profile 2",
+                                    "--app-id=abcdefghijklmnop"], calls)
+
+
 if __name__ == "__main__":
     if os.name != "nt":
         print("SKIP test_launcher — shortcut .lnk chi co tren Windows")
@@ -295,6 +348,7 @@ if __name__ == "__main__":
     test_favicon()
     test_refresh_shell()
     test_ensure_app()
+    test_pwa_app_id()
     print("\nTONG KET test_launcher: %s" % (("FAIL %d: %s" % (len(fails), ", ".join(fails)))
                                             if fails else "ALL PASS"))
     sys.exit(1 if fails else 0)

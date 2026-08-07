@@ -15,11 +15,14 @@ Hai cờ onboarding cho người CHƯA có vault (W13 — logic ở onboarding.p
                       server đang chạy trên vault thật)
   --init-starter DIR  dựng vault đầu tiên tại DIR từ starter-vault/ rồi thoát
 
-Cờ --app (W58): mở bằng CỬA SỔ APP của Edge/Chrome (không thanh địa chỉ, không lẫn
-giữa 20 tab khác) — shortcut do install_launcher.py tạo chạy đúng dòng này.
+Cờ --app (W58/W60): nếu Edge đã cài site-app KB Graph 3D thì đọc ``--app-id`` từ
+shortcut và mở bằng AUMID riêng (icon taskbar riêng); chưa cài thì lùi về cửa sổ
+``--app=<url>`` của Edge/Chrome như trước. Shortcut do install_launcher.py tạo chạy
+đúng dòng này.
 """
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -31,6 +34,9 @@ sys.path.insert(0, HERE)
 from activity_paths import local_data_dir, source_version   # noqa: E402
 import onboarding as onb                     # noqa: E402  (W13 — demo / starter vault)
 import run_graph3d as sup                    # noqa: E402  (health/port_pid/kill_pid/flags)
+import install_launcher as launcher          # noqa: E402  (doc/scan shortcut PWA Windows)
+
+APP_TITLE_PREFIX = "KB Graph 3D"
 
 
 def bind_console():
@@ -75,8 +81,103 @@ def browser_exe():
     return None
 
 
+def _switch_value(arguments, name):
+    """Lấy một switch Chromium từ chuỗi Arguments của .lnk Windows.
+
+    WScript.Shell trả nguyên command line thay vì argv; parser nhỏ này chỉ đọc các
+    switch mình cần và chịu được cả ``--x=value`` lẫn ``--x "value có cách"``.
+    """
+    pattern = (r"(?:^|\s)--%s(?:=|\s+)(?:\"([^\"]*)\"|'([^']*)'|([^\s]+))"
+               % re.escape(name))
+    match = re.search(pattern, arguments or "", re.I)
+    if not match:
+        return None
+    return next((value for value in match.groups() if value is not None), None)
+
+
+def installed_app_candidates():
+    """Shortcut có thể là site-app KB Graph 3D do Edge/Chrome cài.
+
+    Chỉ lọc theo tên trước khi gọi COM đọc .lnk: Start Menu có thể có hàng trăm link,
+    spawn PowerShell cho từng cái vừa chậm vừa làm launcher dễ lỗi. Nếu người dùng đã
+    đổi tên app, ``GRAPH3D_PWA_SHORTCUT`` là đường chỉ định tường minh.
+    """
+    out = []
+    explicit = os.environ.get("GRAPH3D_PWA_SHORTCUT", "").strip()
+    if explicit:
+        out.append(os.path.normpath(explicit))
+    try:
+        folders = launcher.shell_folders()
+    except Exception:                              # noqa: BLE001
+        folders = {}
+    for root in (folders.get("programs"), folders.get("desktop")):
+        if not root or not os.path.isdir(root):
+            continue
+        try:
+            for base, _dirs, files in os.walk(root):
+                for name in files:
+                    if (name.lower().endswith(".lnk")
+                            and name[:-4].casefold().startswith(APP_TITLE_PREFIX.casefold())):
+                        out.append(os.path.normpath(os.path.join(base, name)))
+        except OSError:
+            continue
+    # Explicit đứng đầu; còn lại deterministic để hai lần chạy chọn cùng một link.
+    return list(dict.fromkeys(out))
+
+
+def installed_app_spec(candidates=None, read_shortcut_fn=None, isfile=None):
+    """Trả lệnh mở site-app đã cài, hoặc ``None`` để caller dùng ``--app=<url>``.
+
+    Điểm phân biệt bắt buộc là ``--app-id``. Shortcut launcher Python của chính app
+    cũng mang tên KB Graph 3D nhưng chỉ có ``--app``; nhận nhầm nó sẽ tự gọi lồng
+    ``ensure_graph3d.py`` mãi và vẫn không cho Windows một AppUserModelID riêng.
+    """
+    candidates = installed_app_candidates() if candidates is None else candidates
+    read_shortcut_fn = read_shortcut_fn or launcher.read_shortcut
+    isfile = isfile or os.path.isfile
+    found = []
+    for path in candidates:
+        if not isfile(path):
+            continue
+        try:
+            info = read_shortcut_fn(path)
+        except Exception:                          # noqa: BLE001
+            continue
+        target = os.path.normpath((info.get("target") or "").strip())
+        app_id = _switch_value(info.get("args"), "app-id")
+        exe = os.path.basename(target).casefold()
+        if (not target or not isfile(target) or not app_id
+                or not re.match(r"^[a-z0-9_-]+$", app_id, re.I)
+                or exe not in ("msedge_proxy.exe", "msedge.exe",
+                               "chrome_proxy.exe", "chrome.exe")):
+            continue
+        args = []
+        profile = _switch_value(info.get("args"), "profile-directory")
+        if profile:
+            args.append("--profile-directory=" + profile)
+        args.append("--app-id=" + app_id)
+        # Edge đôi khi ghi URL vào shortcut site-app; giữ lại nếu có để không làm
+        # khác lệnh do chính trình duyệt tạo.
+        app_url = _switch_value(info.get("args"), "app-url")
+        if app_url:
+            args.append("--app-url=" + app_url)
+        rank = 0 if exe.startswith("msedge") else 1
+        found.append((rank, os.path.normcase(path), {
+            "shortcut": path, "target": target, "args": args, "app_id": app_id}))
+    return min(found, key=lambda row: (row[0], row[1]))[2] if found else None
+
+
 def open_app_window(url):
-    """Cửa sổ app riêng. False = không mở được -> caller lùi về trình duyệt mặc định."""
+    """Cửa sổ app riêng; ưu tiên PWA ``--app-id`` để có AUMID/icon taskbar riêng."""
+    installed = installed_app_spec()
+    if installed:
+        try:
+            subprocess.Popen([installed["target"]] + installed["args"], close_fds=True,
+                             creationflags=sup.DETACHED | sup.NO_WINDOW)
+            print("KB Graph 3D: mo app da cai (--app-id=%s)" % installed["app_id"])
+            return True
+        except Exception as exc:                 # noqa: BLE001
+            print("KB Graph 3D: mo app da cai that bai (%s) -> thu --app URL" % exc)
     exe = browser_exe()
     if not exe:
         return False
