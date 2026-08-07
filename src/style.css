@@ -76,6 +76,16 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   cursor: pointer; font-size: 15px; backdrop-filter: blur(8px); transition: right .25s ease; }
 #panel.hidden + #panel-toggle { right: 14px; }
 #panel-toggle:hover { border-color: var(--cyan); box-shadow: 0 0 12px rgba(4,217,255,.35); }
+
+/* W65: dưới 701px, panel phải bắt đầu sau TOÀN BỘ dòng brand (~60px tính từ mép
+   trên). Chỉ nâng z-index sẽ trả click cho VI/EN nhưng vẫn để chữ đè lên nội dung
+   panel; dời cả panel lẫn toggle giữ nguyên khe 6px của layout rộng và sửa cả hình
+   lẫn hit-test (elementFromPoint) ở cửa sổ snap 640px / mobile 375px. */
+@media (max-width: 700px) {
+  #panel { top: 64px; }
+  #panel-toggle { top: 70px; }
+}
+
 #panel-body { flex: 1; overflow-y: auto; }
 #panel-body::-webkit-scrollbar { width: 6px; }
 #panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }

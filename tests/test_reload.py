@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Test nut ⟳ nap lai giao dien (W64) — kiem TINH tren ma nguon, khong can trinh duyet.
+"""Test nut ⟳ + vung click brand o cua so hep (W64/W65) — kiem TINH tren ma nguon.
 
 Vi sao co bo nay: tu W58 app mo bang cua so app Edge/Chrome (`--app=`) nen KHONG con
 thanh dia chi ⇒ khong con nut reload cua trinh duyet. Nut nay la loi thoat duy nhat bam
@@ -13,6 +13,8 @@ Ba dieu de vo nhat, moi dieu mot may gac:
   - pollActivity roi khoi __fx -> khong con nghiem thu duoc nhanh do khi tab bi an
     (tab an => vong poll gan nhu dung, gotcha #9): chinh bay nay da lam lan nghiem thu
     dau tuong nham la code hong.
+  - panel phai de len dong brand o viewport hep -> VI/EN va nut reload van ve ra nhung
+    elementFromPoint tra ve DIV.stats. W65 day panel + toggle xuong duoi brand <=700px.
 """
 import io, os, re, sys
 sys.dont_write_bytecode = True
@@ -36,6 +38,30 @@ def check(name, cond, info=""):
 def read(p):
     with io.open(p, encoding="utf-8") as f:
         return f.read()
+
+
+def css_block(text, selector):
+    """Lay block {...} cua selector, co dem ngoac de dung duoc cho @media long rule."""
+    start = text.find(selector)
+    if start < 0:
+        return ""
+    left = text.find("{", start + len(selector))
+    if left < 0:
+        return ""
+    depth = 0
+    for i in range(left, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[left + 1:i]
+    return ""
+
+
+def px_prop(block, prop):
+    m = re.search(r"(?:^|;)\s*%s\s*:\s*(\d+)px\b" % re.escape(prop), block)
+    return int(m.group(1)) if m else None
 
 
 html = read(INDEX)
@@ -104,6 +130,21 @@ check("9 style.css co rule #reload-b.hot", "#reload-b.hot" in css)
 fx = re.search(r"window\.__fx\s*=\s*\{(.*?)\};", main, re.S)
 check("10 pollActivity co trong __fx (nghiem thu tab an)",
       bool(fx) and "pollActivity" in fx.group(1))
+
+# --- 11: W65, panel phai tranh TOAN BO dong brand o viewport hep ---
+# Chi nang z-index se lam nut bam lai duoc nhung chu van chong len panel. Contract la
+# responsive layout: panel + toggle cung lui xuong; live QA van phai do elementFromPoint.
+narrow = css_block(css, "@media (max-width: 700px)")
+panel_narrow = css_block(narrow, "#panel")
+toggle_narrow = css_block(narrow, "#panel-toggle")
+panel_top = px_prop(panel_narrow, "top")
+toggle_top = px_prop(toggle_narrow, "top")
+check("11 W65 co breakpoint hep <=700px", bool(narrow))
+check("11 W65 panel lui xuong duoi brand (top >=64px)",
+      panel_top is not None and panel_top >= 64, panel_top)
+check("11 W65 panel-toggle lui theo panel (top >= panel+6px)",
+      toggle_top is not None and panel_top is not None and toggle_top >= panel_top + 6,
+      (panel_top, toggle_top))
 
 print("\nTONG KET test_reload: %s" % (("FAIL %d: %s" % (len(fails), ", ".join(fails))) if fails else "ALL PASS"))
 sys.exit(1 if fails else 0)
