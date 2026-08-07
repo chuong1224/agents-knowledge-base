@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Test loi vao he dieu hanh (W58) — install_launcher.py + ensure --app:
+"""Test loi vao he dieu hanh (W58/W61) — install_launcher.py + ensure --app:
 
   - shortcut_spec: chay pythonw(python).exe voi ensure_graph3d.py, co --app, KHONG
     bao gio serve.py (luat "moi launcher goi ensure"); --port chi hien khi khac 8321
@@ -10,6 +10,8 @@
   - ensure.browser_exe: tra None hoac duong dan CO THAT (khong doan bua)
   - ensure.bind_console: pythonw co sys.stdout None -> print() phai chay duoc va roi
     vao launcher.log (bug that neu quen: shortcut chay im lang, khong dau vet)
+  - pythonw: uu tien ban cai trong Registry truoc base_prefix; bo entry stale; canh
+    bao ca runtime generation-* do tooling quan ly chu khong chi venv/uv
 
 Windows-only (shortcut .lnk): may khac -> in SKIP va PASS, de selfcheck ban public
 tren Linux khong do oan.
@@ -39,10 +41,97 @@ def check(name, cond, info=""):
         fails.append(name)
 
 
+class FakeWinreg:
+    """Registry toi thieu de test thu tu chon ma khong phu thuoc Python cua may."""
+    HKEY_CURRENT_USER = "HKCU"
+    HKEY_LOCAL_MACHINE = "HKLM"
+    KEY_READ = 1
+    KEY_WOW64_64KEY = 256
+    KEY_WOW64_32KEY = 512
+
+    def __init__(self, entries):
+        self.entries = entries
+
+    def OpenKey(self, hive, path, _reserved=0, _access=0):
+        base = r"SOFTWARE\Python\PythonCore"
+        if path == base and self.entries.get(hive):
+            return (hive, "root")
+        suffix = r"\InstallPath"
+        if path.startswith(base + "\\") and path.endswith(suffix):
+            tag = path[len(base) + 1:-len(suffix)]
+            if tag in self.entries.get(hive, {}):
+                return (hive, tag)
+        raise OSError("missing key")
+
+    def EnumKey(self, key, index):
+        tags = sorted(self.entries.get(key[0], {}))
+        if index >= len(tags):
+            raise OSError("end")
+        return tags[index]
+
+    def QueryValueEx(self, key, name):
+        if name != "WindowedExecutablePath":
+            raise OSError("missing value")
+        return self.entries[key[0]][key[1]], 1
+
+    @staticmethod
+    def CloseKey(_key):
+        pass
+
+
+def test_registry_pythonw():
+    store_real = (r"C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_"
+                  r"3.13.3824.0_x64__qbz5n2kfra8p0\pythonw3.13.exe")
+    store_alias = os.path.join(
+        r"C:\Users\Tester\AppData\Local\Microsoft\WindowsApps",
+        r"PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\pythonw.exe")
+    got = IL.store_pythonw_alias(
+        store_real,
+        isfile=lambda p: os.path.normcase(p) == os.path.normcase(store_alias),
+        localappdata=r"C:\Users\Tester\AppData\Local")
+    check("Store Python dung app-exec alias on dinh thay duong co so build", got == store_alias, got)
+
+    fake = FakeWinreg({
+        "HKCU": {"3.12": r"C:\Python312\pythonw.exe",
+                 "3.13": r"C:\stale\pythonw.exe"},
+        "HKLM": {"3.14": r"C:\Python314\pythonw.exe"},
+    })
+    got = IL.registered_pythonw_exe(
+        fake, isfile=lambda p: "stale" not in p.lower())
+    check("registry bo entry stale + uu tien HKCU truoc HKLM", got == r"C:\Python312\pythonw.exe", got)
+
+    machine_only = FakeWinreg({"HKCU": {}, "HKLM": {
+        "3.11": r"C:\Python311\pythonw.exe",
+        "3.13": r"C:\Python313\pythonw.exe"}})
+    got = IL.registered_pythonw_exe(machine_only, isfile=lambda _p: True)
+    check("registry chon version moi nhat trong cung hive", got == r"C:\Python313\pythonw.exe", got)
+
+    old = IL.registered_pythonw_exe
+    forced_registry = os.path.abspath(__file__)
+    try:
+        IL.registered_pythonw_exe = lambda: forced_registry
+        check("pythonw_exe uu tien registry truoc base_prefix",
+              IL.pythonw_exe() == forced_registry, IL.pythonw_exe())
+    finally:
+        IL.registered_pythonw_exe = old
+
+    check("canh bao runtime generation do tooling quan ly",
+          IL.managed_python_path(r"C:\Tooling\runtime\python\generation-42\pythonw.exe"))
+    check("canh bao venv van con",
+          IL.managed_python_path(r"C:\tool\venv\Scripts\pythonw.exe"))
+    check("khong canh bao Python cai chuan",
+          not IL.managed_python_path(r"C:\Program Files\Python313\pythonw.exe"))
+
+    live = IL.registered_pythonw_exe()
+    check("registry that: None hoac file con ton tai", live is None or os.path.isfile(live), live)
+
+
 def test_spec():
     spec = IL.shortcut_spec()
     exe = os.path.basename(spec["target"]).lower()
-    check("spec chay python(w).exe", exe in ("pythonw.exe", "python.exe"), spec["target"])
+    check("spec chay python(w)[version].exe",
+          re.match(r"^pythonw?(?:\d+(?:\.\d+)*)?\.exe$", exe) is not None,
+          spec["target"])
     check("spec goi ensure_graph3d.py", "ensure_graph3d.py" in spec["args"], spec["args"])
     check("spec KHONG goi serve.py", "serve.py" not in spec["args"], spec["args"])
     check("spec co --app", "--app" in spec["args"], spec["args"])
@@ -199,6 +288,7 @@ if __name__ == "__main__":
         print("SKIP test_launcher — shortcut .lnk chi co tren Windows")
         sys.exit(0)
     os.makedirs(ROOT, exist_ok=True)
+    test_registry_pythonw()
     test_spec()
     test_icon()
     test_shortcut_roundtrip()

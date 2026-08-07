@@ -25,6 +25,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import struct
 import subprocess
 import sys
@@ -85,20 +86,124 @@ def _powershell(script, extra_env=None):
 
 # ---------------------------------------------------------------- đường dẫn
 
+def _registry_version_key(tag):
+    """Khoá sort version Registry, đủ cho tag PythonCore kiểu 3.13 / 3.13-32."""
+    nums = tuple(int(n) for n in re.findall(r"\d+", tag or ""))
+    return nums or (-1,)
+
+
+def store_pythonw_alias(path, isfile=None, localappdata=None):
+    """Đổi đường Store Python có số build sang app-exec alias ổn định nếu có thật.
+
+    Registry của Microsoft Store trỏ vào ``Program Files/WindowsApps`` với version
+    package trong path; Store update sẽ thay folder đó và làm shortcut chết. Package
+    đồng thời cấp alias per-user không mang số build — vẫn hỏi Registry để xác định
+    bản cài, nhưng ghim alias mới đúng mục tiêu lâu dài của launcher.
+    """
+    isfile = isfile or os.path.isfile
+    package = os.path.basename(os.path.dirname(os.path.normpath(path or "")))
+    match = re.match(r"^(PythonSoftwareFoundation\.Python\.[^_]+)_.+__([A-Za-z0-9]+)$",
+                     package, re.I)
+    base = localappdata or os.environ.get("LOCALAPPDATA", "").strip()
+    if not match or not base:
+        return path
+    family = match.group(1) + "_" + match.group(2)
+    alias = os.path.normpath(os.path.join(
+        base, "Microsoft", "WindowsApps", family, "pythonw.exe"))
+    return alias if isfile(alias) else path
+
+
+def registered_pythonw_exe(winreg_module=None, isfile=None):
+    """Tìm Python cài chuẩn qua PEP 514 Registry, không cần thư viện ngoài.
+
+    Ưu tiên HKCU rồi HKLM; trong mỗi hive lấy version mới nhất còn tồn tại. Quét cả
+    view Registry mặc định/64/32 để một Python 32-bit vẫn thấy bản cài 64-bit. Entry
+    stale bị bỏ qua — Registry còn key không có nghĩa file sau update/uninstall còn.
+
+    ``winreg_module``/``isfile`` là seam nhỏ cho test; lúc chạy thật đều để mặc định.
+    """
+    if winreg_module is None:
+        if os.name != "nt":
+            return None
+        try:
+            import winreg as winreg_module       # stdlib, Windows-only
+        except ImportError:
+            return None
+    isfile = isfile or os.path.isfile
+    wr = winreg_module
+    base = r"SOFTWARE\Python\PythonCore"
+    views = [0]
+    for attr in ("KEY_WOW64_64KEY", "KEY_WOW64_32KEY"):
+        view = getattr(wr, attr, 0)
+        if view and view not in views:
+            views.append(view)
+
+    # Hive người dùng đứng trước hive toàn máy: bản cài per-user là lựa chọn có chủ
+    # đích của chính tài khoản đang tạo shortcut.
+    for hive in (wr.HKEY_CURRENT_USER, wr.HKEY_LOCAL_MACHINE):
+        found = {}
+        for view in views:
+            try:
+                root = wr.OpenKey(hive, base, 0, wr.KEY_READ | view)
+            except OSError:
+                continue
+            try:
+                index = 0
+                while True:
+                    try:
+                        tag = wr.EnumKey(root, index)
+                    except OSError:
+                        break
+                    index += 1
+                    try:
+                        key = wr.OpenKey(hive, base + "\\" + tag + r"\InstallPath",
+                                         0, wr.KEY_READ | view)
+                    except OSError:
+                        continue
+                    try:
+                        value, _kind = wr.QueryValueEx(key, "WindowedExecutablePath")
+                    except OSError:
+                        continue
+                    finally:
+                        wr.CloseKey(key)
+                    path = os.path.normpath(os.path.expandvars(str(value).strip()))
+                    if path and isfile(path):
+                        target = store_pythonw_alias(path, isfile=isfile)
+                        found[os.path.normcase(target)] = (_registry_version_key(tag), target)
+            finally:
+                wr.CloseKey(root)
+        if found:
+            return max(found.values(), key=lambda item: item[0])[1]
+    return None
+
+
+def managed_python_path(path):
+    """True nếu interpreter nằm trong venv/runtime do công cụ khác quản."""
+    low = os.path.normcase(os.path.normpath(path or "")).replace("/", "\\")
+    markers = ("\\venv\\", "\\.venv\\", "\\venvs\\", "\\uv\\",
+               "\\virtualenvs\\", "\\codex-runtimes\\")
+    return any(marker in low for marker in markers) or re.search(r"\\generation-[^\\]+\\", low) is not None
+
+
 def pythonw_exe(override=None):
-    """Python để nhét vào shortcut. Hai điều kiện:
+    """Python để nhét vào shortcut. Ba điều kiện:
 
     1. Ưu tiên `pythonw.exe` — python KHÔNG cửa sổ console, nhờ nó click shortcut không
        loé lên một khung CMD đen rồi biến mất.
-    2. TRÁNH python của VENV. Người cài rất hay đang đứng trong venv của một dự án khác
+    2. Sau chỉ định tay, hỏi Registry trước: đó là bản Python cài chuẩn của máy.
+    3. TRÁNH python của VENV. Người cài rất hay đang đứng trong venv của một dự án khác
        (agent, tooling…); venv là thứ bị xoá/dời/tái tạo thường xuyên, shortcut trỏ vào
        đó là shortcut chết yểu — mà app chỉ dùng stdlib nên chẳng cần venv nào cả.
-       Trong venv thì lùi về python GỐC sinh ra nó (sys.base_prefix).
+       Chỉ khi Registry không có bản hợp lệ mới lùi về sys.base_prefix/interpreter hiện
+       hành; base_prefix cũng có thể là runtime tạm nên không còn là lựa chọn số một.
 
     Chỉ định tay: --python <đường dẫn> hoặc env GRAPH3D_PYTHONW."""
     for cand in (override, os.environ.get("GRAPH3D_PYTHONW", "").strip()):
         if cand and os.path.isfile(cand):
             return cand
+    registered = registered_pythonw_exe()
+    if registered:
+        return registered
     roots = []
     in_venv = bool(getattr(sys, "base_prefix", sys.prefix) != sys.prefix)
     if in_venv:
@@ -418,7 +523,7 @@ def main():
     ap.add_argument("--dir", dest="dest_dir", default=None,
                     help="tao .lnk vao thu muc chi dinh thay vi Desktop/Start Menu")
     ap.add_argument("--python", default=None,
-                    help="chi dinh python chay app (mac dinh: pythonw ngoai venv)")
+                    help="chi dinh python chay app (mac dinh: Python Registry, roi moi fallback)")
     ap.add_argument("--uninstall", action="store_true")
     ap.add_argument("--status", action="store_true")
     args = ap.parse_args()
@@ -439,6 +544,8 @@ def main():
                 else:
                     print("  + %s: %s" % (row["label"], row["path"]))
                     print("      %s %s" % (row.get("target"), row.get("args")))
+                    if managed_python_path(row.get("target")):
+                        print("      ! python nam trong venv/runtime tam — nen cai lai shortcut.")
                     if row.get("hotkey"):
                         print("      phim tat: %s" % row["hotkey"])
             return 0
@@ -461,9 +568,8 @@ def main():
     for label, p in res["paths"]:
         print("  + %s: %s" % (label, p))
     print("  chay: %s %s" % (res["spec"]["target"], res["spec"]["args"]))
-    low = res["spec"]["target"].lower()
-    if os.sep + "venv" + os.sep in low or os.sep + "uv" + os.sep in low:
-        print("  ! python nay do cong cu khac quan ly (venv/uv) — go no la shortcut chet.")
+    if managed_python_path(res["spec"]["target"]):
+        print("  ! python nay do cong cu khac quan ly (venv/runtime tam) — go no la shortcut chet.")
         print("    Muon chac: --python \"<duong dan pythonw.exe cai chuan>\"")
     if res["hotkey"]:
         print("  phim tat: %s (Windows chi nhan hotkey cua .lnk o Desktop/Start Menu)" % res["hotkey"])
