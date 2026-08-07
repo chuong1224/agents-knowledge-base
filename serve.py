@@ -701,7 +701,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/ping":
             # Cổng cho agent KHÁC Claude Code (Hermes, script, curl…) báo hoạt động:
-            #   GET /ping?type=read&file=Work/JXM/Note.md&agent=Hermes  (file lặp lại được)
+            #   GET /ping?type=read&file=Projects/Demo/Note.md&agent=Hermes  (file lặp lại được)
             qs = parse_qs(parsed.query)
             ev = qs.get("type", ["read"])[0]
             agent = qs.get("agent", [None])[0]
@@ -848,9 +848,11 @@ class Handler(BaseHTTPRequestHandler):
             days = _int("days", insight.DEFAULT_DAYS, 1, 90)
             cold = _int("cold", insight.DEFAULT_COLD, 1, 365)
             heat_notes, heat_meta = merge_cumulative_stores()
-            ins = insight.build_insight(read_all_events(), get_graph_data(),
+            graph = get_graph_data()
+            ins = insight.build_insight(read_all_events(), graph,
                                         heat_notes=heat_notes, heat_meta=heat_meta,
-                                        days=days, cold_days=cold)
+                                        days=days, cold_days=cold,
+                                        taxonomy_result=insight.measure_taxonomy(graph))
             ins["boot_id"] = BOOT_ID
             ins["host"] = host_name()
             self._send(200, json.dumps(ins, ensure_ascii=False).encode("utf-8"))

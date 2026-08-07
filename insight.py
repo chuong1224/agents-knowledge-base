@@ -31,8 +31,12 @@ TIÊU THỤ build_insight() chứ không đo lại. Module này KHÔNG bao giờ
 Hồ sơ đợt + định nghĩa chỉ số: note vault "Tầng Insight Sức Khoẻ Vault — KB Graph 3D".
 """
 import argparse
+from collections import Counter, defaultdict
 import json
+import math
 import os
+import random
+import re
 import sys
 import time
 
@@ -54,6 +58,9 @@ COOLING_MIN = 3           # tuần trước ≥ ngần này lượt mà tuần n
 SMALL_CLUSTER = 3         # thành phần liên thông ≤ ngần này note = "cụm nhỏ"
 HUB_GROUP = "Index / MOC"  # nhóm màu của note index/MOC (build_graph_data.TAG_COLORS)
 TYPES = ("read", "search", "edit")
+TAXONOMY_MIN_CHARS = 40   # paper D.4: content unit ngan hon 40 ky tu bi loai
+TAXONOMY_PAIR_CAP = 20000 # B4 sample co dinh de chi phi khong tang O(n^2)
+TAXONOMY_EPS = 1e-12
 
 # Note "sống" do chính module này sinh ra (vế b) — ghi đè mỗi lần chạy, cùng họ với
 # Báo Cáo Audit Vault. Vault khác đặt chỗ khác: env GRAPH3D_INSIGHT_REPORT.
@@ -175,9 +182,292 @@ def self_excludes():
     return out
 
 
+# ------------------------------------------------------- taxonomy B3 / B4
+
+def logical_note_path(rel):
+    """Cay logic cua mot note, bo cap lap cua quy uoc folder-per-note.
+
+    ``A/B/B.md`` la node note ``A/B`` (khong phai ``A/B/B``); ``A/Index.md``
+    van la ``A/Index``. Cach chuan hoa nay giu khoang cach cay phan anh taxonomy
+    ma nguoi dung nhin thay, thay vi phat moi note mot cap gia do dong goi file.
+    """
+    parts = tuple(p for p in str(rel).replace("\\", "/").split("/") if p)
+    if not parts:
+        return ()
+    stem = os.path.splitext(parts[-1])[0]
+    if len(parts) >= 2 and parts[-2].casefold() == stem.casefold():
+        return parts[:-1]
+    return parts[:-1] + (stem,)
+
+
+def _without_frontmatter(text):
+    text = (text or "").lstrip("\ufeff").replace("\r\n", "\n").replace("\r", "\n")
+    lines = text.split("\n")
+    if lines and lines[0].strip() == "---":
+        for i in range(1, len(lines)):
+            if lines[i].strip() == "---":
+                return "\n".join(lines[i + 1:])
+    return text
+
+
+def taxonomy_units(docs, min_chars=TAXONOMY_MIN_CHARS):
+    """Tach markdown thanh content unit la theo dung paper D.4.
+
+    Cay gom folder -> file -> heading. Neu file co heading, chi section KHONG co
+    subsection moi la la; file khong heading tu no la mot unit. Unit ngan hon
+    ``min_chars`` sau khi gom whitespace bi loai. Ham thuần, khong doc dia.
+    """
+    out, ignored = [], 0
+    heading_re = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
+    fence_re = re.compile(r"^\s*(```+|~~~+)")
+    for rel, raw in sorted((docs or {}).items()):
+        text = _without_frontmatter(raw)
+        sections, stack, preface = [], [], []
+        fence = None
+        for line in text.split("\n"):
+            fm = fence_re.match(line)
+            if fm:
+                mark = fm.group(1)[0]
+                if fence == mark:
+                    fence = None
+                elif fence is None:
+                    fence = mark
+            hm = None if fence else heading_re.match(line)
+            if hm:
+                level = len(hm.group(1))
+                title = re.sub(r"\s+#+\s*$", "", hm.group(2)).strip()
+                while stack and stack[-1]["level"] >= level:
+                    stack.pop()
+                for ancestor in stack:
+                    ancestor["leaf"] = False
+                sec = {"level": level, "titles": tuple(x["title"] for x in stack) + (title,),
+                       "title": title, "body": [], "leaf": True}
+                sections.append(sec)
+                stack.append(sec)
+            elif stack:
+                stack[-1]["body"].append(line)
+            else:
+                preface.append(line)
+
+        candidates = [(s["titles"], "\n".join(s["body"]))
+                      for s in sections if s["leaf"]]
+        if not sections:
+            candidates = [((), "\n".join(preface))]
+        note_tree = logical_note_path(rel)
+        for titles, body in candidates:
+            compact = " ".join(body.split())
+            if len(compact) < int(min_chars):
+                ignored += 1
+                continue
+            section = " > ".join(titles) if titles else os.path.splitext(
+                str(rel).replace("\\", "/").split("/")[-1])[0]
+            out.append({"file": rel, "section": section, "text": compact,
+                        "chars": len(compact), "tree": note_tree + titles,
+                        "note_tree": note_tree})
+    return out, ignored
+
+
+def _tokens(text):
+    """Tokenizer Unicode nhe, xac dinh, khong learned component."""
+    return [t.casefold() for t in re.findall(r"[^\W_]+", text or "", flags=re.UNICODE)
+            if len(t) > 1]
+
+
+def _tfidf(units):
+    counts = [Counter(_tokens(u["text"])) for u in units]
+    df = Counter()
+    for row in counts:
+        df.update(row.keys())
+    n = len(counts)
+    vectors = []
+    for row in counts:
+        vec = {term: (1.0 + math.log(freq)) * (math.log((1.0 + n) / (1.0 + df[term])) + 1.0)
+               for term, freq in row.items()}
+        norm = math.sqrt(sum(v * v for v in vec.values()))
+        vectors.append({k: v / norm for k, v in vec.items()} if norm else {})
+    return vectors
+
+
+def _cos(a, b):
+    if len(a) > len(b):
+        a, b = b, a
+    return sum(v * b.get(k, 0.0) for k, v in a.items())
+
+
+def _centroid(vectors):
+    total = defaultdict(float)
+    rows = [v for v in vectors if v]
+    if not rows:
+        return {}
+    for vec in rows:
+        for k, v in vec.items():
+            total[k] += v
+    norm = math.sqrt(sum(v * v for v in total.values()))
+    return {k: v / norm for k, v in total.items()} if norm else {}
+
+
+def _average_ranks(values):
+    order = sorted(range(len(values)), key=lambda i: (values[i], i))
+    ranks = [0.0] * len(values)
+    i = 0
+    while i < len(order):
+        j = i + 1
+        while j < len(order) and values[order[j]] == values[order[i]]:
+            j += 1
+        rank = (i + 1 + j) / 2.0       # average cua rank 1-based i+1 .. j
+        for pos in order[i:j]:
+            ranks[pos] = rank
+        i = j
+    return ranks
+
+
+def spearman(xs, ys):
+    """Spearman rho voi average-rank cho ties; ``None`` neu khong xac dinh."""
+    if len(xs) != len(ys) or len(xs) < 2:
+        return None
+    rx, ry = _average_ranks(xs), _average_ranks(ys)
+    mx, my = sum(rx) / len(rx), sum(ry) / len(ry)
+    dx, dy = [x - mx for x in rx], [y - my for y in ry]
+    den = math.sqrt(sum(x * x for x in dx) * sum(y * y for y in dy))
+    if den <= TAXONOMY_EPS:
+        return None
+    return sum(x * y for x, y in zip(dx, dy)) / den
+
+
+def _tree_distance(a, b):
+    common = 0
+    for x, y in zip(a, b):
+        if x != y:
+            break
+        common += 1
+    return len(a) + len(b) - 2 * common
+
+
+def _sample_pairs(n, cap):
+    total = n * (n - 1) // 2
+    cap = max(0, int(cap))
+    if total <= cap:
+        return [(i, j) for i in range(n) for j in range(i + 1, n)], total
+    rng, picked = random.Random(115), set()
+    while len(picked) < cap:
+        i, j = rng.randrange(n), rng.randrange(n)
+        if i != j:
+            picked.add((i, j) if i < j else (j, i))
+    return sorted(picked), total
+
+
+def build_taxonomy(docs, list_n=40, pair_cap=TAXONOMY_PAIR_CAP):
+    """Tinh B3 scope leakage va B4 distance-relatedness cua paper arXiv:2607.26637.
+
+    B3 duoc ap vao packaging cua vault: moi note la mot sibling group, content unit
+    la section la cua note; chi so la ty le unit gan centroid mot note ANH EM (cung
+    folder logic) hon centroid note cha. Danh sach kem target de con nguoi duyet,
+    tuyet doi khong tu move/sua note.
+
+    B4 la Spearman giua path length qua LCA va ``1 - TF-IDF cosine`` tren cap unit.
+    Neu qua ``pair_cap``, lay mau cap uniform bang seed co dinh de ket qua lap lai.
+    Ca hai la descriptor adherence, KHONG phai diem chat luong — dung canh bao D.4.
+    """
+    units, ignored = taxonomy_units(docs)
+    vectors = _tfidf(units)
+    usable = [(u, v) for u, v in zip(units, vectors) if v]
+    units = [u for u, _ in usable]
+    vectors = [v for _, v in usable]
+
+    # B3: note centroids, chi so sanh note anh em sau khi collapse folder-per-note.
+    by_note = defaultdict(list)
+    for i, unit in enumerate(units):
+        by_note[unit["file"]].append(i)
+    centroids = {rel: _centroid([vectors[i] for i in ids]) for rel, ids in by_note.items()}
+    by_parent = defaultdict(list)
+    for rel in by_note:
+        by_parent[logical_note_path(rel)[:-1]].append(rel)
+    siblings = {}
+    for rels in by_parent.values():
+        if len(rels) >= 2:
+            for rel in rels:
+                siblings[rel] = sorted(x for x in rels if x != rel)
+
+    evaluated, leaks = 0, []
+    for unit, vec in zip(units, vectors):
+        others = siblings.get(unit["file"], [])
+        if not others:
+            continue
+        evaluated += 1
+        own = _cos(vec, centroids[unit["file"]])
+        target, other = max(((rel, _cos(vec, centroids[rel])) for rel in others),
+                            key=lambda row: (row[1], row[0]))
+        if other > own + TAXONOMY_EPS:
+            leaks.append({"file": unit["file"], "section": unit["section"],
+                          "target": target, "own_similarity": round(own, 4),
+                          "other_similarity": round(other, 4),
+                          "margin": round(other - own, 4)})
+    leaks.sort(key=lambda x: (-x["margin"], x["file"], x["section"], x["target"]))
+
+    # B4: pair sample lap lai; pair count luon la so cap THAT da tinh rho.
+    pairs, total_pairs = _sample_pairs(len(units), pair_cap)
+    tree_d = [_tree_distance(units[i]["tree"], units[j]["tree"]) for i, j in pairs]
+    content_d = [1.0 - _cos(vectors[i], vectors[j]) for i, j in pairs]
+    rho = spearman(tree_d, content_d)
+    return {
+        "available": bool(docs), "notes": len(docs or {}), "units": len(units),
+        "ignored_short": ignored, "min_chars": TAXONOMY_MIN_CHARS,
+        "b3_scope_leakage": {
+            "evaluated": evaluated, "total": len(leaks),
+            "pct": round(100.0 * len(leaks) / evaluated, 1) if evaluated else 0.0,
+            "list": leaks[:max(0, int(list_n))],
+        },
+        "b4_distance_relatedness": {
+            "spearman": round(rho, 4) if rho is not None else None,
+            "pairs": len(pairs), "pair_population": total_pairs,
+            "sampled": len(pairs) < total_pairs,
+        },
+    }
+
+
+_TAXONOMY_DOC_CACHE = {"signature": None, "docs": None, "taxonomy": None}
+
+
+def read_taxonomy_docs(graph, vault=VAULT, exclude=None):
+    """Doc dung tap note cua graph va cache theo (path, mtime_ns, size)."""
+    skip = self_excludes() if exclude is None else set(exclude)
+    notes, _adj, _hubs = note_graph(graph, exclude=skip)
+    vault = os.path.abspath(vault)
+    rows = []
+    for rel in sorted(notes):
+        path = os.path.abspath(os.path.join(vault, *rel.split("/")))
+        try:
+            if os.path.commonpath((vault, path)) != vault:
+                continue
+            st = os.stat(path)
+        except (OSError, ValueError):
+            continue
+        rows.append((rel, path, st.st_mtime_ns, st.st_size))
+    signature = (vault, tuple((rel, mtime, size) for rel, _p, mtime, size in rows))
+    if _TAXONOMY_DOC_CACHE["signature"] == signature:
+        return dict(_TAXONOMY_DOC_CACHE["docs"] or {})
+    docs = {}
+    for rel, path, _mtime, _size in rows:
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                docs[rel] = f.read()
+        except OSError:
+            continue
+    _TAXONOMY_DOC_CACHE.update(signature=signature, docs=docs, taxonomy=None)
+    return dict(docs)
+
+
+def measure_taxonomy(graph, vault=VAULT, exclude=None):
+    """I/O + cache cho server/CLI; cung signature voi cache doc markdown."""
+    docs = read_taxonomy_docs(graph, vault=vault, exclude=exclude)
+    if _TAXONOMY_DOC_CACHE["taxonomy"] is None:
+        _TAXONOMY_DOC_CACHE["taxonomy"] = build_taxonomy(docs)
+    return _TAXONOMY_DOC_CACHE["taxonomy"]
+
+
 def build_insight(events, graph, heat_notes=None, heat_meta=None, now=None,
                   days=DEFAULT_DAYS, cold_days=DEFAULT_COLD, top_n=12, list_n=40,
-                  exclude=None):
+                  exclude=None, taxonomy_docs=None, taxonomy_result=None):
     """Ảnh chụp sức khoẻ truy xuất của vault.
 
     HÀM THUẦN: không đọc đĩa, không lấy giờ ẩn (`now` truyền vào) → test được bằng
@@ -188,11 +478,15 @@ def build_insight(events, graph, heat_notes=None, heat_meta=None, now=None,
       heat_meta  — {since, updated, machines} của store heat (để in cửa sổ dữ liệu)
       exclude    — note loại khỏi phép đo; mặc định = self_excludes() (note báo cáo
                    do chính module sinh); truyền set() để đo trọn vault không loại gì
+      taxonomy_docs — {rel: markdown}; None = caller chưa cấp nội dung, B3/B4 unavailable
+      taxonomy_result — kết quả build_taxonomy đã cache; ưu tiên hơn taxonomy_docs
 
-    6 chỉ số (định nghĩa đầy đủ: note "Tầng Insight Sức Khoẻ Vault — KB Graph 3D"):
+    8 chỉ số (định nghĩa đầy đủ: note "Tầng Insight Sức Khoẻ Vault — KB Graph 3D"):
       1 nóng tuần này (J)         4 chưa bao giờ agent đụng (G − (H ∪ J))
       2 đang nguội đi (J)         5 cụm ít kết nối (G)
       3 nguội ≥ cold_days (H ∩ G) 6 coverage theo khu vực (G + H + J)
+      7 B3 scope leakage (M)      8 B4 distance-relatedness (M)
+      M = markdown hiện tại; TF-IDF cosine thuần, không embedding/LLM.
     """
     now = float(now if now is not None else time.time())
     days = max(1, int(days))
@@ -297,6 +591,7 @@ def build_insight(events, graph, heat_notes=None, heat_meta=None, now=None,
     ts_all = [t for t in (_ts(e) for e in evs) if t]
     meta = graph.get("meta", {})
     n_notes = len(notes)
+    taxonomy = taxonomy_result or build_taxonomy(taxonomy_docs or {}, list_n=list_n)
     return {
         "generated": now,
         "params": {"days": days, "cold_days": cold_days,
@@ -329,6 +624,7 @@ def build_insight(events, graph, heat_notes=None, heat_meta=None, now=None,
                  "orphans": {"total": len(orphans), "list": orphans[:list_n]},
                  "thin": {"total": len(thin), "list": thin[:list_n]},
                  "no_index": {"total": len(no_index), "list": no_index[:list_n]}},
+        "taxonomy": taxonomy,
         "areas": areas,
         "data": {"events": len(evs),
                  "oldest_event": min(ts_all) if ts_all else None,
@@ -357,9 +653,11 @@ def collect(days=DEFAULT_DAYS, cold_days=DEFAULT_COLD, now=None):
     """
     import serve  # noqa: PLC0415  (xem docstring — cố ý muộn để tránh vòng tròn)
     heat_notes, heat_meta = serve.merge_cumulative_stores()
-    return build_insight(serve.read_all_events(), serve.get_graph_data(),
+    graph = serve.get_graph_data()
+    return build_insight(serve.read_all_events(), graph,
                          heat_notes=heat_notes, heat_meta=heat_meta,
-                         now=now, days=days, cold_days=cold_days)
+                         now=now, days=days, cold_days=cold_days,
+                         taxonomy_result=measure_taxonomy(graph))
 
 
 def _fmt_day(ts):
@@ -395,6 +693,12 @@ def print_summary(ins, out=print):
     out("Kết nối: %d thành phần (lớn nhất %d note) · %d mồ côi · %d chỉ-1-dây · %d không nằm index nào"
         % (wk["components"], wk["largest"], wk["orphans"]["total"],
            wk["thin"]["total"], wk["no_index"]["total"]))
+    tax = ins["taxonomy"]
+    b3, b4 = tax["b3_scope_leakage"], tax["b4_distance_relatedness"]
+    rho = "—" if b4["spearman"] is None else "%.3f" % b4["spearman"]
+    out("Taxonomy: B3 scope leakage %.1f%% (%d/%d section) · B4 rho %s (%d/%d cặp)"
+        % (b3["pct"], b3["total"], b3["evaluated"], rho,
+           b4["pairs"], b4["pair_population"]))
     out("")
     out("Nóng nhất tuần này:")
     for h in ins["hot"][:8]:
@@ -455,22 +759,24 @@ def render_report(ins, path=None):
           'tắc): tổng quan coverage, note nóng nhất tuần, phân bố tuổi lần đụng cuối, note '
           'đang nguội đi, note nguội quá ngưỡng, note chưa vào đường truy xuất (không dấu '
           'vết / chỉ khớp tìm kiếm), cụm ít kết nối trên đồ thị note–note (mồ côi, chỉ-1-dây, '
-          'ngoài index), và bảng coverage theo khu vực. Kèm cửa sổ dữ liệu của từng nguồn."',
-          "source: Sinh từ `.graph3d/insight.py` (log hoạt động + heat tích luỹ + graph vault)",
+          'ngoài index), hai chỉ số taxonomy B3 scope leakage + B4 khoảng cách cây so với '
+          'độ liên quan, và bảng coverage theo khu vực. Kèm cửa sổ dữ liệu của từng nguồn."',
+          "source: Sinh từ `.graph3d/insight.py` (log hoạt động + heat tích luỹ + graph + markdown vault)",
           "date: " + created, "updated: " + today,
           "type: reference", "tags: [vault-operation]", "---", "", ""]
 
     L = ["# " + REPORT_TITLE, "",
          "> [!info] Note SINH TỰ ĐỘNG — `python .graph3d/insight.py --report`",
-         "> Ảnh chụp sức khoẻ **truy xuất** của vault: độ tươi · độ phủ · độ kết nối. "
+         "> Ảnh chụp sức khoẻ **truy xuất + taxonomy** của vault: độ tươi · độ phủ · "
+         "độ kết nối · nội dung có còn nằm đúng chỗ. "
          "Song sinh với [[Báo Cáo Audit Vault]] — bản kia bắt **vi phạm quy tắc**, bản này "
          "đo **vault có đang được dùng đủ khắp không**. Ghi đè mỗi lần chạy: **đừng sửa tay**.",
          "> - Đường dẫn note để dạng `code` chứ KHÔNG phải wikilink — report không được tự "
          "tạo cạnh mới trong chính đồ thị nó đang đo.",
          "> - Xem tương tác (click mở note): section **🩺 Sức khoẻ vault** trong app "
          "[[KB Graph 3D]] (endpoint `/insight`, cùng một hàm tính).",
-         "> - Đây là **mô tả hiện trạng**, chưa phải worklist đề xuất — sinh đề xuất là "
-         "hạng mục H3 của [[Định Hướng KB Tự Vận Hành — Harness]].", "",
+         "> - B3/B4 là **descriptor mức bám taxonomy, không phải điểm chất lượng**; danh "
+         "sách lệch scope chỉ để người duyệt, công cụ không tự di chuyển note.", "",
          "**Lần chạy:** %s · **Cửa sổ:** %d ngày cuộn · nguội ≥ %d ngày · "
          "**Dữ liệu:** %d event (từ %s) + heat tích luỹ từ %s (máy: %s)"
          % (_fmt_min(ins["generated"]), p["days"], p["cold_days"], da["events"],
@@ -478,6 +784,9 @@ def render_report(ins, path=None):
             ", ".join(da["heat_machines"]) or "—"), "", "---", "",
          "## Tổng quan", ""]
 
+    tax = ins["taxonomy"]
+    b3, b4 = tax["b3_scope_leakage"], tax["b4_distance_relatedness"]
+    rho = "—" if b4["spearman"] is None else "%.3f" % b4["spearman"]
     L.append(_tbl(["Chỉ số", "Số", "Nghĩa"], [
         ["Note trong vault", c["notes"],
          "note `.md` được ĐO — không tính chính note báo cáo này"],
@@ -500,6 +809,12 @@ def render_report(ins, path=None):
          "0 liên kết note / đúng 1 liên kết note"],
         ["Ngoài index", wk["no_index"]["total"],
          "không liên kết tới note index/MOC nào"],
+        ["B3 scope leakage", "%.1f%%" % b3["pct"],
+         "%d/%d section gần note anh em hơn note cha" %
+         (b3["total"], b3["evaluated"])],
+        ["B4 cây ↔ nội dung", "ρ=" + rho,
+         "%d/%d cặp section%s" % (b4["pairs"], b4["pair_population"],
+          " — mẫu cố định" if b4["sampled"] else "")],
     ]))
 
     L += ["", "## 🔥 Nóng nhất %d ngày qua" % p["days"], ""]
@@ -551,6 +866,23 @@ def render_report(ins, path=None):
         L += ["**%s (%d):**" % (label, wk[key]["total"]), ""]
         L.append(_tbl(["Note"], [["`%s`" % f] for f in wk[key]["list"]], "_— không có._"))
         L.append("")
+
+    L += ["", "## 🌳 Taxonomy — nội dung có còn nằm đúng chỗ?", "",
+          "Nguồn: content unit = section lá ≥%d ký tự; TF-IDF cosine thuần, không "
+          "embedding/LLM. Theo Appendix D.4 của arXiv:2607.26637. Hai số này mô tả "
+          "mức bám taxonomy, **không phải điểm chất lượng**." % tax["min_chars"], "",
+          "- **B3 scope leakage:** %.1f%% (%d/%d section được đánh giá) gần centroid "
+          "note anh em hơn note cha." % (b3["pct"], b3["total"], b3["evaluated"]),
+          "- **B4 distance-relatedness:** ρ=%s trên %d/%d cặp section%s. Số dương = "
+          "nội dung liên quan có xu hướng nằm gần nhau trên cây."
+          % (rho, b4["pairs"], b4["pair_population"],
+             " lấy mẫu cố định" if b4["sampled"] else ""), "",
+          "**Section lệch scope (margin cao trước; chỉ là gợi ý để người duyệt):**", ""]
+    L.append(_tbl(["Note cha", "Section", "Note anh em gần hơn", "Cosine cha → đích", "Margin"],
+                  [["`%s`" % x["file"], x["section"], "`%s`" % x["target"],
+                    "%.3f → %.3f" % (x["own_similarity"], x["other_similarity"]),
+                    "%.3f" % x["margin"]] for x in b3["list"]],
+                  "_— không section nào lệch scope theo phép đo này._"))
 
     L += ["", "## 🗺 Theo khu vực", ""]
     L.append(_tbl(["Khu vực", "Note", "Đã đụng", "Chưa bao giờ", "Nguội", "Mồ côi"],

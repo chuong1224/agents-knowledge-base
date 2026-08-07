@@ -8,6 +8,9 @@
   - "chua vao duong truy xuat": never (0 dau vet) + unread (chi khop tim kiem)
   - do thi NOTE-NOTE: bo canh tag/file, thanh phan lien thong, mo coi, 1-day, ngoai index
   - coverage theo khu vuc (folder cap 1)
+  - taxonomy metrics: content unit = section la >=40 ky tu, TF-IDF cosine thuan
+  - B3 scope leakage: section gan note anh em hon centroid note cha
+  - B4 distance-relatedness: Spearman giua khoang cach cay va khoang cach noi dung
   - self_excludes: note bao cao do chinh module sinh KHONG duoc nam trong phep do
   - render_report: idempotent, KHONG sinh wikilink tro tung note (khong tu tao canh moi)
   - merge_cumulative_stores cua serve tra first/last (nguon cua chi so "nguoi")
@@ -94,6 +97,81 @@ META = {"machines": ["HOST-A"], "since": NOW - 40 * D, "updated": NOW}
 
 I = IN.build_insight(EVENTS, GRAPH, heat_notes=HEAT, heat_meta=META, now=NOW,
                      days=7, cold_days=7, exclude=set())
+
+# ---- Taxonomy fixture rieng, khong phu thuoc event/heat ----
+TAX_DOCS = {
+    "Root/Topics/Cats/Cats.md": """---
+title: Cats
+---
+# Cats
+## Cham soc meo
+Meo feline ria whisker keu purr va cham soc long meo trong nha moi ngay.
+## Ngan sach dat nham cho
+Ngan sach doanh thu chi phi loi nhuan du bao tai chinh theo quy va ke hoach dau tu.
+""",
+    "Root/Topics/Dogs/Dogs.md": """# Dogs
+## Cham soc cho
+Cho canine sua bark va cham soc long cho trong nha cung cac bua an moi ngay.
+""",
+    "Root/Topics/Budget/Budget.md": """# Budget
+## Ke hoach tai chinh
+Ngan sach doanh thu chi phi loi nhuan du bao tai chinh theo quy va ke hoach dau tu.
+""",
+    "Root/Topics/Tiny/Tiny.md": "# Tiny\n## Qua ngan\nngan\n",
+}
+units, ignored = IN.taxonomy_units(TAX_DOCS)
+check("T1 chi lay section LA >=40 ky tu va bo frontmatter",
+      len(units) == 4 and ignored == 1 and all(u["chars"] >= 40 for u in units),
+      (units, ignored))
+check("T1 path folder-per-note duoc collapse dung mot cap",
+      IN.logical_note_path("Root/Topics/Cats/Cats.md") == ("Root", "Topics", "Cats"))
+check("T1 section co du ancestry de tinh khoang cach cay",
+      any(u["tree"][-2:] == ("Cats", "Cham soc meo") for u in units),
+      [u["tree"] for u in units])
+
+check("T2 Spearman co tie dung average-rank",
+      abs(IN.spearman([1, 1, 2, 3], [10, 10, 20, 30]) - 1.0) < 1e-9)
+check("T2 Spearman undefined khi mot ve hang",
+      IN.spearman([1, 1, 1], [1, 2, 3]) is None)
+
+TAX = IN.build_taxonomy(TAX_DOCS, list_n=10, pair_cap=1000)
+check("T3 taxonomy co contract B3+B4 va dem nguon",
+      TAX["available"] and TAX["notes"] == 4 and TAX["units"] == 4
+      and TAX["ignored_short"] == 1
+      and set(TAX) >= {"b3_scope_leakage", "b4_distance_relatedness"}, TAX)
+leaks = TAX["b3_scope_leakage"]
+check("T3 bat section tai chinh nam nham trong note Cats",
+      leaks["total"] >= 1
+      and any(x["file"] == "Root/Topics/Cats/Cats.md"
+              and x["target"] == "Root/Topics/Budget/Budget.md"
+              and "Ngan sach dat nham cho" in x["section"] for x in leaks["list"]),
+      leaks)
+check("T3 moi leak co score doi chieu va margin duong",
+      all(x["other_similarity"] > x["own_similarity"]
+          and x["margin"] > 0 for x in leaks["list"]), leaks["list"])
+
+ALIGN_DOCS = {
+    "Root/Animals/Cats/Cats.md": "Meo feline animal pet whisker purr cham soc dong vat trong nha rat than thien.",
+    "Root/Animals/Dogs/Dogs.md": "Cho canine animal pet bark cham soc dong vat trong nha rat than thien.",
+    "Root/Finance/Budget/Budget.md": "Tai chinh ngan sach doanh thu chi phi loi nhuan du bao theo quy va nam.",
+    "Root/Finance/Revenue/Revenue.md": "Tai chinh doanh thu loi nhuan chi phi ngan sach du bao theo quy va nam.",
+}
+ALIGN = IN.build_taxonomy(ALIGN_DOCS, pair_cap=1000)
+check("T4 B4 duong khi cay gan-xa phan anh noi dung gan-xa",
+      ALIGN["b4_distance_relatedness"]["spearman"] is not None
+      and ALIGN["b4_distance_relatedness"]["spearman"] > 0.5,
+      ALIGN["b4_distance_relatedness"])
+check("T4 B4 bao dung so cap va khong sample khi duoi cap",
+      ALIGN["b4_distance_relatedness"]["pairs"] == 6
+      and not ALIGN["b4_distance_relatedness"]["sampled"],
+      ALIGN["b4_distance_relatedness"])
+
+ITAX = IN.build_insight(EVENTS, GRAPH, heat_notes=HEAT, heat_meta=META, now=NOW,
+                        days=7, cold_days=7, exclude=set(), taxonomy_docs=TAX_DOCS)
+check("T5 build_insight xuat taxonomy cung snapshot",
+      ITAX["taxonomy"]["available"]
+      and ITAX["taxonomy"]["b3_scope_leakage"]["total"] == leaks["total"],
+      ITAX["taxonomy"])
 
 # ---- do thi note-note: canh tag/file bi bo ----
 notes, adj, hubs = IN.note_graph(GRAPH)
@@ -263,10 +341,13 @@ check("R khong wikilink tro tung note duoc do",
       not any(l.endswith(".md") or "/" in l for l in links), sorted(links))
 for f in ("Work/A/A.md", "Research/F/F.md"):
     check("R duong dan '%s' in dang code" % f, ("`%s`" % f) in txt)
-check("R co du 7 muc noi dung",
+check("R co du cac muc noi dung + taxonomy",
       all(h in txt for h in ("## Tổng quan", "## 🔥 Nóng nhất", "## 🌡 Tuổi lần đụng cuối",
                              "## 🥶 Đang nguội đi", "## 🕸 Nguội", "## 🚫 Chưa vào đường truy xuất",
-                             "## 🔗 Cụm ít kết nối", "## 🗺 Theo khu vực")))
+                             "## 🔗 Cụm ít kết nối", "## 🌳 Taxonomy", "## 🗺 Theo khu vực")))
+check("R noi ro B3/B4 la descriptor, khong phai diem chat luong",
+      "không phải điểm chất lượng" in txt and "B3 scope leakage" in txt
+      and "B4 distance-relatedness" in txt)
 check("R ket thuc bang link index", txt.rstrip().endswith("[[Index - Audit Vault]]"))
 
 os.environ["GRAPH3D_INSIGHT_REPORT"] = RP
@@ -299,11 +380,16 @@ check("V /heat scope=all giu nguyen contract cu",
 sv_src = open(os.path.join(G3D, "serve.py"), encoding="utf-8").read()
 check("V serve co endpoint /insight goi insight.build_insight",
       '"/insight"' in sv_src and "insight.build_insight" in sv_src)
+check("V server nap taxonomy qua cache cua insight.py",
+      "insight.measure_taxonomy(graph)" in sv_src)
 check("V insight.py nam trong _VERSION_FILES (sua module PHAI restart server)",
       '"insight.py"' in open(os.path.join(G3D, "activity_paths.py"), encoding="utf-8").read())
 ui_src = open(os.path.join(G3D, "src", "insight.js"), encoding="utf-8").read()
 check("V UI khong tu tinh lai chi so (khong co nguong hard-code)",
       "pollInsight" in ui_src and "cold_days" not in ui_src.split("function render")[0])
+check("V UI trinh bay B3/B4 tu contract server, khong tu vector hoa",
+      "b3_scope_leakage" in ui_src and "b4_distance_relatedness" in ui_src
+      and "tfidf" not in ui_src.lower() and "spearman(" not in ui_src.lower())
 
 print("\nTONG KET:", ("FAIL %d muc" % len(fails)) if fails else "ALL PASS")
 sys.exit(1 if fails else 0)

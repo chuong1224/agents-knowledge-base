@@ -44,6 +44,10 @@ function histHtml(hist, oldest) {
 
 function render() {
   const d = DB, p = d.params, c = d.coverage, w = d.window, wk = d.weak, da = d.data;
+  const tax = d.taxonomy || {};
+  const b3 = tax.b3_scope_leakage || { evaluated: 0, total: 0, pct: 0, list: [] };
+  const b4 = tax.b4_distance_relatedness || { spearman: null, pairs: 0, pair_population: 0, sampled: false };
+  const rho = b4.spearman == null ? '—' : Number(b4.spearman).toFixed(3);
   $('ins-sum').innerHTML =
     tr('ins.sum', { n: c.notes, pct: c.pct, days: p.days, cold: p.cold_days }) + ` · 🖥 ${esc(d.host || '')}`;
 
@@ -54,6 +58,8 @@ function render() {
     [tr('ins.tile.cold', { d: p.cold_days }), d.cold.total, d.cold.total ? 'warn' : ''],
     [tr('ins.tile.cooling'), d.cooling.total, ''],
     [tr('ins.tile.noindex'), wk.no_index.total, wk.no_index.total ? 'warn' : ''],
+    [tr('ins.tile.taxleak'), b3.pct + '%', b3.total ? 'warn' : ''],
+    [tr('ins.tile.taxrho'), 'ρ ' + rho, ''],
   ].map(([lab, val, cls]) =>
     `<div class="tile ${cls}"><b>${esc(String(val))}</b><span>${esc(lab)}</span></div>`).join('');
 
@@ -82,6 +88,23 @@ function render() {
     `<span class="${a.never ? 'w' : ''}">${a.never} ${tr('ins.a.never')}</span>` +
     `<span>${a.cold} ${tr('ins.a.cold')}</span><span class="${a.orphans ? 'w' : ''}">${a.orphans} ${tr('ins.a.orphans')}</span></div>`).join('');
 
+  const taxLeaks = (b3.list || []).map(x => {
+    const target = byId.get(x.target);
+    const targetStem = target ? target.stem : (x.target || '').split('/').pop().replace(/\.md$/i, '');
+    return row(x.file, '→ ' + targetStem, tr('ins.tax.tip', {
+      section: x.section, own: x.file, target: x.target,
+      a: Number(x.own_similarity).toFixed(3), b: Number(x.other_similarity).toFixed(3),
+      m: Number(x.margin).toFixed(3),
+    }));
+  });
+  const taxonomy =
+    `<div class="dash-h">${tr('ins.h.taxonomy')}</div>` +
+    `<div class="ins-note">${tr('ins.tax.desc')}</div>` +
+    `<div class="ins-note">${tr('ins.tax.b3', { n: b3.total, e: b3.evaluated, pct: b3.pct })}<br>` +
+    tr('ins.tax.b4', { rho, pairs: b4.pairs, pop: b4.pair_population,
+      sampled: b4.sampled ? tr('ins.tax.sampled') : '' }) + `</div>` +
+    list(taxLeaks, tr('ins.e.taxleak'));
+
   $('ins-body').innerHTML =
     `<div id="ins-tiles">${tiles}</div>` +
     `<div class="dash-h">${tr('ins.h.hot', { d: p.days })}</div>${list(hot, tr('ins.e.hot'))}` +
@@ -95,6 +118,7 @@ function render() {
       .concat(wk.thin.list.map(f => row(f, tr('ins.w.thin'), f + '\n' + tr('ins.w.thin.tip'))))
       .concat(wk.no_index.list.map(f => row(f, tr('ins.w.noindex'), f + '\n' + tr('ins.w.noindex.tip')))),
       tr('ins.e.weak')) +
+    taxonomy +
     `<div class="dash-h">${tr('ins.h.areas')}</div><div class="ins-areas">${areas}</div>`;
 
   $('ins-foot').innerHTML =
@@ -113,7 +137,9 @@ function renderMini() {
   const d = DB;
   if (!d) return;
   $('ins-mini').innerHTML =
-    tr('ins.mini', { pct: d.coverage.pct, never: d.coverage.never, cold: d.cold.total, d: d.params.cold_days, orph: d.weak.orphans.total, noidx: d.weak.no_index.total });
+    tr('ins.mini', { pct: d.coverage.pct, never: d.coverage.never, cold: d.cold.total,
+      d: d.params.cold_days, leak: ((d.taxonomy || {}).b3_scope_leakage || {}).pct || 0,
+      orph: d.weak.orphans.total, noidx: d.weak.no_index.total });
 }
 
 export async function pollInsight() {
