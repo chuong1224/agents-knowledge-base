@@ -325,7 +325,7 @@ check("3c ngoai le khai HONG (thieu title) duoc noi thang, khong so voi chuoi ro
 check("3b tong so van de = 15", rep["problems"] == 15,
       {c["id"]: c["total"] for c in rep["checks"]})
 
-check("3c wikilink trong bang `[[Note\|alias]]` KHONG bi bao gay (bao oan, audit W41)",
+check("3c wikilink trong bang `[[Note\\|alias]]` KHONG bi bao gay (bao oan, audit W41)",
       all("Bang" not in i["file"] for i in C["link"]["list"]),
       [(i["file"], i["target"]) for i in C["link"]["list"]])
 

@@ -34,8 +34,8 @@ from _scratch import SCRATCH, G3D, VAULT
 
 TESTS = os.path.dirname(os.path.abspath(__file__))
 # File CHI co trong ban private (backup git nam ngoai OneDrive — khong publish).
-# Thieu file NAY thi bo qua; thieu bat ky file nao KHAC van la FAIL (bug that).
-PRIVATE_ONLY = {"backup_graph3d.py"}
+# Thieu cac file NAY thi bo qua; thieu bat ky file nao KHAC van la FAIL (bug that).
+PRIVATE_ONLY = {"backup_graph3d.py", "test_backup.py"}
 # Nguoc lai: script CHI co o ban public (repo clone) — khong thuoc app, khong mirror,
 # khong publish tu vault. Co mat cung khong sao, khong can khai trong APP_PY.
 REPO_ONLY = {"try_demo.py"}
@@ -227,9 +227,13 @@ def lop3_unit(slow):
              "test_launcher.py", "test_reload.py", "test_update.py"]
     if slow:
         files.append("test_p2.py")
-    for name in files:
+    jobs = [(name, os.path.join(TESTS, name)) for name in files]
+    private_backup_test = os.path.join(G3D, "test_backup.py")
+    if os.path.isfile(private_backup_test):
+        jobs.append(("test_backup.py (private)", private_backup_test))
+    for name, path in jobs:
         t0 = time.perf_counter()
-        r = subprocess.run([sys.executable, os.path.join(TESTS, name)],
+        r = subprocess.run([sys.executable, path],
                            capture_output=True, text=True, encoding="utf-8",
                            errors="replace", timeout=120, cwd=TESTS)
         dt = time.perf_counter() - t0
