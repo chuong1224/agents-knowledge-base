@@ -69,6 +69,20 @@ def _ts(ev):
     return float(ts) if isinstance(ts, (int, float)) else 0.0
 
 
+def _under_attachments(rel):
+    """True khi đường dẫn nằm dưới một thư mục `attachments/`.
+
+    Graph scanner vẫn cần đi qua `attachments/` để dựng node file, và hiện coi mọi
+    `.md` nó gặp là node note. Với tầng insight, `.md` ở đó chỉ là file phụ trợ/
+    bản nháp, cùng phạm vi chọn note của catalog, nên phải loại theo THÀNH PHẦN
+    đường dẫn — không match substring kiểu `my-attachments`.
+    """
+    if not isinstance(rel, str):
+        return False
+    parts = rel.replace("\\", "/").split("/")
+    return any(part.casefold() == "attachments" for part in parts[:-1])
+
+
 def note_graph(graph, exclude=None):
     """(notes, adj, hubs) của đồ thị **NOTE–NOTE**: bỏ hết cạnh tới node tag/file.
 
@@ -76,11 +90,13 @@ def note_graph(graph, exclude=None):
     phải tính trên note–note thuần. `hubs` = note index/MOC (dùng cho "không nằm
     index nào"). Link ở server luôn là id chuỗi; vẫn nhận dict cho chắc (thư viện
     force-graph thay id bằng object node sau khi ingest).
-    `exclude` = note bị loại khỏi phép đo (xem self_excludes).
+    `exclude` = note bị loại khỏi phép đo (xem self_excludes). `.md` nằm dưới
+    `attachments/` cũng bị loại theo cùng phạm vi chọn note của catalog.
     """
     skip = set(exclude or ())
     notes = {n["id"]: n for n in graph.get("nodes", [])
-             if n.get("kind") == "note" and n["id"] not in skip}
+             if n.get("kind") == "note" and n.get("id") not in skip
+             and not _under_attachments(n.get("id"))}
     adj = {rel: set() for rel in notes}
     for lk in graph.get("links", []):
         s, t = lk.get("source"), lk.get("target")
@@ -181,9 +197,12 @@ def build_insight(events, graph, heat_notes=None, heat_meta=None, now=None,
     now = float(now if now is not None else time.time())
     days = max(1, int(days))
     cold_days = max(1, int(cold_days))
-    heat_notes = heat_notes or {}
     heat_meta = heat_meta or {}
     skip = self_excludes() if exclude is None else set(exclude)
+    # Áp cùng phạm vi cho G, J và H. Chỉ lọc node graph là chưa đủ: event/heat của
+    # file nháp vẫn có thể lọt vào bảng "nóng nhất" và cửa sổ dữ liệu.
+    heat_notes = {rel: row for rel, row in (heat_notes or {}).items()
+                  if rel not in skip and not _under_attachments(rel)}
     notes, adj, hubs = note_graph(graph, exclude=skip)
 
     cur_from = now - days * DAY
@@ -191,7 +210,8 @@ def build_insight(events, graph, heat_notes=None, heat_meta=None, now=None,
     # MỘT bộ đếm duy nhất (log_activity.aggregate_by_file) cho cả 3 lượt — cùng
     # luật gom loại/agent với heat, sửa một nơi khỏi lệch nhau. Event của note bị
     # loại (report tự sinh) rơi ra ngay từ đây, kẻo nó lọt vào bảng "nóng nhất".
-    evs = [e for e in events if e.get("file") not in skip]
+    evs = [e for e in events if e.get("file") not in skip
+           and not _under_attachments(e.get("file"))]
     cur = log_activity.aggregate_by_file([e for e in evs if _ts(e) >= cur_from])
     prev = log_activity.aggregate_by_file(
         [e for e in evs if prev_from <= _ts(e) < cur_from])
@@ -274,7 +294,7 @@ def build_insight(events, graph, heat_notes=None, heat_meta=None, now=None,
             a["orphans"] += 1
     areas = sorted(areas.values(), key=lambda a: (-a["notes"], a["area"]))
 
-    ts_all = [t for t in (_ts(e) for e in events) if t]
+    ts_all = [t for t in (_ts(e) for e in evs) if t]
     meta = graph.get("meta", {})
     n_notes = len(notes)
     return {
@@ -310,7 +330,7 @@ def build_insight(events, graph, heat_notes=None, heat_meta=None, now=None,
                  "thin": {"total": len(thin), "list": thin[:list_n]},
                  "no_index": {"total": len(no_index), "list": no_index[:list_n]}},
         "areas": areas,
-        "data": {"events": len(events),
+        "data": {"events": len(evs),
                  "oldest_event": min(ts_all) if ts_all else None,
                  "newest_event": max(ts_all) if ts_all else None,
                  "heat_notes": len(heat_notes),

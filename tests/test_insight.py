@@ -12,7 +12,7 @@
   - render_report: idempotent, KHONG sinh wikilink tro tung note (khong tu tao canh moi)
   - merge_cumulative_stores cua serve tra first/last (nguon cua chi so "nguoi")
 """
-import os, sys, time
+import json, os, sys, time
 sys.dont_write_bytecode = True   # khong sinh __pycache__ trong vault
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # console cp1252
@@ -101,6 +101,40 @@ check("N chi lay node kind=note", len(notes) == 7, sorted(notes))
 check("N bo canh tag/file khoi do thi note-note",
       I["vault"]["note_links"] == 5, I["vault"]["note_links"])
 check("N hub = nhom Index / MOC", hubs == {"Work/Index - Work.md"}, hubs)
+
+# ---- .md trong attachments/ la file phu tro, KHONG phai note ----
+# Hai case phai di thanh CAP: case B chung minh bo loc van nhin thay cung file khi
+# no lui ra ngoai attachments/, tranh xanh gia kieu "chua bao gio nhin".
+ATTACH_DRAFT = "Work/A/attachments/_inbox/_draft.md"
+OUTSIDE_DRAFT = "Work/A/_inbox/_draft.md"
+draft_heat = {"total": 5, "read": 5, "search": 0, "edit": 0,
+              "first": NOW - 2 * D, "last": NOW - 0.25 * D,
+              "agents": {"Claude": 5}}
+
+G_ATTACH = {"meta": dict(GRAPH["meta"]),
+            "nodes": GRAPH["nodes"] + [note(ATTACH_DRAFT)],
+            "links": list(GRAPH["links"])}
+I_ATTACH = IN.build_insight(EVENTS + [ev(0.25, ATTACH_DRAFT)], G_ATTACH,
+                            heat_notes={**HEAT, ATTACH_DRAFT: draft_heat},
+                            heat_meta=META, now=NOW, days=7, cold_days=7,
+                            exclude=set())
+check("A .md trong attachments im lang tren moi chi so",
+      ATTACH_DRAFT not in json.dumps(I_ATTACH, ensure_ascii=False)
+      and I_ATTACH["coverage"]["notes"] == 7,
+      I_ATTACH)
+
+G_OUTSIDE = {"meta": dict(GRAPH["meta"]),
+             "nodes": GRAPH["nodes"] + [note(OUTSIDE_DRAFT)],
+             "links": list(GRAPH["links"])}
+I_OUTSIDE = IN.build_insight(EVENTS + [ev(0.25, OUTSIDE_DRAFT)], G_OUTSIDE,
+                             heat_notes={**HEAT, OUTSIDE_DRAFT: draft_heat},
+                             heat_meta=META, now=NOW, days=7, cold_days=7,
+                             exclude=set())
+check("B cung .md lui ra ngoai attachments duoc bat lai",
+      I_OUTSIDE["coverage"]["notes"] == 8
+      and OUTSIDE_DRAFT in I_OUTSIDE["weak"]["no_index"]["list"]
+      and OUTSIDE_DRAFT in {h["file"] for h in I_OUTSIDE["hot"]},
+      I_OUTSIDE)
 
 # ---- cua so tuan ----
 check("W tuan nay dem dung", (I["window"]["cur_events"], I["window"]["cur_notes"]) == (4, 2),
