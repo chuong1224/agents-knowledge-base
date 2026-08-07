@@ -22,24 +22,23 @@ Chín check cơ học, chia hai họ:
     9 title        `title` ≠ tên file ≠ H1 (§V, `policy.title_rule` — ngoại lệ khai
                    trong `title_rule.exceptions`, KHÔNG đoán)
 
-KHÔNG thay thế gate `verify_vault_integrity.py` của skill `obsidian-vault-update`:
-gate vẫn là chuẩn NGHIỆM THU (nó còn bắt "CN remnant dính chữ" mà module này cố ý
-không làm). Đây là ĐÈN BÁO: mở app là thấy, không phải chạy tay, không phải đợi
-audit 08:00.
+KHÔNG thay thế gate `verify_vault_integrity.py`: gate vẫn là chuẩn NGHIỆM THU
+(nó còn bắt "CN remnant dính chữ" mà module này cố ý không làm). Từ W50, gate
+soft-import chính module này làm engine cho 4 check cấu trúc; thiếu/lỗi `.graph3d`
+thì gate tự lùi về implementation legacy để vẫn dùng được với vault bất kỳ. Đây
+là ĐÈN BÁO: mở app là thấy, không phải chạy tay, không phải đợi audit 08:00.
 
 Quan hệ số liệu với gate — chốt để hai bên không cãi nhau:
   * Tiêu chí BỎ QUA note lấy NGUYÊN của gate: tên file bắt đầu `_`, hoặc frontmatter
     có `gate_ignore: true` (dò trên TRỌN khối frontmatter — bản vá 2026-07-25).
-  * 4 check cấu trúc: app là TẬP CON của gate — app chỉ báo cái gate cũng báo.
-    App nới hơn gate đúng hai chỗ, cả hai đều theo hướng ÍT báo oan hơn:
-    (a) so khớp tên không phân biệt hoa/thường; (b) ảnh được nhắc bằng `[[x.png]]`
-    hay `![](attachments/x.png)` vẫn tính là "có người dùng" (gate chỉ đếm `![[…]]`).
-    ⇒ **app im lặng KHÔNG thay cho gate PASS.**
-  * 5 check contract: gate chưa có — luật lấy thẳng từ nguồn chân lý, nên khi gate
-    nhận thêm check nào thì hai bên vẫn cùng một luật gốc.
-  * Phạm vi: app đo đúng phạm vi graph (bỏ mọi dot-folder + `EXCLUDED_DIRS` của
-    scanner) — gate walk thêm `.graph3d/README.md`… nên TỔNG note hai bên lệch vài
-    file. Con số phạm vi luôn đi kèm trong `vault` của báo cáo.
+  * 4 check cấu trúc: một implementation duy nhất ở module này. Gate gọi
+    `build_integrity()` nên cùng so khớp không phân biệt hoa/thường và cùng tính
+    `[[x.png]]` / `![](attachments/x.png)` là reference hợp lệ.
+  * Contract: app có đủ 5 check; gate chỉ giữ các check nghiệm thu riêng (CN và
+    digest). Đuôi digest của cả hai cùng đọc `policy.binary_digest_ext`.
+  * Phạm vi: app đo phạm vi graph (bỏ dot-folder + `EXCLUDED_DIRS`); gate chủ động
+    cấp cho engine một walk rộng hơn để giữ contract nghiệm thu cũ. Vì đầu vào khác,
+    tổng note có thể lệch dù ngữ nghĩa 4 check hoàn toàn giống nhau.
 
 Không chép luật (CLAUDE.md — quy tắc đếm được có nguồn sinh duy nhất): trường
 frontmatter bắt buộc, đuôi file phải "mở nilon", tag vocabulary, luật index và
@@ -100,7 +99,8 @@ def _default_rules_dir(vault=None):
 
 RULES_DIR = _default_rules_dir()
 
-# Regex lấy NGUYÊN của gate verify_vault_integrity.py — sửa một bên phải sửa cả hai.
+# Nguồn dùng chung cho 4 check structure. Gate W50 import module này; regex legacy
+# trong gate chỉ còn phục vụ fallback khi vault không có `.graph3d`.
 EMBED_RE = re.compile(r"!\[\[([^\]]+)\]\]")            # ![[target]]
 WIKILINK_RE = re.compile(r"(?<!\!)\[\[([^\]]+)\]\]")   # [[target]] (không phải embed)
 HEADING_RE = re.compile(r"^#{1,6}\s+(.*?)\s*$")
