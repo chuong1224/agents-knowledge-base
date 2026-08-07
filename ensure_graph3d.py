@@ -15,12 +15,13 @@ Hai cờ onboarding cho người CHƯA có vault (W13 — logic ở onboarding.p
                       server đang chạy trên vault thật)
   --init-starter DIR  dựng vault đầu tiên tại DIR từ starter-vault/ rồi thoát
 
-Cờ --app (W58/W60): nếu Edge đã cài site-app KB Graph 3D thì đọc ``--app-id`` từ
-shortcut và mở bằng AUMID riêng (icon taskbar riêng); chưa cài thì lùi về cửa sổ
-``--app=<url>`` của Edge/Chrome như trước. Shortcut do install_launcher.py tạo chạy
-đúng dòng này.
+Cờ --app (W58/W60): nếu Edge đã cài site-app KB Graph 3D thì ưu tiên AUMID packaged
+trong Windows Start Apps (Edge hiện hành), kế đến ``--app-id`` trong shortcut kiểu cũ,
+để mở bằng identity/icon taskbar riêng; chưa cài thì lùi về cửa sổ ``--app=<url>``
+của Edge/Chrome như trước. Shortcut do install_launcher.py tạo chạy đúng dòng này.
 """
 import argparse
+import json
 import os
 import re
 import shutil
@@ -37,6 +38,12 @@ import run_graph3d as sup                    # noqa: E402  (health/port_pid/kill
 import install_launcher as launcher          # noqa: E402  (doc/scan shortcut PWA Windows)
 
 APP_TITLE_PREFIX = "KB Graph 3D"
+APP_TITLE = "KB Graph 3D — Knowledge Base"
+
+_PS_START_APPS = r"""
+$ErrorActionPreference = 'Stop'
+Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Compress
+"""
 
 
 def bind_console():
@@ -125,13 +132,66 @@ def installed_app_candidates():
     return list(dict.fromkeys(out))
 
 
-def installed_app_spec(candidates=None, read_shortcut_fn=None, isfile=None):
+def registered_start_apps():
+    """Đọc app Windows đã đăng ký, gồm site-app Edge kiểu packaged hiện hành.
+
+    Edge mới không nhất thiết tạo ``.lnk --app-id``. Windows vẫn công bố app qua
+    ``Get-StartApps`` với AUMID dạng ``<package>!App``; đây mới là identity mà taskbar
+    dùng. Lỗi probe chỉ làm mất tối ưu này, không được chặn fallback ``--app=<url>``.
+    """
+    if os.name != "nt":
+        return []
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", _PS_START_APPS],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=12, creationflags=sup.NO_WINDOW)
+        if result.returncode or not result.stdout.strip():
+            return []
+        rows = json.loads(result.stdout)
+        return rows if isinstance(rows, list) else [rows]
+    except Exception:                              # noqa: BLE001
+        return []
+
+
+def packaged_app_spec(rows):
+    """Chọn AUMID packaged của KB Graph, loại AppID tự sinh của shortcut Python cũ."""
+    explorer = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "explorer.exe")
+    if not os.path.isfile(explorer):
+        return None
+    found = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("Name") or row.get("name") or "").strip()
+        app_id = str(row.get("AppID") or row.get("AppId")
+                     or row.get("app_id") or "").strip()
+        if (not name.casefold().startswith(APP_TITLE_PREFIX.casefold())
+                or not re.fullmatch(r"[a-z0-9._{}-]+![a-z0-9._{}-]+", app_id, re.I)):
+            continue
+        rank = 0 if name.casefold() == APP_TITLE.casefold() else 1
+        found.append((rank, name.casefold(), app_id.casefold(), {
+            "kind": "apps-folder", "name": name, "app_id": app_id,
+            "target": explorer, "args": ["shell:AppsFolder\\" + app_id]}))
+    return min(found, key=lambda row: row[:3])[3] if found else None
+
+
+def installed_app_spec(candidates=None, read_shortcut_fn=None, isfile=None,
+                       start_apps=None):
     """Trả lệnh mở site-app đã cài, hoặc ``None`` để caller dùng ``--app=<url>``.
 
-    Điểm phân biệt bắt buộc là ``--app-id``. Shortcut launcher Python của chính app
-    cũng mang tên KB Graph 3D nhưng chỉ có ``--app``; nhận nhầm nó sẽ tự gọi lồng
-    ``ensure_graph3d.py`` mãi và vẫn không cho Windows một AppUserModelID riêng.
+    Identity hợp lệ là AUMID packaged ``<package>!App`` từ Windows Start Apps, hoặc
+    ``--app-id`` của shortcut Chromium kiểu cũ. AppID tự sinh của shortcut launcher
+    Python không có ``!`` nên bị loại; nhận nhầm nó sẽ tự gọi lồng ensure mãi và vẫn
+    không cho Windows một AppUserModelID riêng.
     """
+    # Khi test/caller truyền candidates tường minh, không probe máy thật ngoài ý muốn.
+    # Caller vẫn có thể truyền start_apps tường minh để test nhánh packaged.
+    if start_apps is None:
+        start_apps = registered_start_apps() if candidates is None else []
+    packaged = packaged_app_spec(start_apps)
+    if packaged:
+        return packaged
     candidates = installed_app_candidates() if candidates is None else candidates
     read_shortcut_fn = read_shortcut_fn or launcher.read_shortcut
     isfile = isfile or os.path.isfile
@@ -163,18 +223,19 @@ def installed_app_spec(candidates=None, read_shortcut_fn=None, isfile=None):
             args.append("--app-url=" + app_url)
         rank = 0 if exe.startswith("msedge") else 1
         found.append((rank, os.path.normcase(path), {
-            "shortcut": path, "target": target, "args": args, "app_id": app_id}))
+            "kind": "chromium-shortcut", "shortcut": path,
+            "target": target, "args": args, "app_id": app_id}))
     return min(found, key=lambda row: (row[0], row[1]))[2] if found else None
 
 
 def open_app_window(url):
-    """Cửa sổ app riêng; ưu tiên PWA ``--app-id`` để có AUMID/icon taskbar riêng."""
+    """Cửa sổ app riêng; ưu tiên AUMID đã đăng ký để có identity/icon taskbar riêng."""
     installed = installed_app_spec()
     if installed:
         try:
             subprocess.Popen([installed["target"]] + installed["args"], close_fds=True,
                              creationflags=sup.DETACHED | sup.NO_WINDOW)
-            print("KB Graph 3D: mo app da cai (--app-id=%s)" % installed["app_id"])
+            print("KB Graph 3D: mo app da cai (AppUserModelID=%s)" % installed["app_id"])
             return True
         except Exception as exc:                 # noqa: BLE001
             print("KB Graph 3D: mo app da cai that bai (%s) -> thu --app URL" % exc)

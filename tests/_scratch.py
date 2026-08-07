@@ -1,12 +1,16 @@
 # -*- coding: utf-8 -*-
-"""Duong dan dung chung cho bo test .graph3d (G1.1).
+"""Duong dan dung chung cho mot lan chay bo test .graph3d (G1.1).
 
 SCRATCH nam trong %TEMP% — test KHONG duoc ghi file rac vao vault.
 G3D/VAULT suy tu vi tri file nay -> chay dung tren moi may, khong hardcode.
+Moi selfcheck co run-id rieng de private/public chay dong thoi khong giam len .lnk,
+log hay vault fixture cua nhau; process con ke thua run-id qua environment.
 """
 import os, tempfile
 
-SCRATCH = os.path.join(tempfile.gettempdir(), "graph3d-selfcheck")
+RUN_ID = os.environ.get("GRAPH3D_TEST_RUN_ID") or str(os.getpid())
+os.environ.setdefault("GRAPH3D_TEST_RUN_ID", RUN_ID)
+SCRATCH = os.path.join(tempfile.gettempdir(), "graph3d-selfcheck", RUN_ID)
 os.makedirs(SCRATCH, exist_ok=True)
 
 G3D = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
