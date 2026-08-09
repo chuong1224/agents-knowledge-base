@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""KB Graph 3D — tầng insight "vault đang khoẻ không" (W10 / backlog #13).
+"""KB Graph 3D — tầng insight + worklist đề xuất (W10/W18).
 
 `/dashboard` trả lời *"agent đã làm gì hôm nay"*; module này trả lời
 *"vault đang khoẻ không"*: note nóng / đang nguội theo tuần, note nguội theo lần
@@ -24,14 +24,15 @@ Mọi con số đi kèm cửa sổ dữ liệu của chính nó (`data.oldest_ev
 "nguội 14 ngày" trên store mới 3 tuần tuổi KHÔNG cùng nghĩa với "nguội 14 ngày" sau
 nửa năm — caller PHẢI hiện kèm, đừng bày số trần.
 
-Phạm vi CỐ Ý: đợt này chỉ MÔ TẢ hiện trạng. Sinh đề xuất ("thêm link A–B", "gộp 2
-note") là việc của H3/W18 và có ranh giới an toàn riêng (§VII note Harness) — nó sẽ
-TIÊU THỤ build_insight() chứ không đo lại. Module này KHÔNG bao giờ sửa note.
+W18/H3 đóng vòng bằng `build_worklist()`: nó CHỈ tiêu thụ snapshot `build_insight()`
+đã tính, không đi đo lại nguồn. Kết quả là đề xuất read-only có đích + bằng chứng +
+ưu tiên ổn định; module này KHÔNG bao giờ tự sửa link/note hay tự ghi vào Work Map.
 
 Hồ sơ đợt + định nghĩa chỉ số: note vault "Tầng Insight Sức Khoẻ Vault — KB Graph 3D".
 """
 import argparse
 from collections import Counter, defaultdict
+import hashlib
 import json
 import math
 import os
@@ -61,6 +62,13 @@ TYPES = ("read", "search", "edit")
 TAXONOMY_MIN_CHARS = 40   # paper D.4: content unit ngan hon 40 ky tu bi loai
 TAXONOMY_PAIR_CAP = 20000 # B4 sample co dinh de chi phi khong tang O(n^2)
 TAXONOMY_EPS = 1e-12
+REREAD_MIN = 2            # >=2 lượt đọc lặp trong cửa sổ mới thành đề xuất
+LONG_CHAIN_MIN = 6        # chuỗi đi qua >=6 note khác nhau = đường truy xuất dài
+SCOPE_MARGIN_MIN = 0.08   # B3 yếu hơn mức này chỉ là descriptor, chưa vào worklist
+WORKLIST_LIMIT = 30       # report/UI không được ngập; total vẫn giữ số đầy đủ
+REREAD_WORKLIST_CAP = 8   # giữ top tín hiệu mỗi lớp — worklist là hàng đợi, không dump
+LONG_WORKLIST_CAP = 5
+SCOPE_WORKLIST_CAP = 10
 
 # Note "sống" do chính module này sinh ra (vế b) — ghi đè mỗi lần chạy, cùng họ với
 # Báo Cáo Audit Vault. Vault khác đặt chỗ khác: env GRAPH3D_INSIGHT_REPORT.
@@ -146,6 +154,168 @@ def components(adj):
 def area_of(rel):
     """Khu vực = folder cấp 1 (Work / Vault Operation / Personal / Skills…)."""
     return rel.split("/")[0] if "/" in rel else "(gốc vault)"
+
+
+def nearest_index(rel, notes, hubs):
+    """Index gần nhất theo folder ancestry — chỉ là ỨNG VIÊN, không tự tạo link.
+
+    Chọn hub có folder sâu nhất vẫn là tổ tiên của folder note. Đây là phép chọn cơ
+    học, xác định; nếu không có hub tổ tiên thì trả None thay vì đoán chéo khu vực.
+    """
+    node = notes.get(rel) or {}
+    folder = (node.get("folder") or os.path.dirname(rel)).replace("\\", "/").strip("/")
+    candidates = []
+    for hub in hubs:
+        hnode = notes.get(hub) or {}
+        hfolder = (hnode.get("folder") or os.path.dirname(hub)).replace("\\", "/").strip("/")
+        if not hfolder or folder == hfolder or folder.startswith(hfolder + "/"):
+            candidates.append((len([p for p in hfolder.split("/") if p]), hub))
+    return sorted(candidates, key=lambda x: (-x[0], x[1]))[0][1] if candidates else None
+
+
+def build_friction(chains, notes, cur_from, list_n=40):
+    """Tín hiệu đọc-lặp/chuỗi-dài từ chain canonical do `serve.build_chains` sinh.
+
+    Hàm không tự gom chain lần hai. Caller truyền đúng output canonical; ở đây chỉ
+    cắt về cửa sổ insight và giao với tập note hiện hành.
+    """
+    if chains is None:
+        return {"available": False, "chains": 0,
+                "reread": {"total": 0, "list": []},
+                "long": {"total": 0, "list": []}}
+    reread = defaultdict(lambda: {"rereads": 0, "chains": 0})
+    long = []
+    chain_count = 0
+    for chain in chains:
+        events = [e for e in chain.get("events", [])
+                  if _ts(e) >= cur_from and e.get("file") in notes
+                  and not _under_attachments(e.get("file"))]
+        if not events:
+            continue
+        chain_count += 1
+        reads = Counter(e.get("file") for e in events if e.get("type", "read") == "read")
+        for rel, count in reads.items():
+            excess = max(0, count - 1)
+            if excess:
+                reread[rel]["rereads"] += excess
+                reread[rel]["chains"] += 1
+        ordered = []
+        for e in sorted(events, key=_ts):
+            rel = e.get("file")
+            if rel not in ordered:
+                ordered.append(rel)
+        if len(ordered) >= LONG_CHAIN_MIN:
+            start, end = min(_ts(e) for e in events), max(_ts(e) for e in events)
+            long.append({"agent": chain.get("agent") or "Claude", "start": start,
+                         "end": end, "span": max(0.0, end - start),
+                         "count": len(events), "distinct": len(ordered),
+                         "first": ordered[0], "last": ordered[-1],
+                         "files": ordered[:list_n]})
+    rr = [{"file": rel, **row} for rel, row in reread.items()]
+    rr.sort(key=lambda x: (-x["rereads"], -x["chains"], x["file"]))
+    long.sort(key=lambda x: (-x["distinct"], -x["count"], x["start"], x["first"]))
+    return {"available": True, "chains": chain_count,
+            "reread": {"total": len(rr), "list": rr[:list_n]},
+            "long": {"total": len(long), "list": long[:list_n]}}
+
+
+def _work_id(kind, rel, target="", extra=""):
+    raw = "|".join((kind, rel or "", target or "", extra or ""))
+    return "H3-" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10]
+
+
+def build_worklist(ins, limit=WORKLIST_LIMIT):
+    """Biến snapshot insight thành đề xuất read-only — KHÔNG đo lại và KHÔNG sửa.
+
+    Mỗi item có hành động cụ thể, đích, bằng chứng và mức ưu tiên. Semantic choice
+    (thêm link, gộp/move section, sửa aliases/summary) luôn để người duyệt.
+    """
+    items, seen = [], set()
+
+    def add(priority, kind, rel, target=None, evidence=None, extra=""):
+        ident = _work_id(kind, rel, target or "", extra)
+        if ident in seen:
+            return
+        seen.add(ident)
+        items.append({"id": ident, "priority": priority, "kind": kind,
+                      "file": rel, "target": target,
+                      "evidence": evidence or {}, "review_required": True})
+
+    wk = ins.get("weak") or {}
+    never = {x["file"] for x in (ins.get("never") or {}).get("list", [])}
+    unread = set((ins.get("unread") or {}).get("list", []))
+    orphans = set((wk.get("orphans") or {}).get("list", []))
+    no_index = (wk.get("no_index") or {}).get("list", [])
+    candidates = wk.get("index_candidates") or {}
+    covered = set()
+    for rel in no_index:
+        target = candidates.get(rel)
+        blind = rel in never or rel in unread
+        add("P1" if blind or rel in orphans else "P2",
+            "connect_index" if target else "review_index", rel, target,
+            {"orphan": rel in orphans, "never": rel in never,
+             "unread": rel in unread})
+        covered.add(rel)
+    for rel in sorted((never | unread) - covered):
+        add("P1", "open_unseen", rel, evidence={"never": rel in never,
+                                                  "unread": rel in unread})
+
+    friction = ins.get("friction") or {}
+    for row in (friction.get("reread") or {}).get("list", [])[:REREAD_WORKLIST_CAP]:
+        if row.get("rereads", 0) >= REREAD_MIN:
+            add("P2", "reduce_reread", row["file"], evidence={
+                "rereads": row["rereads"], "chains": row["chains"]})
+    routes = {}
+    for row in (friction.get("long") or {}).get("list", []):
+        key = (row["first"], row["last"])
+        cur = routes.get(key)
+        if cur is None:
+            cur = dict(row)
+            cur["occurrences"] = 1
+            routes[key] = cur
+        else:
+            cur["occurrences"] += 1
+            if (row["distinct"], row["count"], row["span"]) > (
+                    cur["distinct"], cur["count"], cur["span"]):
+                keep = cur["occurrences"]
+                cur.update(row)
+                cur["occurrences"] = keep
+    route_rows = sorted(routes.values(), key=lambda x: (-x["occurrences"],
+                         -x["distinct"], -x["count"], x["first"], x["last"]))
+    for row in route_rows[:LONG_WORKLIST_CAP]:
+        add("P2", "shorten_chain", row["first"], row["last"], {
+            "distinct": row["distinct"], "count": row["count"],
+            "span": row["span"], "agent": row["agent"],
+            "occurrences": row["occurrences"]})
+
+    b3 = ((ins.get("taxonomy") or {}).get("b3_scope_leakage") or {})
+    scope_added = 0
+    for row in b3.get("list", []):
+        if row.get("margin", 0.0) >= SCOPE_MARGIN_MIN:
+            add("P2", "review_scope", row["file"], row.get("target"), {
+                "section": row.get("section", ""), "margin": row.get("margin", 0.0),
+                "own_similarity": row.get("own_similarity", 0.0),
+                "other_similarity": row.get("other_similarity", 0.0)},
+                extra=row.get("section", ""))
+            scope_added += 1
+            if scope_added >= SCOPE_WORKLIST_CAP:
+                break
+
+    rank = {"P1": 0, "P2": 1, "P3": 2}
+    items.sort(key=lambda x: (rank.get(x["priority"], 9), x["kind"], x["file"],
+                              x.get("target") or "", x["id"]))
+    counts = Counter(x["priority"] for x in items)
+    shown = items[:max(1, int(limit))]
+    return {"mode": "proposal_only", "auto_apply": False, "review_required": True,
+            "total": len(items), "shown": len(shown), "truncated": len(items) > len(shown),
+            "counts": {p: counts.get(p, 0) for p in ("P1", "P2", "P3")},
+            "thresholds": {"reread_min": REREAD_MIN,
+                           "long_chain_min_distinct": LONG_CHAIN_MIN,
+                           "scope_margin_min": SCOPE_MARGIN_MIN,
+                           "caps": {"reread": REREAD_WORKLIST_CAP,
+                                    "long_chain": LONG_WORKLIST_CAP,
+                                    "scope": SCOPE_WORKLIST_CAP}},
+            "items": shown}
 
 
 def age_hist(ages):
@@ -467,7 +637,8 @@ def measure_taxonomy(graph, vault=VAULT, exclude=None):
 
 def build_insight(events, graph, heat_notes=None, heat_meta=None, now=None,
                   days=DEFAULT_DAYS, cold_days=DEFAULT_COLD, top_n=12, list_n=40,
-                  exclude=None, taxonomy_docs=None, taxonomy_result=None):
+                  exclude=None, taxonomy_docs=None, taxonomy_result=None,
+                  chains=None):
     """Ảnh chụp sức khoẻ truy xuất của vault.
 
     HÀM THUẦN: không đọc đĩa, không lấy giờ ẩn (`now` truyền vào) → test được bằng
@@ -480,6 +651,8 @@ def build_insight(events, graph, heat_notes=None, heat_meta=None, now=None,
                    do chính module sinh); truyền set() để đo trọn vault không loại gì
       taxonomy_docs — {rel: markdown}; None = caller chưa cấp nội dung, B3/B4 unavailable
       taxonomy_result — kết quả build_taxonomy đã cache; ưu tiên hơn taxonomy_docs
+      chains      — output canonical của serve.build_chains; chỉ dùng để rút tín hiệu
+                    đọc-lặp/chuỗi-dài, không tự gom chain lần hai
 
     8 chỉ số (định nghĩa đầy đủ: note "Tầng Insight Sức Khoẻ Vault — KB Graph 3D"):
       1 nóng tuần này (J)         4 chưa bao giờ agent đụng (G − (H ∪ J))
@@ -570,6 +743,7 @@ def build_insight(events, graph, heat_notes=None, heat_meta=None, now=None,
     thin = sorted(rel for rel in notes if len(adj[rel]) == 1)
     no_index = sorted(rel for rel in notes
                       if rel not in hubs and not (adj[rel] & hubs))
+    index_candidates = {rel: nearest_index(rel, notes, hubs) for rel in no_index}
     small = [c for c in comps if len(c) <= SMALL_CLUSTER and len(c) > 1]
 
     # ---- 6. coverage theo khu vực ----
@@ -592,7 +766,8 @@ def build_insight(events, graph, heat_notes=None, heat_meta=None, now=None,
     meta = graph.get("meta", {})
     n_notes = len(notes)
     taxonomy = taxonomy_result or build_taxonomy(taxonomy_docs or {}, list_n=list_n)
-    return {
+    friction = build_friction(chains, notes, cur_from, list_n=list_n)
+    out = {
         "generated": now,
         "params": {"days": days, "cold_days": cold_days,
                    "cooling_min": COOLING_MIN, "small_cluster": SMALL_CLUSTER},
@@ -623,7 +798,10 @@ def build_insight(events, graph, heat_notes=None, heat_meta=None, now=None,
                  "small": [{"size": len(c), "files": c} for c in small[:list_n]],
                  "orphans": {"total": len(orphans), "list": orphans[:list_n]},
                  "thin": {"total": len(thin), "list": thin[:list_n]},
-                 "no_index": {"total": len(no_index), "list": no_index[:list_n]}},
+                 "no_index": {"total": len(no_index), "list": no_index[:list_n]},
+                 "index_candidates": {rel: index_candidates.get(rel)
+                                      for rel in no_index[:list_n]}},
+        "friction": friction,
         "taxonomy": taxonomy,
         "areas": areas,
         "data": {"events": len(evs),
@@ -638,6 +816,8 @@ def build_insight(events, graph, heat_notes=None, heat_meta=None, now=None,
                  "heat_updated": heat_meta.get("updated"),
                  "heat_machines": heat_meta.get("machines") or []},
     }
+    out["worklist"] = build_worklist(out, limit=WORKLIST_LIMIT)
+    return out
 
 
 # ---------------------------------------------------------------- I/O cho CLI
@@ -654,10 +834,12 @@ def collect(days=DEFAULT_DAYS, cold_days=DEFAULT_COLD, now=None):
     import serve  # noqa: PLC0415  (xem docstring — cố ý muộn để tránh vòng tròn)
     heat_notes, heat_meta = serve.merge_cumulative_stores()
     graph = serve.get_graph_data()
-    return build_insight(serve.read_all_events(), graph,
+    events = serve.read_all_events()
+    return build_insight(events, graph,
                          heat_notes=heat_notes, heat_meta=heat_meta,
                          now=now, days=days, cold_days=cold_days,
-                         taxonomy_result=measure_taxonomy(graph))
+                         taxonomy_result=measure_taxonomy(graph),
+                         chains=serve.build_chains(events, limit=len(events) + 1))
 
 
 def _fmt_day(ts):
@@ -693,6 +875,10 @@ def print_summary(ins, out=print):
     out("Kết nối: %d thành phần (lớn nhất %d note) · %d mồ côi · %d chỉ-1-dây · %d không nằm index nào"
         % (wk["components"], wk["largest"], wk["orphans"]["total"],
            wk["thin"]["total"], wk["no_index"]["total"]))
+    wl = ins.get("worklist") or {"total": 0, "counts": {}}
+    out("Worklist đề xuất: %d việc (%d P1 · %d P2 · %d P3) — chỉ đọc, cần người duyệt"
+        % (wl["total"], wl["counts"].get("P1", 0), wl["counts"].get("P2", 0),
+           wl["counts"].get("P3", 0)))
     tax = ins["taxonomy"]
     b3, b4 = tax["b3_scope_leakage"], tax["b4_distance_relatedness"]
     rho = "—" if b4["spearman"] is None else "%.3f" % b4["spearman"]
@@ -738,6 +924,52 @@ def _tbl(header, rows, empty="_— không có._"):
     return "\n".join(out) + "\n"
 
 
+def _work_action(item):
+    """Câu hành động hoàn chỉnh cho report; đường dẫn luôn là code, không wikilink."""
+    rel, target, ev = item["file"], item.get("target"), item.get("evidence") or {}
+    kind = item["kind"]
+    if kind == "connect_index":
+        return "Đề xuất thêm liên kết giữa `%s` và index gần nhất `%s`." % (rel, target)
+    if kind == "review_index":
+        return "Xác định index đúng cho `%s`, rồi mới đề xuất liên kết; máy không đoán chéo khu vực." % rel
+    if kind == "open_unseen":
+        return "Mở `%s`, xác nhận giá trị rồi quyết định giữ, gộp hoặc bổ sung đường truy xuất." % rel
+    if kind == "reduce_reread":
+        return "Rà `aliases` · `summary` · liên kết vào `%s` để giảm đọc lặp." % rel
+    if kind == "shorten_chain":
+        return "Rà lối tắt/MOC từ đầu chuỗi `%s` tới cuối chuỗi `%s`." % (rel, target)
+    if kind == "review_scope":
+        return "Duyệt section **%s** trong `%s` so với `%s`; không tự di chuyển." % (
+            ev.get("section") or "—", rel, target)
+    return "Duyệt `%s`." % rel
+
+
+def _work_evidence(item):
+    ev, kind = item.get("evidence") or {}, item["kind"]
+    if kind in ("connect_index", "review_index"):
+        flags = []
+        if ev.get("orphan"):
+            flags.append("mồ côi")
+        if ev.get("never"):
+            flags.append("chưa có dấu vết")
+        if ev.get("unread"):
+            flags.append("chỉ khớp tìm kiếm")
+        return "ngoài index" + ((" · " + " · ".join(flags)) if flags else "")
+    if kind == "open_unseen":
+        return "chưa có dấu vết" if ev.get("never") else "chỉ khớp tìm kiếm"
+    if kind == "reduce_reread":
+        return "%d lượt đọc lặp trong %d chuỗi" % (ev.get("rereads", 0), ev.get("chains", 0))
+    if kind == "shorten_chain":
+        return "%d note khác nhau · %d thao tác · %.1f phút · %s · lặp %d lần" % (
+            ev.get("distinct", 0), ev.get("count", 0), ev.get("span", 0.0) / 60.0,
+            ev.get("agent") or "—", ev.get("occurrences", 1))
+    if kind == "review_scope":
+        return "B3 margin %.3f · cosine %.3f → %.3f" % (
+            ev.get("margin", 0.0), ev.get("own_similarity", 0.0),
+            ev.get("other_similarity", 0.0))
+    return "—"
+
+
 def render_report(ins, path=None):
     """Markdown của note báo cáo — thuần hàm (test được), không ghi đĩa.
 
@@ -760,7 +992,8 @@ def render_report(ins, path=None):
           'đang nguội đi, note nguội quá ngưỡng, note chưa vào đường truy xuất (không dấu '
           'vết / chỉ khớp tìm kiếm), cụm ít kết nối trên đồ thị note–note (mồ côi, chỉ-1-dây, '
           'ngoài index), hai chỉ số taxonomy B3 scope leakage + B4 khoảng cách cây so với '
-          'độ liên quan, và bảng coverage theo khu vực. Kèm cửa sổ dữ liệu của từng nguồn."',
+          'độ liên quan, worklist đề xuất read-only có ưu tiên/đích/bằng chứng, và bảng '
+          'coverage theo khu vực. Kèm cửa sổ dữ liệu của từng nguồn."',
           "source: Sinh từ `.graph3d/insight.py` (log hoạt động + heat tích luỹ + graph + markdown vault)",
           "date: " + created, "updated: " + today,
           "type: reference", "tags: [vault-operation]", "---", "", ""]
@@ -776,7 +1009,9 @@ def render_report(ins, path=None):
          "> - Xem tương tác (click mở note): section **🩺 Sức khoẻ vault** trong app "
          "[[KB Graph 3D]] (endpoint `/insight`, cùng một hàm tính).",
          "> - B3/B4 là **descriptor mức bám taxonomy, không phải điểm chất lượng**; danh "
-         "sách lệch scope chỉ để người duyệt, công cụ không tự di chuyển note.", "",
+         "sách lệch scope chỉ để người duyệt, công cụ không tự di chuyển note.",
+         "> - Worklist H3 là **đề xuất read-only**: không tự thêm link, gộp/move section, "
+         "sửa metadata hay ghi vào Work Map.", "",
          "**Lần chạy:** %s · **Cửa sổ:** %d ngày cuộn · nguội ≥ %d ngày · "
          "**Dữ liệu:** %d event (từ %s) + heat tích luỹ từ %s (máy: %s)"
          % (_fmt_min(ins["generated"]), p["days"], p["cold_days"], da["events"],
@@ -785,6 +1020,7 @@ def render_report(ins, path=None):
          "## Tổng quan", ""]
 
     tax = ins["taxonomy"]
+    wl = ins.get("worklist") or {"total": 0, "shown": 0, "counts": {}, "items": []}
     b3, b4 = tax["b3_scope_leakage"], tax["b4_distance_relatedness"]
     rho = "—" if b4["spearman"] is None else "%.3f" % b4["spearman"]
     L.append(_tbl(["Chỉ số", "Số", "Nghĩa"], [
@@ -809,6 +1045,9 @@ def render_report(ins, path=None):
          "0 liên kết note / đúng 1 liên kết note"],
         ["Ngoài index", wk["no_index"]["total"],
          "không liên kết tới note index/MOC nào"],
+        ["Worklist đề xuất", wl["total"], "%d P1 · %d P2 · %d P3 — cần người duyệt" %
+         (wl["counts"].get("P1", 0), wl["counts"].get("P2", 0),
+          wl["counts"].get("P3", 0))],
         ["B3 scope leakage", "%.1f%%" % b3["pct"],
          "%d/%d section gần note anh em hơn note cha" %
          (b3["total"], b3["evaluated"])],
@@ -816,6 +1055,17 @@ def render_report(ins, path=None):
          "%d/%d cặp section%s" % (b4["pairs"], b4["pair_population"],
           " — mẫu cố định" if b4["sampled"] else "")],
     ]))
+
+    L += ["", "## 📋 Worklist đề xuất — hành động cụ thể, cần người duyệt", "",
+          "> [!warning] Máy chỉ **đề xuất**, không tự sửa vault. Mỗi dòng có đích và "
+          "bằng chứng để phiên có giám sát quyết định; bác bỏ đề xuất không làm thay đổi dữ liệu.", ""]
+    L.append(_tbl(["ID", "Ưu tiên", "Đề xuất", "Bằng chứng"],
+                  [["`%s`" % x["id"], x["priority"], _work_action(x), _work_evidence(x)]
+                   for x in wl["items"]],
+                  "_— snapshot này không sinh đề xuất nào._"))
+    if wl.get("truncated"):
+        L += ["", "_Đang hiện %d/%d đề xuất; JSON `/insight` giữ cùng giới hạn của snapshot._"
+              % (wl["shown"], wl["total"])]
 
     L += ["", "## 🔥 Nóng nhất %d ngày qua" % p["days"], ""]
     L.append(_tbl(["Note", "Lượt", "Kỳ trước", "Chênh"],

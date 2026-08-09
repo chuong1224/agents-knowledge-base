@@ -11,6 +11,22 @@ import { wsOpen } from './workspace.js';
 
 let DB = null;
 
+function workTip(x, ev) {
+  const vars = {
+    file: x.file || '—', target: x.target || '—', section: ev.section || '—',
+    n: ev.rereads || ev.distinct || 0, chains: ev.chains || 0,
+    count: ev.count || 0, min: ((ev.span || 0) / 60).toFixed(1),
+    times: ev.occurrences || 1, margin: Number(ev.margin || 0).toFixed(3),
+  };
+  if (x.kind === 'connect_index') return tr('ins.wl.connect_index', vars);
+  if (x.kind === 'review_index') return tr('ins.wl.review_index', vars);
+  if (x.kind === 'open_unseen') return tr('ins.wl.open_unseen', vars);
+  if (x.kind === 'reduce_reread') return tr('ins.wl.reduce_reread', vars);
+  if (x.kind === 'shorten_chain') return tr('ins.wl.shorten_chain', vars);
+  if (x.kind === 'review_scope') return tr('ins.wl.review_scope', vars);
+  return tr('ins.wl.review_index', vars);
+}
+
 function fmtDay(ts) {
   if (!ts) return '—';
   return new Date(ts * 1000).toLocaleDateString(locale());
@@ -45,11 +61,13 @@ function histHtml(hist, oldest) {
 function render() {
   const d = DB, p = d.params, c = d.coverage, w = d.window, wk = d.weak, da = d.data;
   const tax = d.taxonomy || {};
+  const wl = d.worklist || { total: 0, counts: {}, items: [] };
   const b3 = tax.b3_scope_leakage || { evaluated: 0, total: 0, pct: 0, list: [] };
   const b4 = tax.b4_distance_relatedness || { spearman: null, pairs: 0, pair_population: 0, sampled: false };
   const rho = b4.spearman == null ? '—' : Number(b4.spearman).toFixed(3);
   $('ins-sum').innerHTML =
-    tr('ins.sum', { n: c.notes, pct: c.pct, days: p.days, cold: p.cold_days }) + ` · 🖥 ${esc(d.host || '')}`;
+    tr('ins.sum', { n: c.notes, pct: c.pct, days: p.days, cold: p.cold_days,
+      work: wl.total }) + ` · 🖥 ${esc(d.host || '')}`;
 
   const tiles = [
     [tr('ins.tile.week'), w.cur_notes + ' ' + tr('stats.notes'), ''],
@@ -58,6 +76,7 @@ function render() {
     [tr('ins.tile.cold', { d: p.cold_days }), d.cold.total, d.cold.total ? 'warn' : ''],
     [tr('ins.tile.cooling'), d.cooling.total, ''],
     [tr('ins.tile.noindex'), wk.no_index.total, wk.no_index.total ? 'warn' : ''],
+    [tr('ins.tile.work'), wl.total, wl.counts.P1 ? 'warn' : ''],
     [tr('ins.tile.taxleak'), b3.pct + '%', b3.total ? 'warn' : ''],
     [tr('ins.tile.taxrho'), 'ρ ' + rho, ''],
   ].map(([lab, val, cls]) =>
@@ -97,6 +116,11 @@ function render() {
       m: Number(x.margin).toFixed(3),
     }));
   });
+  const work = (wl.items || []).map(x => {
+    const ev = x.evidence || {};
+    const tip = workTip(x, ev);
+    return row(x.file, x.priority, `${x.id}\n${tip}`);
+  });
   const taxonomy =
     `<div class="dash-h">${tr('ins.h.taxonomy')}</div>` +
     `<div class="ins-note">${tr('ins.tax.desc')}</div>` +
@@ -107,6 +131,8 @@ function render() {
 
   $('ins-body').innerHTML =
     `<div id="ins-tiles">${tiles}</div>` +
+    `<div class="dash-h">${tr('ins.h.worklist', { n: wl.total, p1: (wl.counts || {}).P1 || 0 })}</div>` +
+    `<div class="ins-note">${tr('ins.wl.readonly')}</div>${list(work, tr('ins.e.worklist'))}` +
     `<div class="dash-h">${tr('ins.h.hot', { d: p.days })}</div>${list(hot, tr('ins.e.hot'))}` +
     `<div class="dash-h">${tr('ins.h.age')}</div>${histHtml(d.cold.hist, d.cold.oldest_age)}` +
     `<div class="dash-h">${tr('ins.h.cooling', { n: p.cooling_min })}</div>${list(cooling, tr('ins.e.cooling'))}` +
@@ -139,7 +165,8 @@ function renderMini() {
   $('ins-mini').innerHTML =
     tr('ins.mini', { pct: d.coverage.pct, never: d.coverage.never, cold: d.cold.total,
       d: d.params.cold_days, leak: ((d.taxonomy || {}).b3_scope_leakage || {}).pct || 0,
-      orph: d.weak.orphans.total, noidx: d.weak.no_index.total });
+      orph: d.weak.orphans.total, noidx: d.weak.no_index.total,
+      work: (d.worklist || {}).total || 0 });
 }
 
 export async function pollInsight() {

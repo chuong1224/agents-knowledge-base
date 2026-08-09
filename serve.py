@@ -835,8 +835,8 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/insight":
-            # "Vault đang khoẻ không" (W10): tính trong insight.build_insight — cùng
-            # hàm mà CLI `insight.py --report` gọi, không có bộ đếm thứ hai. Chỉ ĐỌC:
+            # "Vault đang khoẻ không" + worklist H3: cùng build_insight/build_worklist
+            # mà CLI `insight.py --report` gọi, không có bộ đếm thứ hai. Chỉ ĐỌC:
             # event đã cache theo mtime + graph cache 3s + store heat, không ghi gì.
             qs = parse_qs(parsed.query)
 
@@ -849,10 +849,12 @@ class Handler(BaseHTTPRequestHandler):
             cold = _int("cold", insight.DEFAULT_COLD, 1, 365)
             heat_notes, heat_meta = merge_cumulative_stores()
             graph = get_graph_data()
-            ins = insight.build_insight(read_all_events(), graph,
+            events = read_all_events()
+            ins = insight.build_insight(events, graph,
                                         heat_notes=heat_notes, heat_meta=heat_meta,
                                         days=days, cold_days=cold,
-                                        taxonomy_result=insight.measure_taxonomy(graph))
+                                        taxonomy_result=insight.measure_taxonomy(graph),
+                                        chains=build_chains(events, limit=len(events) + 1))
             ins["boot_id"] = BOOT_ID
             ins["host"] = host_name()
             self._send(200, json.dumps(ins, ensure_ascii=False).encode("utf-8"))

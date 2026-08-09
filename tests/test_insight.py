@@ -11,6 +11,7 @@
   - taxonomy metrics: content unit = section la >=40 ky tu, TF-IDF cosine thuan
   - B3 scope leakage: section gan note anh em hon centroid note cha
   - B4 distance-relatedness: Spearman giua khoang cach cay va khoang cach noi dung
+  - W18/H3: worklist chi tieu thu snapshot, co uu tien/dich/bang chung, khong auto-apply
   - self_excludes: note bao cao do chinh module sinh KHONG duoc nam trong phep do
   - render_report: idempotent, KHONG sinh wikilink tro tung note (khong tu tao canh moi)
   - merge_cumulative_stores cua serve tra first/last (nguon cua chi so "nguoi")
@@ -94,9 +95,17 @@ HEAT = {
                        "first": NOW - 30 * D, "last": NOW - 20 * D, "agents": {"Claude": 7}},
 }
 META = {"machines": ["HOST-A"], "since": NOW - 40 * D, "updated": NOW}
+CHAIN_EVENTS = [
+    ev(1.0, "Work/A/A.md"), ev(0.999, "Work/A/A.md"), ev(0.998, "Work/A/A.md"),
+    ev(0.997, "Work/B/B.md"), ev(0.996, "Work/C/C.md"),
+    ev(0.995, "Research/D/D.md"), ev(0.994, "Research/E/E.md"),
+    ev(0.993, "Research/F/F.md"),
+]
+CHAINS = [{"agent": "Claude", "start": CHAIN_EVENTS[0]["ts"],
+           "end": CHAIN_EVENTS[-1]["ts"], "events": CHAIN_EVENTS}]
 
 I = IN.build_insight(EVENTS, GRAPH, heat_notes=HEAT, heat_meta=META, now=NOW,
-                     days=7, cold_days=7, exclude=set())
+                     days=7, cold_days=7, exclude=set(), chains=CHAINS)
 
 # ---- Taxonomy fixture rieng, khong phu thuoc event/heat ----
 TAX_DOCS = {
@@ -172,6 +181,9 @@ check("T5 build_insight xuat taxonomy cung snapshot",
       ITAX["taxonomy"]["available"]
       and ITAX["taxonomy"]["b3_scope_leakage"]["total"] == leaks["total"],
       ITAX["taxonomy"])
+check("T5 B3 margin du manh tu vao worklist review-only",
+      any(x["kind"] == "review_scope" and x["review_required"]
+          for x in ITAX["worklist"]["items"]), ITAX["worklist"])
 
 # ---- do thi note-note: canh tag/file bi bo ----
 notes, adj, hubs = IN.note_graph(GRAPH)
@@ -279,6 +291,36 @@ check("G ngoai index = moi note tru A, B (hub khong tu tinh)",
       set(wk["no_index"]["list"]) == {"Work/C/C.md", "Research/D/D.md",
                                       "Research/E/E.md", "Research/F/F.md"},
       wk["no_index"])
+check("G index gan nhat chon bang ancestry, khong doan cheo khu vuc",
+      wk["index_candidates"]["Work/C/C.md"] == "Work/Index - Work.md"
+      and wk["index_candidates"]["Research/F/F.md"] is None,
+      wk["index_candidates"])
+
+# ---- W18/H3: friction -> worklist actionable, read-only ----
+fr = I["friction"]
+check("H3 doc lap-lai tu chain canonical, khong gom lai event",
+      fr["available"] and fr["reread"]["list"][0] == {
+          "file": "Work/A/A.md", "rereads": 2, "chains": 1}, fr)
+check("H3 bat chuoi dai >= nguong voi dau-cuoi cu the",
+      fr["long"]["total"] == 1
+      and fr["long"]["list"][0]["first"] == "Work/A/A.md"
+      and fr["long"]["list"][0]["last"] == "Research/F/F.md", fr["long"])
+wl = I["worklist"]
+kinds = {x["kind"] for x in wl["items"]}
+check("H3 worklist co du 4 nhom hanh dong cu the",
+      {"connect_index", "review_index", "reduce_reread", "shorten_chain"} <= kinds,
+      wl["items"])
+check("H3 link index co dich chinh xac + blind spot len P1",
+      any(x["kind"] == "connect_index" and x["file"] == "Work/C/C.md"
+          and x["target"] == "Work/Index - Work.md" and x["priority"] == "P2"
+          for x in wl["items"])
+      and any(x["kind"] == "review_index" and x["file"] == "Research/F/F.md"
+              and x["priority"] == "P1" for x in wl["items"]), wl["items"])
+check("H3 tat ca item on dinh + review-required, top-level cam auto-apply",
+      not wl["auto_apply"] and wl["review_required"]
+      and all(x["id"].startswith("H3-") and x["review_required"] for x in wl["items"]), wl)
+check("H3 build_worklist idempotent tren cung snapshot",
+      wl == IN.build_worklist(I, limit=40))
 
 # ---- khu vuc ----
 ar = {a["area"]: a for a in I["areas"]}
@@ -342,12 +384,15 @@ check("R khong wikilink tro tung note duoc do",
 for f in ("Work/A/A.md", "Research/F/F.md"):
     check("R duong dan '%s' in dang code" % f, ("`%s`" % f) in txt)
 check("R co du cac muc noi dung + taxonomy",
-      all(h in txt for h in ("## Tổng quan", "## 🔥 Nóng nhất", "## 🌡 Tuổi lần đụng cuối",
+      all(h in txt for h in ("## Tổng quan", "## 📋 Worklist đề xuất", "## 🔥 Nóng nhất", "## 🌡 Tuổi lần đụng cuối",
                              "## 🥶 Đang nguội đi", "## 🕸 Nguội", "## 🚫 Chưa vào đường truy xuất",
                              "## 🔗 Cụm ít kết nối", "## 🌳 Taxonomy", "## 🗺 Theo khu vực")))
 check("R noi ro B3/B4 la descriptor, khong phai diem chat luong",
       "không phải điểm chất lượng" in txt and "B3 scope leakage" in txt
       and "B4 distance-relatedness" in txt)
+check("R worklist noi ro read-only + co ID/uu tien/bang chung",
+      "không tự sửa vault" in txt and "H3-" in txt
+      and "| ID | Ưu tiên | Đề xuất | Bằng chứng |" in txt)
 check("R ket thuc bang link index", txt.rstrip().endswith("[[Index - Audit Vault]]"))
 
 os.environ["GRAPH3D_INSIGHT_REPORT"] = RP
@@ -380,6 +425,9 @@ check("V /heat scope=all giu nguyen contract cu",
 sv_src = open(os.path.join(G3D, "serve.py"), encoding="utf-8").read()
 check("V serve co endpoint /insight goi insight.build_insight",
       '"/insight"' in sv_src and "insight.build_insight" in sv_src)
+check("V endpoint va CLI dung chain canonical cho worklist",
+      "chains=build_chains(events" in sv_src
+      and "chains=serve.build_chains(events" in open(os.path.join(G3D, "insight.py"), encoding="utf-8").read())
 check("V server nap taxonomy qua cache cua insight.py",
       "insight.measure_taxonomy(graph)" in sv_src)
 check("V insight.py nam trong _VERSION_FILES (sua module PHAI restart server)",
@@ -390,6 +438,9 @@ check("V UI khong tu tinh lai chi so (khong co nguong hard-code)",
 check("V UI trinh bay B3/B4 tu contract server, khong tu vector hoa",
       "b3_scope_leakage" in ui_src and "b4_distance_relatedness" in ui_src
       and "tfidf" not in ui_src.lower() and "spearman(" not in ui_src.lower())
+check("V UI trinh bay worklist server, khong tu sinh de xuat",
+      "d.worklist" in ui_src and "ins.wl." in ui_src
+      and "nearest_index" not in ui_src and "REREAD_MIN" not in ui_src)
 
 print("\nTONG KET:", ("FAIL %d muc" % len(fails)) if fails else "ALL PASS")
 sys.exit(1 if fails else 0)
