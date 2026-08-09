@@ -23,9 +23,9 @@ Endpoint:
                      tuần cuộn, note nguội theo lần đụng cuối, note CHƯA BAO GIỜ
                      agent đụng, cụm ít kết nối, coverage theo khu vực — tính trong
                      insight.py (CLI --report của module đó dùng CÙNG hàm)
-  /integrity     -> "vault có đang GÃY chỗ nào không" (W11): wikilink/nhúng gãy,
-                     anchor lệch heading, ảnh mồ côi, note thiếu trường frontmatter
-                     bắt buộc, file nhị phân chưa "mở nilon" — tính trong
+  /integrity     -> "vault có đang GÃY chỗ nào không" (W11/W149): wikilink/nhúng gãy,
+                     anchor lệch heading, ảnh mồ côi, YAML frontmatter vỡ/thiếu trường,
+                     file nhị phân chưa "mở nilon" — tính trong
                      integrity.py (tiêu chí bỏ qua note lấy của gate verify_vault_
                      integrity.py; luật đếm được đọc từ vault-rules.json trong vault)
   /onboarding    -> vault có TRỐNG không + lối đi nào sẵn có (W13): starter-vault/

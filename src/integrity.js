@@ -11,8 +11,8 @@ import { wsOpen } from './workspace.js';
 
 let DB = null;
 
-/* 🟢 sạch · 🔴 có vấn đề · ⚪ check tắt (vault không có nguồn luật) */
-function lamp(c) { return !c.available ? '⚪' : (c.total ? '🔴' : '🟢'); }
+/* 🟢 sạch · 🔴 có vấn đề · ⚠ checker bắt buộc tắt · ⚪ luật tùy chọn chưa khai */
+function lamp(c) { return !c.available ? (c.critical ? '⚠' : '⚪') : (c.total ? '🔴' : '🟢'); }
 
 /* Mở mục lỗi: note → Reader; file khác → tab mới qua /asset (như cây vault).
    Không phải mục nào cũng là node trên graph: mục "ngoại lệ mồ côi" trỏ thẳng tới
@@ -28,13 +28,13 @@ function openItem(rel) {
 function itemRow(it) {
   const node = byId.get(it.file);
   const name = node ? node.stem : (it.file || '').split('/').pop().replace(/\.md$/i, '');
-  const where = it.line ? `:${it.line}` : '';
+  const where = it.line ? `:${it.line}${it.column ? `:${it.column}` : ''}` : '';
   return `<div class="itg-item" data-file="${esc(it.file)}" title="${esc(it.file + where)}">` +
     `<span class="f">${esc(name)}${esc(where)}</span>` +
     `<span class="d">${esc(it.detail || '')}</span></div>`;
 }
 
-/* Nhãn/mô tả/cách sửa của 6 check do integrity.py gửi kèm (tiếng Việt — CLI dùng chính
+/* Nhãn/mô tả/cách sửa của 10 check do integrity.py gửi kèm (tiếng Việt — CLI dùng chính
    chuỗi đó). Trên UI thì ƯU TIÊN từ điển theo id check để còn dịch được; thiếu khoá thì
    rơi về chuỗi server, không bao giờ trống. Server vẫn là nơi ĐỊNH NGHĨA check. */
 function cText(c, field) {
@@ -48,7 +48,9 @@ function checkBlock(c) {
     `<b>${esc(cText(c, 'label'))}</b><span class="n">${c.available ? c.total : '—'}</span></div>`;
   let body;
   if (!c.available) {
-    body = `<div class="itg-desc">${tr('itg.off')}</div>`;
+    const off = c.reason_code === 'missing_pyyaml'
+      ? tr('itg.off.missing_pyyaml') : tr('itg.off.missing_rule');
+    body = `<div class="itg-desc" title="${esc(c.reason || '')}">${off}</div>`;
   } else if (!c.total) {
     body = `<div class="itg-desc">${esc(cText(c, 'desc'))} — ${tr('itg.clean')}</div>`;
   } else {
@@ -63,9 +65,11 @@ function checkBlock(c) {
 
 function render() {
   const d = DB, v = d.vault;
-  $('itg-sum').innerHTML = d.ok
-    ? tr('itg.sum.ok', { c: v.checked, n: v.notes })
-    : tr('itg.sum.bad', { p: d.problems, c: v.checked, n: v.notes });
+  $('itg-sum').innerHTML = d.degraded
+    ? tr('itg.sum.degraded', { p: d.problems, c: v.checked, n: v.notes })
+    : (d.ok
+      ? tr('itg.sum.ok', { c: v.checked, n: v.notes })
+      : tr('itg.sum.bad', { p: d.problems, c: v.checked, n: v.notes }));
 
   $('itg-body').innerHTML =
     `<div class="dash-h">${tr('itg.fam.structure')}</div>` +
@@ -92,10 +96,12 @@ function renderMini() {
   // Nhãn chạy giữa câu nên hạ chữ đầu — CHỈ chữ đầu: `toLowerCase()` cả chuỗi biến
   // "title ≠ tên file ≠ H1" thành "… h1" (audit W41).
   const lower = s => s.charAt(0).toLowerCase() + s.slice(1);
-  $('itg-mini').innerHTML = d.ok
-    ? tr('itg.mini.ok', { c: d.vault.checked, n: d.vault.notes })
-    : tr('itg.mini.bad', { p: d.problems }) +
-      bad.map(c => `${c.total} ${esc(lower(cText(c, 'label')))}`).join(' · ');
+  $('itg-mini').innerHTML = d.degraded
+    ? tr('itg.mini.degraded', { p: d.problems })
+    : (d.ok
+      ? tr('itg.mini.ok', { c: d.vault.checked, n: d.vault.notes })
+      : tr('itg.mini.bad', { p: d.problems }) +
+        bad.map(c => `${c.total} ${esc(lower(cText(c, 'label')))}`).join(' · '));
 }
 
 export async function pollIntegrity() {

@@ -2,8 +2,8 @@
 """Test den bao toan ven vault (W11 + W41) — integrity.scan_vault + build_integrity + collect:
 
   - 4 check cau truc: wikilink gay, nhung gay, anchor lech heading, anh mo coi
-  - 5 check contract: thieu truong frontmatter bat buoc, file nhi phan chua "mo nilon",
-    tag ngoai vocabulary, index sai tag, title != ten file != H1 (W41)
+  - 6 check contract: YAML frontmatter vo (W149), thieu truong bat buoc, file nhi phan
+    chua "mo nilon", tag ngoai vocabulary, index sai tag, title != ten file != H1 (W41)
   - ngoai le title (policy.title_rule.exceptions) PIN gia tri: note trong danh sach van
     bi bat neu title troi tiep; ngoai le khai cho note khong con ton tai cung bi bao
   - thieu LE mot khoa policy -> chi check do tat, cac check contract khac van chay
@@ -12,7 +12,7 @@
   - app NOI hon gate co chu y: hoa/thuong khong phan biet; anh duoc nhac bang
     [[x.png]] hay ![](attachments/x.png) van tinh la co nguoi dung
   - pham vi = pham vi scanner graph: node_modules/.trash/dot-folder khong bi quet
-  - thieu nguon luat (vault-rules.json) -> 2 check contract TAT em, cau truc van chay
+  - thieu nguon luat (vault-rules.json) -> 5 check policy TAT em, YAML + cau truc van chay
   - parse frontmatter dung parser cua vault_rules.py: tags dang YAML list nhieu dong
     KHONG bi bao thieu (bug regex chi bat 'tags: [...]' inline, audit 26/07)
   - cache theo chu ky mtime: goi 2 lan tra CUNG object, sua note thi do lai
@@ -180,6 +180,12 @@ def build_fake_vault():
     w("Work/Gamma/Gamma.md", fm("Gamma", aliases=False, summary=False) +
       "![[mat-tieu.png]]\n")
 
+    # W149: parser dong van boc du field, nhung YAML that phai nem loi o dong summary
+    w("Work/Vo YAML/Vo YAML.md",
+      '---\ntitle: Vo YAML\naliases: ["Vo"]\n'
+      'summary: "noi dung co "dau nhay kep" khong escape"\n'
+      'tags: [JXM]\n---\n\n# Vo YAML\n')
+
     # Delta: gate_ignore CUOI khoi frontmatter dai -> mien bao loi
     w("Work/Delta/Delta.md",
       "---\ntitle: Delta\n" + 'aliases: ["%s"]\n' % ("x" * 600) +
@@ -245,10 +251,10 @@ rep = ITG.collect(vault=VAULT_DIR, rules_dir=RULES_DIR, use_cache=False)
 C = by_id(rep)
 
 # --- pham vi + tieu chi bo qua ---
-check("1 dem dung so note trong pham vi (bo node_modules/.trash)", rep["vault"]["notes"] == 19,
+check("1 dem dung so note trong pham vi (bo node_modules/.trash)", rep["vault"]["notes"] == 20,
       rep["vault"])
-check("1 mien 3 note (_Meta + 2 gate_ignore), kiem 16",
-      (rep["vault"]["ignored"], rep["vault"]["checked"]) == (3, 16), rep["vault"])
+check("1 mien 3 note (_Meta + 2 gate_ignore), kiem 17",
+      (rep["vault"]["ignored"], rep["vault"]["checked"]) == (3, 17), rep["vault"])
 
 # --- check cau truc ---
 check("2 wikilink gay = 1 (Beta -> Khong Ton Tai)", C["link"]["total"] == 1,
@@ -271,6 +277,22 @@ check("2 anh nhac kieu [[x.png]] / markdown KHONG bi coi la mo coi",
           for i in C["orphan"]["list"]), C["orphan"]["list"])
 
 # --- check contract ---
+check("3 YAML vo bi bat dung note + dong + cot",
+      C["yaml"]["total"] == 1
+      and C["yaml"]["list"][0]["file"] == "Work/Vo YAML/Vo YAML.md"
+      and C["yaml"]["list"][0]["line"] == 4
+      and C["yaml"]["list"][0]["column"] > 1,
+      C["yaml"]["list"])
+summary_lines = []
+ITG.print_summary(rep, out=summary_lines.append)
+check("3 YAML vo hien du file:dong:cot tren CLI",
+      any("Work/Vo YAML/Vo YAML.md:4:%s" % C["yaml"]["list"][0]["column"] in line
+          for line in summary_lines), summary_lines)
+check("3 YAML vo khong bi parser dong tao them bao loi contract gia",
+      all("Vo YAML" not in i["file"]
+          for k in ("frontmatter", "tag", "index_tag", "title") for i in C[k]["list"]),
+      {k: [i["file"] for i in C[k]["list"]]
+       for k in ("frontmatter", "tag", "index_tag", "title")})
 check("3 thieu truong frontmatter = 1 (Gamma thieu aliases+summary)",
       C["frontmatter"]["total"] == 1
       and set(C["frontmatter"]["list"][0]["missing"]) == {"aliases", "summary"},
@@ -322,7 +344,7 @@ check("3c note gate_ignore vi pham ca 3 check moi van duoc MIEN",
 check("3c ngoai le khai HONG (thieu title) duoc noi thang, khong so voi chuoi rong",
       "khai thiếu" in T.get("Khai Hong.md", "") and '“”' not in T.get("Khai Hong.md", ""),
       T.get("Khai Hong.md"))
-check("3b tong so van de = 15", rep["problems"] == 15,
+check("3b tong so van de = 16", rep["problems"] == 16,
       {c["id"]: c["total"] for c in rep["checks"]})
 
 check("3c wikilink trong bang `[[Note\\|alias]]` KHONG bi bao gay (bao oan, audit W41)",
@@ -337,7 +359,7 @@ check("4 thieu vault-rules.json -> ca 5 check contract available=False",
               for k in ("frontmatter", "digest", "tag", "index_tag", "title")), rep2["rules"])
 check("4 check cau truc VAN chay khi thieu nguon luat",
       all(C2[k]["available"] for k in ("link", "embed", "anchor", "orphan")))
-check("4 problems chi con phan cau truc = 4", rep2["problems"] == 4,
+check("4 problems gom cau truc + YAML doc lap nguon luat = 5", rep2["problems"] == 5,
       {c["id"]: c["total"] for c in rep2["checks"]})
 check("4 rules.reason noi ro vi sao tat", bool(rep2["rules"].get("reason")), rep2["rules"])
 
@@ -389,6 +411,19 @@ check("6 _title_problems: khop du bo ba thi rong",
       ITG._title_problems({"stem": "X", "h1": "X"}, "X", None, True) == [])
 check("6 build_integrity la ham thuan (now truyen vao)",
       ITG.build_integrity(ITG.scan_vault(VAULT_DIR), now=123.0)["generated"] == 123.0)
+
+# --- W149: thieu PyYAML phai DEGRADE + exit 2, tuyet doi khong bao sach gia ---
+rules6, info6 = ITG.load_rules(RULES_DIR)
+rep6 = ITG.build_integrity(ITG.scan_vault(VAULT_DIR), rules=rules6, rules_info=info6,
+                           yaml_loader=None, yaml_reason="ImportError test")
+C6 = by_id(rep6)
+check("6 thieu PyYAML -> check yaml TAT co ly do ro",
+      not C6["yaml"]["available"] and "PyYAML" in C6["yaml"]["reason"], C6["yaml"])
+check("6 thieu PyYAML -> degraded + ok=False + exit 2 (khong xanh gia)",
+      rep6["degraded"] and not rep6["ok"] and rep6["warnings"]
+      and ITG.result_exit_code(rep6) == 2,
+      {"degraded": rep6["degraded"], "ok": rep6["ok"],
+       "warnings": rep6["warnings"], "exit": ITG.result_exit_code(rep6)})
 
 print("\nKET QUA: " + ("FAIL %d muc: %s" % (len(fails), ", ".join(fails)) if fails else "ALL PASS"))
 sys.exit(1 if fails else 0)

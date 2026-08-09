@@ -6,20 +6,21 @@ Bộ ba câu hỏi về vault, mỗi cái một module:
   `/insight`   → "vault có đang được dùng đủ khắp không" (insight.py)
   `/integrity` → **"vault có đang GÃY chỗ nào không"** — module này.
 
-Chín check cơ học, chia hai họ:
+Mười check cơ học, chia hai họ:
   CẤU TRÚC (không cần nguồn luật — vault nào cũng chạy được)
     1 link    wikilink `[[Note]]` trỏ tới note/file không tồn tại
     2 embed   nhúng `![[file]]` trỏ tới file không tồn tại
     3 anchor  `[[Note#Heading]]` mà Note không có heading đó
     4 orphan  ảnh/video trong vault không note nào nhắc tới
   CONTRACT (đọc luật từ `vault-rules.json` — thiếu luật nào thì check đó tắt êm)
-    5 frontmatter  note thiếu trường BẮT BUỘC (`policy.mandatory_frontmatter`)
-    6 digest       file nhị phân trong `attachments/` chưa "mở nilon"
+    5 yaml         frontmatter không parse được bằng YAML thật (`yaml.safe_load`)
+    6 frontmatter  note thiếu trường BẮT BUỘC (`policy.mandatory_frontmatter`)
+    7 digest       file nhị phân trong `attachments/` chưa "mở nilon"
                    (thiếu tên trong `file_digest` — §VI Q18, `policy.binary_digest_ext`)
-    7 tag          note dùng tag ngoài controlled vocabulary (`policy.tag_vocabulary`)
-    8 index_tag    file index không đúng 1 tag `index`, hoặc note thường mượn tag
+    8 tag          note dùng tag ngoài controlled vocabulary (`policy.tag_vocabulary`)
+    9 index_tag    file index không đúng 1 tag `index`, hoặc note thường mượn tag
                    `index` (§IV, `policy.index_rule`)
-    9 title        `title` ≠ tên file ≠ H1 (§V, `policy.title_rule` — ngoại lệ khai
+   10 title        `title` ≠ tên file ≠ H1 (§V, `policy.title_rule` — ngoại lệ khai
                    trong `title_rule.exceptions`, KHÔNG đoán)
 
 KHÔNG thay thế gate `verify_vault_integrity.py`: gate vẫn là chuẩn NGHIỆM THU
@@ -34,8 +35,9 @@ Quan hệ số liệu với gate — chốt để hai bên không cãi nhau:
   * 4 check cấu trúc: một implementation duy nhất ở module này. Gate gọi
     `build_integrity()` nên cùng so khớp không phân biệt hoa/thường và cùng tính
     `[[x.png]]` / `![](attachments/x.png)` là reference hợp lệ.
-  * Contract: app có đủ 5 check; gate chỉ giữ các check nghiệm thu riêng (CN và
-    digest). Đuôi digest của cả hai cùng đọc `policy.binary_digest_ext`.
+  * Contract: app có 6 check — YAML thật độc lập với nguồn luật + 5 check đọc
+    policy; gate chỉ giữ các check nghiệm thu riêng (CN và digest). Đuôi digest
+    của cả hai cùng đọc `policy.binary_digest_ext`.
   * Phạm vi: app đo phạm vi graph (bỏ dot-folder + `EXCLUDED_DIRS`); gate chủ động
     cấp cho engine một walk rộng hơn để giữ contract nghiệm thu cũ. Vì đầu vào khác,
     tổng note có thể lệch dù ngữ nghĩa 4 check hoàn toàn giống nhau.
@@ -49,7 +51,7 @@ audit dùng — hết cảnh mỗi bên một regex). Vault khác/bản public k
 luật" thay vì đoán bừa — mỗi check tự soi phần luật của mình.
 
 Chạy tay:
-  python .graph3d/integrity.py            # tóm tắt console (exit 1 nếu có lỗi)
+  python .graph3d/integrity.py            # exit 0 sạch · 1 có lỗi · 2 thiếu PyYAML
   python .graph3d/integrity.py --json     # đổ nguyên JSON (debug)
   python .graph3d/integrity.py --list 100 # nới trần danh sách mỗi check
 
@@ -62,6 +64,14 @@ import os
 import re
 import sys
 import time
+
+try:
+    import yaml as _yaml
+    YAML_SAFE_LOAD = _yaml.safe_load
+    YAML_IMPORT_ERROR = ""
+except Exception as exc:                                  # noqa: BLE001 — dependency tùy chọn
+    YAML_SAFE_LOAD = None
+    YAML_IMPORT_ERROR = "%s: %s" % (type(exc).__name__, exc)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 VAULT = os.path.dirname(HERE)
@@ -125,6 +135,9 @@ CHECKS = [
     ("orphan", "Ảnh/video mồ côi", "structure",
      "file media trong vault không note nào nhắc tới",
      "Nhúng vào note đúng chỗ, hoặc xoá nếu là rác của lần import cũ."),
+    ("yaml", "Frontmatter YAML vỡ", "contract",
+     "khối frontmatter không parse được bằng YAML thật (`yaml.safe_load`)",
+     "Sửa cú pháp YAML tại dòng/cột được báo; dấu nháy nằm trong chuỗi phải escape hoặc đổi kiểu nháy."),
     ("frontmatter", "Thiếu trường frontmatter", "contract",
      "note thiếu trường BẮT BUỘC theo vault-rules.json (policy.mandatory_frontmatter)",
      "Bổ sung trường còn thiếu — aliases/summary là 'bìa' để agent triage, thiếu là bị bỏ sót."),
@@ -141,6 +154,9 @@ CHECKS = [
      "title (frontmatter) phải trùng tên file .md và trùng H1 — trừ ngoại lệ khai trong vault-rules.json",
      "Sửa cho khớp. Lệch CÓ CHỦ Ý (rút gọn path) thì khai vào policy.title_rule.exceptions, đừng để đèn tự đoán."),
 ]
+
+CRITICAL_CHECKS = {"yaml"}       # tắt check này thì không được phép báo "sạch"
+_YAML_DEFAULT = object()
 
 
 # --------------------------------------------------------------------- tiện ích
@@ -343,13 +359,16 @@ def load_rules(rules_dir=None):
 
 # ------------------------------------------------------------------ phép tính
 
-def build_integrity(scan, rules=None, rules_info=None, now=None, list_n=LIST_N):
+def build_integrity(scan, rules=None, rules_info=None, now=None, list_n=LIST_N,
+                    yaml_loader=_YAML_DEFAULT, yaml_reason=""):
     """Ảnh chụp toàn vẹn vault — HÀM THUẦN (không đọc đĩa, `now` truyền vào → test được).
 
     scan       — kết quả scan_vault()
     rules      — {} hoặc {mandatory_frontmatter, binary_digest_ext, tag_vocabulary,
                  index_rule, title_rule, parse_frontmatter}
     rules_info — mô tả nguồn luật để UI giải thích khi check contract tắt
+    yaml_loader — mặc định `yaml.safe_load`; truyền None trong test để mô phỏng thiếu
+                  PyYAML. Thiếu validator là trạng thái DEGRADED, không được báo sạch.
     """
     now = float(now if now is not None else time.time())
     notes, files = scan["notes"], scan["files"]
@@ -360,6 +379,9 @@ def build_integrity(scan, rules=None, rules_info=None, now=None, list_n=LIST_N):
     index_rule = dict(rules.get("index_rule") or {})
     title_rule = dict(rules.get("title_rule") or {})
     parse_fm = rules.get("parse_frontmatter")
+    if yaml_loader is _YAML_DEFAULT:
+        yaml_loader = YAML_SAFE_LOAD
+        yaml_reason = YAML_IMPORT_ERROR
 
     idx_tag = str(index_rule.get("tag") or "").strip()
     idx_prefix = str(index_rule.get("name_prefix") or "").strip().lower()
@@ -375,6 +397,7 @@ def build_integrity(scan, rules=None, rules_info=None, now=None, list_n=LIST_N):
     # Mỗi check contract tự soi phần luật CỦA MÌNH: vault khai thiếu `index_rule` thì chỉ
     # đèn index tắt, đừng kéo cả họ contract tắt theo (bản public/vault khác dùng dần).
     avail = {"link": True, "embed": True, "anchor": True, "orphan": True,
+             "yaml": bool(yaml_loader),
              "frontmatter": bool(parse_fm and mandatory),
              "digest": bool(parse_fm and digest_ext),
              "tag": bool(parse_fm and vocab),
@@ -395,6 +418,7 @@ def build_integrity(scan, rules=None, rules_info=None, now=None, list_n=LIST_N):
 
     hits = {cid: [] for cid, _l, _f, _d, _h in CHECKS}
     referenced = set()          # basename mọi đích link — dùng tìm media mồ côi
+    yaml_invalid = set()        # note YAML vỡ: không chạy tiếp parser dòng khoan dung
     checked = ignored = 0
 
     for rel in sorted(notes):
@@ -402,6 +426,28 @@ def build_integrity(scan, rules=None, rules_info=None, now=None, list_n=LIST_N):
         active = not n["ignored"]
         checked += 1 if active else 0
         ignored += 0 if active else 1
+
+        if active and avail["yaml"]:
+            block = frontmatter_block(n["text"])
+            if block:
+                try:
+                    parsed_yaml = yaml_loader(block)
+                    if parsed_yaml is not None and not isinstance(parsed_yaml, dict):
+                        yaml_invalid.add(rel)
+                        hits["yaml"].append(
+                            {"file": rel, "line": 2, "column": 1, "target": "",
+                             "detail": "frontmatter phải là mapping `key: value`, đang là %s"
+                                       % type(parsed_yaml).__name__})
+                except Exception as exc:                  # noqa: BLE001 — lỗi parser là dữ liệu cần báo
+                    yaml_invalid.add(rel)
+                    mark = getattr(exc, "problem_mark", None)
+                    line = int(getattr(mark, "line", 0)) + 2
+                    col = int(getattr(mark, "column", 0)) + 1
+                    problem = str(getattr(exc, "problem", "") or str(exc)).splitlines()[0]
+                    hits["yaml"].append(
+                        {"file": rel, "line": line, "column": col, "target": "",
+                         "detail": "YAML không hợp lệ tại dòng %d, cột %d: %s"
+                                   % (line, col, problem)})
 
         for i, line in enumerate(n["text"].splitlines(), 1):
             for m in EMBED_RE.finditer(line):
@@ -439,7 +485,7 @@ def build_integrity(scan, rules=None, rules_info=None, now=None, list_n=LIST_N):
                     continue        # anchor nội bộ / URL ngoài
                 referenced.add(os.path.basename(tgt.split("#")[0]).lower())
 
-        if active and need_fm:
+        if active and need_fm and rel not in yaml_invalid:
             fm = parse_fm(n["text"])              # parse MỘT lần cho cả 4 check contract
             tags = fm.get("tags") or []
             tags = [tags] if isinstance(tags, str) else list(tags)
@@ -497,7 +543,7 @@ def build_integrity(scan, rules=None, rules_info=None, now=None, list_n=LIST_N):
                 binary_by_folder.setdefault(os.path.dirname(d), []).append(rel)
         for folder, bins in sorted(binary_by_folder.items()):
             owner = _owner_note(folder, notes_by_folder, notes)
-            if owner is None or notes[owner]["ignored"]:
+            if owner is None or notes[owner]["ignored"] or owner in yaml_invalid:
                 continue      # folder không xác định được chủ (không phải folder-per-note)
             declared = parse_fm(notes[owner]["text"]).get("file_digest")
             declared = [str(x).strip().lower() for x in (declared or [])] \
@@ -521,18 +567,34 @@ def build_integrity(scan, rules=None, rules_info=None, now=None, list_n=LIST_N):
                      "detail": "ngoại lệ title khai cho note không còn tồn tại: %s"
                                % excs[key].get("file", key)})
 
+    unavailable = {
+        "yaml": "không nạp được PyYAML — check cú pháp YAML thật đã TẮT%s"
+                % ((": " + yaml_reason) if yaml_reason else ""),
+        "frontmatter": "thiếu parser frontmatter hoặc policy.mandatory_frontmatter",
+        "digest": "thiếu parser frontmatter hoặc policy.binary_digest_ext",
+        "tag": "thiếu parser frontmatter hoặc policy.tag_vocabulary",
+        "index_tag": "thiếu parser frontmatter hoặc policy.index_rule.tag",
+        "title": "thiếu parser frontmatter hoặc policy.title_rule",
+    }
     checks = []
     for cid, label, family, desc, fix in CHECKS:
         ok = avail[cid]
         checks.append({"id": cid, "label": label, "family": family, "desc": desc,
-                       "fix": fix, "available": ok,
+                       "fix": fix, "available": ok, "critical": cid in CRITICAL_CHECKS,
+                       "reason_code": "" if ok else
+                                      ("missing_pyyaml" if cid == "yaml" else "missing_rule"),
+                       "reason": "" if ok else unavailable.get(cid, "check không khả dụng"),
                        "total": len(hits[cid]) if ok else 0,
                        "list": hits[cid][:list_n] if ok else []})
     problems = sum(c["total"] for c in checks)
+    degraded = any(c["critical"] and not c["available"] for c in checks)
+    warnings = [c["reason"] for c in checks if c["critical"] and not c["available"]]
     media = sum(1 for ext in files.values() if ext in MEDIA_EXTS)
     return {
         "generated": now,
-        "ok": problems == 0,
+        "ok": problems == 0 and not degraded,
+        "degraded": degraded,
+        "warnings": warnings,
         "problems": problems,
         "vault": {"notes": len(notes), "checked": checked, "ignored": ignored,
                   "files": len(files), "media": media},
@@ -649,17 +711,33 @@ def print_summary(rep, out=print):
     if not rep["rules"].get("loaded"):
         out("⚠ check contract TẮT — %s (%s)"
             % (rep["rules"].get("reason", "?"), rep["rules"].get("path", "?")))
+    for warning in rep.get("warnings", []):
+        out("⚠ %s" % warning)
     for c in rep["checks"]:
         if not c["available"]:
-            out("  —  %-28s (tắt: thiếu nguồn luật)" % c["label"])
+            out("  —  %-28s (tắt: %s)" % (c["label"], c.get("reason", "không khả dụng")))
             continue
         out("  %s %-28s %d" % ("🔴" if c["total"] else "🟢", c["label"], c["total"]))
         for it in c["list"][:8]:
-            loc = "%s:%s" % (it["file"], it["line"]) if it.get("line") else it["file"]
+            if it.get("line"):
+                loc = "%s:%s" % (it["file"], it["line"])
+                if it.get("column"):
+                    loc += ":%s" % it["column"]
+            else:
+                loc = it["file"]
             out("      %s — %s" % (loc, it["detail"]))
         if c["total"] > 8:
             out("      … còn %d mục" % (c["total"] - 8))
     out("TỔNG: %d vấn đề" % rep["problems"])
+    if rep.get("degraded"):
+        out("KẾT QUẢ: KHÔNG ĐỦ PHÉP ĐO — không được coi là sạch")
+
+
+def result_exit_code(rep):
+    """0=sạch thật · 1=có lỗi dữ liệu · 2=thiếu checker bắt buộc (không xanh giả)."""
+    if rep.get("degraded"):
+        return 2
+    return 1 if rep["problems"] else 0
 
 
 def main(argv=None):
@@ -678,7 +756,7 @@ def main(argv=None):
         print(json.dumps(rep, ensure_ascii=False, indent=2))
     else:
         print_summary(rep)
-    return 1 if rep["problems"] else 0        # exit code kiểu gate — script dùng lại được
+    return result_exit_code(rep)
 
 
 if __name__ == "__main__":

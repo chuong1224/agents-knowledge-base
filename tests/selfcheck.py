@@ -15,7 +15,7 @@
      + test_journal (journal dong bo log 2 may qua vault, v1.25.0)
      + test_insight (tang insight suc khoe vault /insight + note bao cao, W10)
      + test_integrity (den bao toan ven vault /integrity — link/nhung/anchor gay,
-       anh mo coi, frontmatter, "mo nilon"; W11)
+       anh mo coi, YAML frontmatter vo/thieu truong, "mo nilon"; W11/W149)
      + test_onboarding (vault trong: state/install_starter/mirror_app, W13)
      + test_i18n (song ngu VI/EN: 2 ngon ngu cung tap khoa, khoa dung deu co that,
        bien {x} khop, src/*.js het chuoi giao dien tieng Viet; W43)
