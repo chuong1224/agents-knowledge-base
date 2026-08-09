@@ -12,14 +12,14 @@ Ba dieu tuyet doi khong duoc vo, moi dieu mot may gac:
   3. Semver KHONG duoc chep ra hang so thu hai; no phai derive tu badge index.html
      (contract 2i cua selfcheck gac badge chi xuat hien 1 lan).
 """
-import io, os, re, sys, tempfile
+import io, os, re, shutil, sys, tempfile
 sys.dont_write_bytecode = True
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
     pass
 
-from _scratch import G3D
+from _scratch import G3D, SCRATCH
 
 sys.path.insert(0, G3D)
 import activity_paths                      # noqa: E402
@@ -53,7 +53,10 @@ check("1 update_check.py nam trong _VERSION_FILES (serve.py import luc nap)",
       "update_check.py" in activity_paths._VERSION_FILES)
 
 # --- 2: CHUA dong y => TUYET DOI khong goi mang ---
-_tmp = tempfile.mkdtemp()
+_tmp = os.path.join(SCRATCH, "update-state")
+if os.path.isdir(_tmp):
+    shutil.rmtree(_tmp)
+os.makedirs(_tmp)
 os.environ["LOCALAPPDATA"] = _tmp                 # state file ra thu muc tam
 
 

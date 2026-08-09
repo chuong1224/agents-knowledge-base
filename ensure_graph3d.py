@@ -13,7 +13,8 @@ GET /ping (khi server đang chạy). Tuyệt đối không agent nào tự chạ
 Hai cờ onboarding cho người CHƯA có vault (W13 — logic ở onboarding.py):
   --demo              mở cockpit trên vault demo bundled (port riêng 8322, không đụng
                       server đang chạy trên vault thật)
-  --init-starter DIR  dựng vault đầu tiên tại DIR từ starter-vault/ rồi thoát
+  --init-starter DIR  dựng vault đầu tiên tại DIR từ starter-vault/ rồi thoát;
+                      thêm --force để nhập note hướng dẫn vào vault đang có
 
 Cờ --app (W58/W60): nếu Edge đã cài site-app KB Graph 3D thì ưu tiên AUMID packaged
 trong Windows Start Apps (Edge hiện hành), kế đến ``--app-id`` trong shortcut kiểu cũ,
@@ -259,15 +260,23 @@ def open_ui(url, app_mode):
     webbrowser.open(url)
 
 
-def init_starter(target):
+def init_starter(target, force=False):
     """--init-starter: chép starter-vault/ vào DIR. In từng file cho người dùng thấy
     mình vừa nhận được cái gì, rồi chỉ luôn bước kế (mở cockpit trên vault mới)."""
     try:
-        res = onb.install_starter(target)
+        res = onb.install_starter(target, force=force)
     except onb.OnboardingError as exc:
         print("KB Graph 3D: %s" % exc)
+        if getattr(exc, "code", "") == "target_not_empty":
+            print("  -> Muon them note huong dan vao vault dang co, chay lai voi --force:")
+            print('     python "%s" --init-starter "%s" --force'
+                  % (os.path.join(HERE, "ensure_graph3d.py"), os.path.abspath(target)))
+            print("     --force van KHONG de file trung ten; file cua ban luon duoc giu nguyen.")
         return 2
-    print("KB Graph 3D: da tao vault dau tien tai %s" % res["target"])
+    if force:
+        print("KB Graph 3D: da them bo note huong dan vao %s" % res["target"])
+    else:
+        print("KB Graph 3D: da tao vault dau tien tai %s" % res["target"])
     for rel in res["created"]:
         print("  + " + rel)
     for rel in res["skipped"]:
@@ -312,18 +321,23 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=None,
                     help="mac dinh 8321, rieng --demo mac dinh %d" % onb.DEMO_PORT)
-    ap.add_argument("--no-open", action="store_true")
+    ap.add_argument("--no-open", action="store_true",
+                    help="khoi dong server nhung khong mo trinh duyet")
     ap.add_argument("--demo", action="store_true",
                     help="mo cockpit tren vault demo bundled (khong can vault cua ban)")
     ap.add_argument("--init-starter", metavar="DIR",
-                    help="tao vault dau tien tai DIR tu starter-vault/ roi thoat")
+                    help="tao starter tai DIR; mac dinh doi vault trong, KHONG de file trung ten")
+    ap.add_argument("--force", action="store_true",
+                    help="kem --init-starter: cho vault dang co; van KHONG de file trung ten")
     ap.add_argument("--app", action="store_true",
                     help="mo bang cua so app cua Edge/Chrome thay vi tab trinh duyet")
     args = ap.parse_args()
     log = bind_console()
 
+    if args.force and not args.init_starter:
+        ap.error("--force chi dung kem --init-starter DIR")
     if args.init_starter:
-        sys.exit(init_starter(args.init_starter))
+        sys.exit(init_starter(args.init_starter, force=args.force))
     if args.demo:
         sys.exit(run_demo(args.port or onb.DEMO_PORT, not args.no_open, args.app))
     args.port = args.port or 8321

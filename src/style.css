@@ -786,6 +786,14 @@ select#ck-day:focus { border-color: var(--cyan); }
    z-index 42 = TRÊN mọi overlay khác (41): vault trống thì chẳng có gì để xem bên dưới,
    và đây là thứ duy nhất user mới cần thấy. Không dùng backdrop mờ đặc — vẫn để lộ
    nền sao/brand để user thấy app đang chạy bình thường, chỉ là chưa có dữ liệu. */
+/* W44: khi chưa có note, chrome graph chưa có đối tượng để thao tác. Ẩn hẳn cây,
+   panel (kể cả 0/0 integrity), hint và layout khỏi thứ tự Tab; brand + VI/EN +
+   onboarding vẫn giữ nguyên. Class được onboarding.js đồng bộ từ S.all.meta.notes. */
+:root.vault-empty { --rail-w: 0px; }
+:root.vault-empty #sidebar, :root.vault-empty #sidebar-toggle,
+:root.vault-empty #panel, :root.vault-empty #panel-toggle,
+:root.vault-empty #reader, :root.vault-empty #hint,
+:root.vault-empty #layout-fab { display: none; }
 #onb { position: absolute; inset: 0; z-index: 42; display: none; background: rgba(8,6,16,.72); }
 #onb.show { display: block; }
 #onb-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -798,8 +806,9 @@ select#ck-day:focus { border-color: var(--cyan); }
   color: var(--cyan); flex: none; }
 #onb-sum { color: var(--faint); font-size: 11px; }
 #onb-sum b { color: var(--muted); }
-#onb-x { margin-left: auto; cursor: pointer; color: var(--faint); font-size: 15px; flex: none; }
-#onb-x:hover { color: var(--magenta); }
+#onb-x { margin-left: auto; padding: 2px 4px; border: 0; background: transparent;
+  cursor: pointer; color: var(--faint); font: inherit; font-size: 15px; line-height: 1; flex: none; }
+#onb-x:hover, #onb-x:focus-visible { color: var(--magenta); }
 /* Câu tuyên ngôn EN — cùng thông điệp README/landing đợt 5, đặt ngay đầu vì hiểu lầm
    "phải học Obsidian trước" là thứ chặn user mới nhiều nhất. */
 #onb-lead { margin: 9px 0 15px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
@@ -836,9 +845,10 @@ select#ck-day:focus { border-color: var(--cyan); }
 .onb-a { display: flex; margin-top: 11px; }
 .onb-a .btn { padding: 7px 0; }
 .onb-cmd { flex: 1; cursor: pointer; padding: 6px 8px; border-radius: 8px; font-size: 10.5px;
-  border: 1px dashed var(--border); background: var(--bg2); color: var(--muted);
-  word-break: break-all; }
-.onb-cmd:hover { border-color: var(--cyan); color: var(--text); }
+  font-family: inherit; text-align: left; border: 1px dashed var(--border);
+  background: var(--bg2); color: var(--muted); word-break: break-all; }
+.onb-cmd code { color: inherit; font-size: inherit; white-space: normal; }
+.onb-cmd:hover, .onb-cmd:focus-visible { border-color: var(--cyan); color: var(--text); }
 #onb-status { margin-top: 13px; min-height: 16px; font-size: 11.5px; color: var(--faint); }
 #onb-status.ok { color: var(--green); }
 #onb-status.warn { color: var(--orange); }

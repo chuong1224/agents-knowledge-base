@@ -44,7 +44,8 @@ function status(html, cls) {
 
 /* Khối lệnh copy-1-chạm — dùng cho card không bấm được (bản cài thiếu demo/starter). */
 function cmdBlock(cmd) {
-  return `<code class="onb-cmd" title="${tr('onb.copy')}">${esc(cmd)}</code>`;
+  const label = esc(tr('onb.copy'));
+  return `<button type="button" class="onb-cmd" title="${label}" aria-label="${label}"><code>${esc(cmd)}</code></button>`;
 }
 
 function card(o) {
@@ -209,6 +210,11 @@ export function closeOnboarding() { $('onb').classList.remove('show'); restoreFo
 export function syncOnbFab() {
   const b = $('onb-fab');
   if (!b) return;
+  // W44: vault 0 note chỉ nên có onboarding. Panel số liệu 0/0, cây trống, tìm kiếm,
+  // heat/layout… đều là control kỹ thuật chưa có đối tượng để thao tác và làm màn đầu
+  // trông như một báo cáo lỗi. Class trên root để CSS dọn toàn bộ chrome vô nghĩa;
+  // S.all là nguồn hiện hành nên poll/rescan/cài starter tự trả chrome lại ngay.
+  document.documentElement.classList.toggle('vault-empty', !S.all.meta.notes);
   const why = needed();
   // 'block' tường minh (xem ghi chú ở #onb-note): mặc định CSS của nút là display:none
   b.style.display = why && !$('onb').classList.contains('show') ? 'block' : 'none';

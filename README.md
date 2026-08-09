@@ -61,9 +61,10 @@ Point it at a folder of markdown notes (an Obsidian-style vault) and it serves a
 
 ### 🌱 Starts from nothing
 - Point the app at a folder with **no notes at all** and it offers three ways in — the bundled demo vault (own port, your real server untouched), a **starter vault written into that folder on one click**, or a one-minute guide with a rescan button
+- Until the first note exists, the empty tree, graph controls, and technical `0/0` health figures stay out of the way — the onboarding choices are the whole first screen
 - It also catches the most common first-run mistake: if the app folder isn't named `.graph3d`, it is reading the folder *above the clone* as your vault — the app says which folder that is, shows the right clone command, and offers a "this really is my vault" button if you know better
 - Scaffolding the starter vault opens the first note for you, and the invitation stays one click away at the bottom of the screen until the vault has notes
-- Writing files is deliberately narrow: it never overwrites an existing file, and it only scaffolds into a folder that has no notes yet
+- Writing files is deliberately narrow: the in-app action only scaffolds an empty vault; the CLI can add the guide notes to an existing vault with `--force`, but **neither path ever overwrites an existing file**
 - The two endpoints that have side effects are the only non-GET routes in the app, and they check the request origin — everything else is read-only
 
 ### 🌳 Work map (optional)
@@ -128,8 +129,9 @@ This repo ships a [`starter-vault/`](starter-vault/) — 9 short notes that teac
 Same two actions from a terminal, if you prefer:
 
 ```bash
-python ensure_graph3d.py --demo                    # demo vault, own port, nothing installed
-python ensure_graph3d.py --init-starter "path/to/MyVault"
+python ensure_graph3d.py --demo                              # demo vault, own port, nothing installed
+python ensure_graph3d.py --init-starter "path/to/MyVault"   # create a new starter vault
+python ensure_graph3d.py --init-starter "path/to/MyVault" --force  # add guides safely; never overwrite
 ```
 
 Or lay it out by hand:
@@ -223,8 +225,8 @@ Trỏ vào một thư mục note markdown (vault kiểu Obsidian), app phục v�
 - **Cài đặt vào vault của bạn:** chỉ cần Python 3.9+ — clone vào vault thành thư mục `.graph3d` (trong lệnh mẫu, thay `YourVault` bằng **đường dẫn thư mục vault của bạn** — thư mục chứa các note markdown, ví dụ `D:/Notes`), chạy `python ensure_graph3d.py`, app mở tại `http://127.0.0.1:8321`. Không npm, không build; `PyYAML` là tuỳ chọn để bật phép kiểm cú pháp frontmatter thật (`python -m pip install pyyaml`). Windows có thể double-click `Start-Graph3D.bat`.
 - **Lối vào đàng hoàng (Windows):** chạy MỘT lần mỗi máy `python install_launcher.py --hotkey "CTRL+ALT+G"` → shortcut Start Menu + Desktop chạy `pythonw ensure_graph3d.py --app`: click là ra **cửa sổ app riêng**, không thanh địa chỉ, không lẫn giữa hai chục tab. Muốn **nút taskbar đang chạy** cũng có icon neon riêng, mở app một lần trong Edge rồi chọn **⋯ → Apps → Install this site as an app**; các lần sau `ensure` mở AppUserModelID packaged mà Windows đăng ký qua `shell:AppsFolder` (Edge hiện hành), hoặc dùng `--app-id` từ shortcut Chromium kiểu cũ; chưa cài thì lùi về `--app=<url>`. Chỉ cần đặt `GRAPH3D_PWA_SHORTCUT` khi bản Chromium kiểu cũ dùng shortcut đã đổi tên/di chuyển. `--status` xem launcher đang cài gì · `--uninstall` gỡ launcher · `--python` ghim interpreter cụ thể. Mặc định installer tìm Python đã đăng ký trước khi lùi về runtime hiện hành; đường Store Python có số build được đổi sang app-exec alias ổn định khi alias tồn tại, nên Store cập nhật không làm shortcut chết. Không có console nên thông báo của ensure nằm ở `%LOCALAPPDATA%\claude-graph3d\launcher.log`. Ý nghĩa thật: đường dẫn vault là thuộc tính của **máy**, nên nó nằm trong shortcut chứ không nằm trong một note mà bạn phải mở ra trước.
 - **Chưa có vault? KHÔNG cần Obsidian trước.** Vault chỉ là một thư mục chứa file `.md` — soạn bằng Notepad cũng được. Obsidian là editor tuỳ chọn về sau, dùng chung đúng thư mục này.
-- **Mở app trên thư mục chưa có note nào → app tự mời 3 lối đi** thay vì graph rỗng: **🌌 xem demo** 120 note (server riêng cổng 8322, server trên vault thật của bạn vẫn chạy nguyên), **🌱 tạo vault đầu tiên ngay tại đó** (chép [`starter-vault/`](starter-vault/) 9 note — dạy note/wikilink/tag/hub ngay trong app, có bản tiếng Việt; **không bao giờ đè file đã có**), **📖 tự làm 1 phút** + nút quét lại. Bằng terminal: `python ensure_graph3d.py --demo` hoặc `--init-starter "đường/dẫn/VaultCuaBan"`.
-- **Cài nhầm chỗ app cũng nói:** nếu thư mục app không tên `.graph3d` thì app đang đọc **thư mục cha của bản clone** làm vault — app chỉ rõ thư mục đó, đưa lệnh clone đúng, và có nút "đây đúng là vault của tôi" nếu bạn cố ý. Tạo starter vault xong app mở luôn note đầu tiên; lời mời vẫn nằm sẵn một nút ở đáy màn hình chừng nào vault còn trống.
+- **Mở app trên thư mục chưa có note nào → app tự mời 3 lối đi** thay vì graph rỗng: **🌌 xem demo** 120 note (server riêng cổng 8322, server trên vault thật của bạn vẫn chạy nguyên), **🌱 tạo vault đầu tiên ngay tại đó** (chép [`starter-vault/`](starter-vault/) 9 note — dạy note/wikilink/tag/hub ngay trong app, có bản tiếng Việt; **không bao giờ đè file đã có**), **📖 tự làm 1 phút** + nút quét lại. Khi chưa có note, app ẩn cây/panel/control graph và các số kỹ thuật `0/0` để màn đầu chỉ còn đúng hướng dẫn cần thiết.
+- **CLI có lối an toàn cho vault đang dùng:** `python ensure_graph3d.py --init-starter "đường/dẫn/VaultCuaBan" --force` thêm bộ note hướng dẫn nhưng vẫn **tuyệt đối không đè file trùng tên**. Cài nhầm chỗ thì app cũng nói rõ thư mục đang bị đọc, đưa lệnh clone đúng, và có nút "đây đúng là vault của tôi" nếu bạn cố ý. Tạo starter vault xong app mở luôn note đầu tiên; lời mời vẫn nằm sẵn một nút ở đáy màn hình chừng nào vault còn trống.
 - **Graph:** physics co giãn theo degree, 🧲 gom cụm theo nhóm màu, chống chồng node, preset bố cục 🪐 Vũ Trụ (xếp note theo cây index: root làm tâm, lá quây quanh index, deterministic qua reload), lọc tag / đuôi file / nhóm màu (spotlight vs declutter, **nhớ qua phiên**), heatmap tần suất truy cập, độ chói neon chỉnh được, hỗ trợ tiếp cận (AA, bàn phím, reduced-motion).
 - **Agent:** hook `PostToolUse` của Claude Code (mẫu ở phần tiếng Anh) ghi mọi thao tác đọc/sửa → hiệu ứng sao chổi, cú nhảy siêu không gian giữa các note, chuỗi truy xuất replay được, thanh tua cả ngày + dashboard per-agent. Agent khác truyền `--agent "Tên"` là có màu riêng.
 - **Đọc & tìm:** click node đọc note ngay (wikilink, ảnh, backlink), cây thư mục kéo-giãn, `Ctrl+P` tìm tên / `#tag` / nội dung không dấu, tab + 2 pane + ghim + lịch sử đọc (persist).

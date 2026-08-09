@@ -13,7 +13,7 @@
     may, khong duoc roi vao working tree repo public — su co doi 4 va doi 6)
   - danh sach dan xuat: restart_py_files() = phan .py cua _VERSION_FILES va nam trong APP_PY
 """
-import os, shutil, sys
+import contextlib, io, os, shutil, subprocess, sys
 sys.dont_write_bytecode = True   # khong sinh __pycache__ trong vault
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # console cp1252
@@ -26,6 +26,7 @@ sys.path.insert(0, G3D)
 
 import activity_paths as AP
 import onboarding as ONB
+import ensure_graph3d as ENS
 
 fails = []
 def check(name, cond, info=""):
@@ -150,6 +151,49 @@ check("force=True van KHONG de file trung ten",
       kept == "NOI DUNG CUA TOI\n" and "Start Here.md" in res2["skipped"], res2)
 check("file trung ten vao 'skipped', khong vao 'created'",
       "Start Here.md" not in res2["created"], res2["created"])
+
+# ---- W44: CLI co loi ra AN TOAN cho vault dang co ----
+out = io.StringIO()
+with contextlib.redirect_stdout(out):
+    rc = ENS.init_starter(VAULT_FULL)
+refusal = out.getvalue()
+check("CLI tu choi vault co note nhung goi ro --force",
+      rc == 2 and "--force" in refusal and "KHONG de file trung ten" in refusal, refusal)
+
+out = io.StringIO()
+with contextlib.redirect_stdout(out):
+    rc = ENS.init_starter(VAULT_FULL, force=True)
+check("CLI --force them starter vao vault dang co ma giu note cua user",
+      rc == 0 and os.path.isfile(os.path.join(VAULT_FULL, "Note cua toi.md"))
+      and os.path.isfile(os.path.join(VAULT_FULL, "Start Here.md")), out.getvalue())
+
+hp = subprocess.run([sys.executable, os.path.join(G3D, "ensure_graph3d.py"), "--help"],
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, encoding="utf-8", errors="replace", check=False)
+help_text = " ".join(hp.stdout.split())       # argparse xuong dong theo be rong console
+check("--help mo ta --no-open + --force + hang rao khong de file",
+      hp.returncode == 0 and "--no-open" in help_text
+      and "khong mo trinh duyet" in help_text and "--force" in help_text
+      and "KHONG de file trung ten" in help_text, hp.stdout)
+
+# W44 UI: vault 0 note khong de 0/0 + control graph chen vao man onboarding; moi
+# control click duoc trong onboarding phai la button that de Enter/Space dung duoc.
+with open(os.path.join(G3D, "src", "onboarding.js"), encoding="utf-8") as f:
+    onb_js = f.read()
+with open(os.path.join(G3D, "src", "style.css"), encoding="utf-8") as f:
+    css = f.read()
+with open(os.path.join(G3D, "index.html"), encoding="utf-8") as f:
+    html = f.read()
+check("UI vault trong gan class vault-empty tu so note hien hanh",
+      "classList.toggle('vault-empty', !S.all.meta.notes)" in onb_js)
+check("CSS vault-empty an panel/cay/hint/layout khoi man dau",
+      ":root.vault-empty #panel" in css and ":root.vault-empty #sidebar" in css
+      and ":root.vault-empty #hint" in css and ":root.vault-empty #layout-fab" in css)
+check("lenh copy onboarding la button ban phim, khong con code onclick",
+      '<button type="button" class="onb-cmd"' in onb_js
+      and '<code>${esc(cmd)}</code></button>' in onb_js)
+check("nut dong onboarding la button co aria-label",
+      '<button type="button" id="onb-x"' in html and 'data-i18n-aria="onb.close"' in html)
 
 try:
     ONB.install_starter(VAULT_EMPTY, src=os.path.join(ROOT, "khong-co-that"))
