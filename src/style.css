@@ -377,6 +377,8 @@ input[type=range] { width: 118px; accent-color: var(--magenta); }
 .md .wl.miss { color: var(--faint); border-bottom: 1px dashed var(--border); cursor: default; }
 .md img, .md video { max-width: 100%; border-radius: 8px; border: 1px solid var(--border);
   display: block; margin: 8px 0; }
+.rd-content img { cursor: zoom-in; }
+.rd-content img:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 .md code { background: rgba(24,20,40,.85); border: 1px solid var(--border); border-radius: 4px;
   padding: 1px 5px; font-size: 11.5px; font-family: Consolas, "Courier New", monospace; color: var(--yellow); }
 .md pre { background: rgba(10,8,20,.9); border: 1px solid var(--border); border-radius: 8px;
@@ -417,6 +419,70 @@ input[type=range] { width: 118px; accent-color: var(--magenta); }
   box-shadow: 0 0 6px currentColor; }
 .rd-backlinks .bl-row .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bl-empty { color: var(--faint); font-size: 11.5px; padding: 4px 2px; }
+
+/* ---------- Lightbox ảnh Reader (W139–W143) ---------- */
+#imgv { position: fixed; inset: 0; z-index: 50; display: none; place-items: center;
+  background: rgba(5,4,12,.82); backdrop-filter: blur(5px); }
+#imgv.show { display: grid; }
+#imgv-box { position: relative; max-width: 80vw; max-height: 80vh; min-width: 240px;
+  overflow: hidden; display: flex; flex-direction: column; background: rgba(13,10,25,.98);
+  border: 1px solid rgba(4,217,255,.42); border-radius: 14px;
+  box-shadow: 0 0 46px rgba(4,217,255,.16), 0 0 80px rgba(177,74,237,.12); }
+#imgv-head { flex: none; min-height: 42px; display: flex; align-items: center; gap: 6px;
+  flex-wrap: wrap; padding: 7px 8px; border-bottom: 1px solid var(--border);
+  background: rgba(18,14,34,.96); }
+#imgv-title { flex: 1 1 150px; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; color: var(--cyan); font-size: 11.5px; font-weight: 700; }
+#imgv-scale { flex: none; min-width: 42px; text-align: right; color: var(--yellow);
+  font: 700 11px/1 Consolas, "Courier New", monospace; }
+#imgv-head button { flex: none; height: 28px; min-width: 30px; padding: 0 8px;
+  border: 1px solid var(--border); border-radius: 7px; background: var(--bg2);
+  color: var(--muted); cursor: pointer; font-size: 11px; }
+#imgv-head button:hover { color: var(--text); border-color: var(--cyan); }
+#imgv-head button:focus-visible, #imgv-stage:focus-visible, #imgv-menu button:focus-visible {
+  outline: 1px solid var(--cyan); outline-offset: 2px; }
+#imgv-close { color: var(--faint) !important; font-size: 14px !important; }
+#imgv-close:hover { color: var(--magenta) !important; border-color: var(--magenta) !important; }
+#imgv-stage { position: relative; flex: 1 1 auto; min-width: 0; min-height: 72px;
+  overflow: hidden; outline: none; touch-action: none; user-select: none;
+  background-color: #080611;
+  background-image: linear-gradient(45deg, rgba(255,255,255,.025) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255,255,255,.025) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255,255,255,.025) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,.025) 75%);
+  background-size: 20px 20px; background-position: 0 0, 0 10px, 10px -10px, -10px 0; }
+#imgv-stage.pannable { cursor: grab; }
+#imgv-stage.dragging { cursor: grabbing; }
+#imgv-image { position: absolute; left: 50%; top: 50%; max-width: none; max-height: none;
+  width: auto; height: auto; margin: 0; border: 0; border-radius: 0; pointer-events: none;
+  transform-origin: center center; will-change: transform; image-rendering: auto; }
+#imgv-menu { position: fixed; z-index: 52; width: 178px; padding: 5px;
+  border: 1px solid var(--border); border-radius: 9px; background: rgba(18,14,34,.98);
+  box-shadow: 0 12px 30px rgba(0,0,0,.45); }
+#imgv-menu[hidden] { display: none; }
+#imgv-menu button { display: block; width: 100%; padding: 7px 9px; border: 0;
+  border-radius: 6px; background: transparent; color: var(--muted); text-align: left;
+  font-size: 11.5px; cursor: pointer; }
+#imgv-menu button:hover, #imgv-menu button:focus { color: var(--text); background: rgba(4,217,255,.1); }
+#imgv-status { position: absolute; left: 50%; bottom: 12px; z-index: 2;
+  max-width: calc(100% - 24px); transform: translate(-50%, 8px); opacity: 0;
+  pointer-events: none; padding: 6px 10px; border: 1px solid var(--border);
+  border-radius: 16px; background: rgba(12,9,24,.94); color: var(--text);
+  font-size: 10.5px; text-align: center; transition: opacity .16s, transform .16s; }
+#imgv-status.show { opacity: 1; transform: translate(-50%, 0); }
+#imgv-status.warn { color: var(--yellow); border-color: rgba(249,248,113,.5); }
+#imgv-status.bad { color: var(--orange); border-color: rgba(255,71,87,.55); }
+#imgv-status.wait { color: var(--cyan); }
+:root.imgv-open { overflow: hidden; }
+
+@media (max-width: 500px) {
+  #imgv-box { max-width: 80vw; max-height: 80vh; min-width: 0; }
+  #imgv-head { gap: 4px; padding: 6px; }
+  #imgv-title { flex-basis: calc(100% - 52px); order: 0; }
+  #imgv-scale { order: 0; }
+  #imgv-head button { padding: 0 6px; }
+  #imgv-minus, #imgv-plus, #imgv-fit, #imgv-actual, #imgv-close { order: 1; }
+}
 
 /* ---------- sidebar trái điều hướng + cây vault (Finder) ----------
    --rail-w = chỗ sidebar chiếm ở cạnh trái (0 khi ẩn) — Reader + hint dời theo,

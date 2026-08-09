@@ -15,7 +15,7 @@
 
 <div id="brand">
   <h1>KB GRAPH 3D</h1>
-  <div class="sub">KNOWLEDGE BASE · SYNTHWAVE · <span id="app-ver" role="button" tabindex="0" data-i18n-title="upd.ver.tip" title="Bấm để xem bản mới và bật/tắt kiểm tra cập nhật">v1.54.1</span><span id="update-badge" role="button" tabindex="0" data-i18n-title="upd.badge.tip" title="Có bản mới trên repo — bấm xem có gì thay đổi" hidden></span><button id="reload-b" type="button" data-i18n-title="reload.tip" data-i18n-aria="reload.aria" title="Nạp lại giao diện — lấy bản mã mới nhất" aria-label="Nạp lại giao diện">⟳</button><span id="lang-sw" role="group" data-i18n-aria="lang.switch" aria-label="Ngôn ngữ giao diện"></span></div>
+  <div class="sub">KNOWLEDGE BASE · SYNTHWAVE · <span id="app-ver" role="button" tabindex="0" data-i18n-title="upd.ver.tip" title="Bấm để xem bản mới và bật/tắt kiểm tra cập nhật">v1.55.0</span><span id="update-badge" role="button" tabindex="0" data-i18n-title="upd.badge.tip" title="Có bản mới trên repo — bấm xem có gì thay đổi" hidden></span><button id="reload-b" type="button" data-i18n-title="reload.tip" data-i18n-aria="reload.aria" title="Nạp lại giao diện — lấy bản mã mới nhất" aria-label="Nạp lại giao diện">⟳</button><span id="lang-sw" role="group" data-i18n-aria="lang.switch" aria-label="Ngôn ngữ giao diện"></span></div>
 </div>
 
 <div id="sidebar">
@@ -171,6 +171,30 @@
       <div class="tags rd-tags"></div>
       <div class="rd-content md"></div>
       <div class="rd-backlinks"></div>
+    </div>
+  </div>
+</div>
+
+<div id="imgv" aria-hidden="true">
+  <div id="imgv-box" role="dialog" aria-modal="true" aria-labelledby="imgv-title" data-i18n-aria="iv.aria">
+    <div id="imgv-head">
+      <div id="imgv-title" data-i18n="iv.title">Ảnh trong Reader</div>
+      <output id="imgv-scale" aria-live="polite">100%</output>
+      <button id="imgv-minus" type="button" data-i18n-title="iv.zoom.out" data-i18n-aria="iv.zoom.out" title="Thu nhỏ" aria-label="Thu nhỏ">−</button>
+      <button id="imgv-plus" type="button" data-i18n-title="iv.zoom.in" data-i18n-aria="iv.zoom.in" title="Phóng to" aria-label="Phóng to">＋</button>
+      <button id="imgv-fit" type="button" data-i18n="iv.fit">Vừa khung</button>
+      <button id="imgv-actual" type="button" data-i18n="iv.actual">100%</button>
+      <button id="imgv-close" type="button" data-i18n-title="iv.close" data-i18n-aria="iv.close" title="Đóng (Esc)" aria-label="Đóng (Esc)">✕</button>
+    </div>
+    <div id="imgv-stage" tabindex="0" data-i18n-aria="iv.stage.aria" aria-label="Vùng xem ảnh — lăn để zoom, kéo để di chuyển">
+      <img id="imgv-image" draggable="false" alt="">
+      <div id="imgv-status" role="status" aria-live="polite"></div>
+    </div>
+    <div id="imgv-menu" role="menu" data-i18n-aria="iv.menu.aria" aria-label="Tác vụ với ảnh" hidden>
+      <button id="imgv-copy-image" type="button" role="menuitem" data-i18n="iv.copy.image">Copy ảnh</button>
+      <button id="imgv-copy-link" type="button" role="menuitem" data-i18n="iv.copy.link">Copy link</button>
+      <button id="imgv-open-original" type="button" role="menuitem" data-i18n="iv.open">Mở bản gốc</button>
+      <button id="imgv-download" type="button" role="menuitem" data-i18n="iv.download">Tải bản gốc</button>
     </div>
   </div>
 </div>

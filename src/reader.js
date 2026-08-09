@@ -13,6 +13,7 @@ import { tr, locale } from './i18n.js';
 import { flyTo } from './graph.js';
 import { pulses } from './effects.js';
 import { WS, wsOpen, wsBack, wsSplit, tabAt, isPinned, togglePin, pushRecent } from './workspace.js';
+import { initImageViewer, isImageViewerOpen, decorateViewerImages } from './image-viewer.js';
 
 const IMG_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif', 'ico']);
 const VIDEO_EXTS = new Set(['mp4', 'webm', 'mov']);
@@ -272,6 +273,7 @@ export async function renderPane(p, opts = {}) {
   R.content.innerHTML = mdRenderer().render(text, { folder: node.folder });
   decorateCallouts(R.content);
   decorateTasks(R.content);
+  decorateViewerImages(R.content);
   renderBacklinks(node, R);
   R.body.scrollTop = t.scroll || 0;                 // quay lại tab = đúng chỗ đang đọc
   pushRecent(node.id);                              // lịch sử đọc (giai đoạn 4)
@@ -308,8 +310,10 @@ export function initReader() {
   };
   $('reader').addEventListener('click', ev => navigate(ev, false));
   $('reader').addEventListener('auxclick', ev => { if (ev.button === 1) navigate(ev, true); });
+  initImageViewer($('reader'));
   document.addEventListener('keydown', ev => {
     if (ev.key !== 'Escape') return;
+    if (isImageViewerOpen()) return;
     const tag = (ev.target.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;   // Esc trong ô tìm kiếm giữ nghĩa cũ
     if ($('reader').classList.contains('show')) closeReader();
