@@ -197,6 +197,7 @@ python tests/selfcheck.py --slow # adds port/kill-policy integration tests (~16s
 ```
 
 The suite is designed to run with the app installed inside a real vault.
+Each run gets an isolated scratch directory, so private and public clones can be checked in parallel without deleting each other's journal fixtures (v1.54.1).
 
 ## Roadmap
 
@@ -235,6 +236,6 @@ Trỏ vào một thư mục note markdown (vault kiểu Obsidian), app phục v�
 - **2 máy:** journal per-máy nằm trong vault — 2 máy sync chung vault (OneDrive/Drive/Syncthing) tự thấy lịch sử của nhau, máy thứ hai không cần chạy server.
 - **Ngôn ngữ:** giao diện có **song ngữ VI/EN** — lần đầu tự nhận theo ngôn ngữ trình duyệt, đổi bằng nút **VI | EN** cạnh logo (nhớ lựa chọn). Nội dung của bạn không bị dịch: tên note, tag, nhóm màu, đường dẫn giữ nguyên như trong vault.
 - **Cấu hình:** nhóm màu tag ở `TAG_COLORS` (`build_graph_data.py`) + `GROUP_ORDER` (`src/state.js`); loại folder ở `EXCLUDED_DIRS`; đổi port bằng `--port`. Taxonomy mặc định đang theo vault của tác giả — tách ra file config là mục roadmap số một.
-- **Test:** `python tests/selfcheck.py` (~3s; thêm `--slow` cho test port/kill ~16s).
+- **Test:** `python tests/selfcheck.py` (~3s; thêm `--slow` cho test port/kill ~16s). Mỗi lượt có scratch theo run-id, nên clone private/public có thể tự kiểm song song mà không xoá fixture journal của nhau (v1.54.1).
 
 Giấy phép [MIT](LICENSE).

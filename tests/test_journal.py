@@ -10,10 +10,9 @@ try:
 except Exception:
     pass
 
-import tempfile
-JDIR = os.path.join(tempfile.gettempdir(), "graph3d-selfcheck", "journal_test")
-os.environ["GRAPH3D_JOURNAL_DIR"] = JDIR          # TRUOC khi import _scratch (setdefault)
 from _scratch import SCRATCH, G3D, VAULT
+JDIR = os.path.join(SCRATCH, "journal_test")
+os.environ["GRAPH3D_JOURNAL_DIR"] = JDIR          # TRUOC khi import activity_paths
 LOG = os.path.join(SCRATCH, "act_journal.jsonl")
 os.environ["GRAPH3D_ACTIVITY_FILE"] = LOG
 sys.path.insert(0, G3D)
@@ -50,6 +49,7 @@ check("J1a journal nam trong GRAPH3D_JOURNAL_DIR", os.path.dirname(JP) == os.pat
 check("J1b ten file activity-<HOST>.jsonl", os.path.basename(JP) == "activity-%s.jsonl" % HOST, JP)
 check("J1c journal_host parse nguoc", AP.journal_host(JP) == HOST, AP.journal_host(JP))
 check("J1d journal_host ten may co dau -", AP.journal_host("activity-CPU-12-A.jsonl") == "CPU-12-A")
+check("J1e journal scratch nam trong run-id rieng", os.path.commonpath([JDIR, SCRATCH]) == os.path.normpath(SCRATCH), JDIR)
 
 # ---- J2: seed backfill lan dau — journal chua co thi chep log local vao truoc ----
 now = time.time()
