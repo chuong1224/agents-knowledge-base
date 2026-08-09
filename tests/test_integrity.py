@@ -11,6 +11,8 @@
     (gate_ignore nam CUOI khoi frontmatter dai van phai bat duoc — bug 39 bao oan 25/07)
   - app NOI hon gate co chu y: hoa/thuong khong phan biet; anh duoc nhac bang
     [[x.png]] hay ![](attachments/x.png) van tinh la co nguoi dung
+  - W73: wikilink/nhung/heading trong inline code va code fence chi la vi du;
+    scanner phai bo qua, dong thoi tiep tuc quet dung van xuoi sau fence
   - pham vi = pham vi scanner graph: node_modules/.trash/dot-folder khong bi quet
   - thieu nguon luat (vault-rules.json) -> 5 check policy TAT em, YAML + cau truc van chay
   - parse frontmatter dung parser cua vault_rules.py: tags dang YAML list nhieu dong
@@ -237,6 +239,16 @@ def build_fake_vault():
     w("Work/Bang/Bang.md", fm("Bang") +
       "| Cot | Gia tri |\n|---|---|\n| Link | [[Alpha\\|ten hien thi]] |\n")
 
+    # W73: code khong duoc sinh link/nhung/reference that. Fence 4 backtick co the
+    # chua 3 backtick ben trong; tilde fence va inline delimiter 1/2 backtick deu phu.
+    w("Work/Code/Code.md", fm("Code") +
+      "Inline `[[Inline Ao]]` va ``![[inline-ao.png]]``.\n\n"
+      "````markdown\n[[Fence Ao]]\n![[fence-ao.png]]\n```\n````\n\n"
+      "~~~md\n[[Tilde Ao]]\n![[tilde-ao.png]]\n~~~\n\n"
+      "Anh chi duoc nhac trong code: `[[code-only.png]]`.\n"
+      "Ngoai code van phai bat: [[Khong Ton Tai Sau Code]].\n")
+    blob("Work/Code/attachments/code-only.png")
+
     # Ngoai pham vi scanner: khong duoc quet (loi trong day PHAI im)
     w("node_modules/junk.md", "# junk\n\n[[Khong Ton Tai 4]]\n")
     w(".trash/rac.md", "# rac\n\n[[Khong Ton Tai 5]]\n")
@@ -251,17 +263,21 @@ rep = ITG.collect(vault=VAULT_DIR, rules_dir=RULES_DIR, use_cache=False)
 C = by_id(rep)
 
 # --- pham vi + tieu chi bo qua ---
-check("1 dem dung so note trong pham vi (bo node_modules/.trash)", rep["vault"]["notes"] == 20,
+check("1 dem dung so note trong pham vi (bo node_modules/.trash)", rep["vault"]["notes"] == 21,
       rep["vault"])
-check("1 mien 3 note (_Meta + 2 gate_ignore), kiem 17",
-      (rep["vault"]["ignored"], rep["vault"]["checked"]) == (3, 17), rep["vault"])
+check("1 mien 3 note (_Meta + 2 gate_ignore), kiem 18",
+      (rep["vault"]["ignored"], rep["vault"]["checked"]) == (3, 18), rep["vault"])
 
 # --- check cau truc ---
-check("2 wikilink gay = 1 (Beta -> Khong Ton Tai)", C["link"]["total"] == 1,
+check("2 wikilink gay = 2 (Beta + van xuoi sau code fence)", C["link"]["total"] == 2,
       C["link"]["list"])
 check("2 wikilink gay chi ra dung file + so dong",
       C["link"]["list"] and C["link"]["list"][0]["file"] == "Work/Beta/Beta.md"
       and C["link"]["list"][0]["line"] > 0, C["link"]["list"])
+code_links = [i for i in C["link"]["list"] if i["file"] == "Work/Code/Code.md"]
+check("2 W73 bo link trong inline/fence, van bat dung link ngoai code",
+      len(code_links) == 1 and code_links[0]["target"] == "Khong Ton Tai Sau Code",
+      code_links)
 check("2 note mien KHONG bi bao (Delta gate_ignore + _Meta)",
       all("Delta" not in i["file"] and "_Meta" not in i["file"] for i in C["link"]["list"]),
       C["link"]["list"])
@@ -269,8 +285,10 @@ check("2 anchor lech = 1 (Alpha#Khong co heading nay)", C["anchor"]["total"] == 
       C["anchor"]["list"])
 check("2 nhung gay = 1 (Gamma -> mat-tieu.png)", C["embed"]["total"] == 1,
       C["embed"]["list"])
-check("2 anh mo coi = 1 (chi orphan.png)",
-      C["orphan"]["total"] == 1 and C["orphan"]["list"][0]["file"].endswith("orphan.png"),
+check("2 anh mo coi = 2 (orphan.png + code-only.png chi duoc nhac trong code)",
+      C["orphan"]["total"] == 2
+      and {os.path.basename(i["file"]) for i in C["orphan"]["list"]}
+      == {"orphan.png", "code-only.png"},
       C["orphan"]["list"])
 check("2 anh nhac kieu [[x.png]] / markdown KHONG bi coi la mo coi",
       all("wiki.png" not in i["file"] and "md.png" not in i["file"]
@@ -344,7 +362,7 @@ check("3c note gate_ignore vi pham ca 3 check moi van duoc MIEN",
 check("3c ngoai le khai HONG (thieu title) duoc noi thang, khong so voi chuoi rong",
       "khai thiếu" in T.get("Khai Hong.md", "") and '“”' not in T.get("Khai Hong.md", ""),
       T.get("Khai Hong.md"))
-check("3b tong so van de = 16", rep["problems"] == 16,
+check("3b tong so van de = 18", rep["problems"] == 18,
       {c["id"]: c["total"] for c in rep["checks"]})
 
 check("3c wikilink trong bang `[[Note\\|alias]]` KHONG bi bao gay (bao oan, audit W41)",
@@ -359,7 +377,7 @@ check("4 thieu vault-rules.json -> ca 5 check contract available=False",
               for k in ("frontmatter", "digest", "tag", "index_tag", "title")), rep2["rules"])
 check("4 check cau truc VAN chay khi thieu nguon luat",
       all(C2[k]["available"] for k in ("link", "embed", "anchor", "orphan")))
-check("4 problems gom cau truc + YAML doc lap nguon luat = 5", rep2["problems"] == 5,
+check("4 problems gom cau truc + YAML doc lap nguon luat = 7", rep2["problems"] == 7,
       {c["id"]: c["total"] for c in rep2["checks"]})
 check("4 rules.reason noi ro vi sao tat", bool(rep2["rules"].get("reason")), rep2["rules"])
 
@@ -389,7 +407,7 @@ b = ITG.collect(vault=VAULT_DIR, rules_dir=RULES_DIR)
 check("5 goi 2 lan lien tiep tra CUNG object (cache chu ky)", a is b)
 w("Work/Zeta/Zeta.md", fm("Zeta") + "[[Cung Khong Ton Tai]]\n")
 c = ITG.collect(vault=VAULT_DIR, rules_dir=RULES_DIR)
-check("5 them note gay -> cache tu het han, dem lai", c is not a and by_id(c)["link"]["total"] == 2,
+check("5 them note gay -> cache tu het han, dem lai", c is not a and by_id(c)["link"]["total"] == 3,
       by_id(c)["link"]["list"])
 
 # --- ham thuan + tien ich ---

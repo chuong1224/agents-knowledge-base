@@ -117,6 +117,7 @@ HEADING_RE = re.compile(r"^#{1,6}\s+(.*?)\s*$")
 H1_RE = re.compile(r"^#\s+(.*?)\s*$")                  # riêng H1 — check title=H1 (§V)
 FRONTMATTER_RE = re.compile(r"\A﻿?---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.S)
 GATE_IGNORE_RE = re.compile(r"(?mi)^\s*gate_ignore:\s*true\b")
+FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 
 MEDIA_EXTS = build_graph_data.IMG_EXTS | build_graph_data.VIDEO_EXTS
 ATTACH_DIR = "attachments"
@@ -197,6 +198,81 @@ def split_target(t):
         base, anchor = t.split("#", 1)
         return base.strip(), anchor.strip()
     return t, None
+
+
+def strip_markdown_code(text):
+    """Che code fence + inline code bằng khoảng trắng, giữ nguyên newline/độ dài.
+
+    Bốn check cấu trúc cần nhìn Markdown *được render*, không được coi cú pháp minh
+    hoạ trong code là wikilink/nhúng/heading thật. Giữ nguyên độ dài và newline để
+    số dòng trong báo cáo không trôi. Fence hỗ trợ cả backtick lẫn tilde theo luật
+    CommonMark cơ bản (tối đa 3 space đầu dòng; fence đóng cùng ký tự, dài >= mở).
+    Inline code hỗ trợ delimiter nhiều backtick; delimiter không có cặp được giữ như
+    văn xuôi thay vì nuốt phần còn lại của note.
+    """
+    out = []
+    fence_char = None
+    fence_len = 0
+
+    for raw in text.splitlines(keepends=True):
+        body = raw.rstrip("\r\n")
+        ending = raw[len(body):]
+
+        if fence_char is not None:
+            stripped = body.lstrip(" ")
+            indent = len(body) - len(stripped)
+            run = len(stripped) - len(stripped.lstrip(fence_char))
+            closes = indent <= 3 and run >= fence_len \
+                and not stripped[run:].strip(" \t")
+            out.append(" " * len(body) + ending)
+            if closes:
+                fence_char = None
+                fence_len = 0
+            continue
+
+        fm = FENCE_OPEN_RE.match(body)
+        if fm:
+            fence = fm.group(1)
+            info = fm.group(2)
+            # Backtick info string không được chứa backtick; nếu có thì đây là văn
+            # xuôi, không phải fence mở. Tilde fence không có hạn chế tương ứng.
+            if fence[0] == "~" or "`" not in info:
+                fence_char = fence[0]
+                fence_len = len(fence)
+                out.append(" " * len(body) + ending)
+                continue
+
+        chars = list(body)
+        i = 0
+        while i < len(body):
+            if body[i] != "`":
+                i += 1
+                continue
+            run_end = i + 1
+            while run_end < len(body) and body[run_end] == "`":
+                run_end += 1
+            width = run_end - i
+            j = run_end
+            close_end = None
+            while j < len(body):
+                j = body.find("`", j)
+                if j < 0:
+                    break
+                end = j + 1
+                while end < len(body) and body[end] == "`":
+                    end += 1
+                if end - j == width:
+                    close_end = end
+                    break
+                j = end
+            if close_end is None:
+                i = run_end
+                continue
+            chars[i:close_end] = " " * (close_end - i)
+            i = close_end
+        out.append("".join(chars) + ending)
+
+    return "".join(out)
 
 
 FM_KEY_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$")
@@ -288,7 +364,7 @@ def scan_vault(vault, sig=None):
             continue
         stem = os.path.splitext(os.path.basename(rel))[0]
         heads, h1 = set(), None
-        for line in text.splitlines():
+        for line in strip_markdown_code(text).splitlines():
             hm = HEADING_RE.match(line)
             if hm:
                 heads.add(hm.group(1).strip().lower())
@@ -449,7 +525,10 @@ def build_integrity(scan, rules=None, rules_info=None, now=None, list_n=LIST_N,
                          "detail": "YAML không hợp lệ tại dòng %d, cột %d: %s"
                                    % (line, col, problem)})
 
-        for i, line in enumerate(n["text"].splitlines(), 1):
+        # W73: cấu trúc trong code chỉ là ví dụ. Quét trên bản đã che code để cả
+        # wikilink/nhúng/anchor lẫn phép đếm reference media cùng một ngữ nghĩa.
+        structure_text = strip_markdown_code(n["text"])
+        for i, line in enumerate(structure_text.splitlines(), 1):
             for m in EMBED_RE.finditer(line):
                 base, _anchor = split_target(m.group(1))
                 b = os.path.basename(base).lower()
