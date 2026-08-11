@@ -41,6 +41,8 @@ function nodeHtml(d) {
   if (d.unblocks) bits.push(tr('work.unblocks', { n: d.unblocks }));
   if (d.bucket === 'waiting_dep') bits.push(tr('work.needs', { list: (d.unmet_codes || d.unmet).join(', ') }));
   if (d.bucket === 'waiting_gate') bits.push(gateText(d));
+  const agent = d.agent_label || d.agent || '—';
+  bits.unshift(`Agent: ${agent}`);
   // Mã ngắn là thứ người dùng gọi tên khi giao việc — cho vào tooltip luôn
   const tip = [`${d.code || ''} · ${d.priority || 'P?'}`, d.why || '', bits.join(' · ')]
     .filter(Boolean).join('\n');
@@ -49,6 +51,7 @@ function nodeHtml(d) {
       title="${esc(tip)}">
     <span class="wm-code">${esc(d.code || '—')}</span>
     <span class="wm-p">${esc(d.priority || 'P?')}</span>
+    <span class="wm-p wm-agent" title="Agent">${esc(agent)}</span>
     <span class="wm-t">${esc(d.title)}</span>
     ${d.unblocks ? `<span class="wm-u" title="${tr('work.unblocks.tip', { n: d.unblocks })}">⛓${d.unblocks}</span>` : ''}
   </button>`;

@@ -19,6 +19,7 @@ Windows-only (shortcut .lnk): may khac -> in SKIP va PASS, de selfcheck ban publ
 tren Linux khong do oan.
 """
 import os, re, struct, sys
+from types import SimpleNamespace
 sys.dont_write_bytecode = True   # khong sinh __pycache__ trong vault
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # console cp1252
@@ -198,6 +199,26 @@ def test_icon():
     check("icon ten co dinh cua ban cu cung bi don", not os.path.isfile(stale))
 
 
+def test_hidden_powershell():
+    # Launcher chay bang pythonw, nen PowerShell helper khong co CREATE_NO_WINDOW se
+    # loe mot terminal moi. Shell folder + moi shortcut deu di qua _powershell(); mot
+    # lan mo app co the loe lien tiep nhieu cua so (bug that tren may Windows ngay 11/08).
+    calls = []
+    real_run = IL.subprocess.run
+    try:
+        IL.subprocess.run = lambda argv, **kwargs: (
+            calls.append((argv, kwargs))
+            or SimpleNamespace(returncode=0, stdout="ok\n", stderr=""))
+        out = IL._powershell("'ok'")
+    finally:
+        IL.subprocess.run = real_run
+    check("PowerShell helper tra stdout binh thuong", out == "ok", out)
+    check("PowerShell helper co chay that trong may gac", len(calls) == 1, calls)
+    flags = calls[0][1].get("creationflags") if calls else None
+    check("PowerShell helper dung CREATE_NO_WINDOW, khong loe terminal",
+          flags == 0x08000000, flags)
+
+
 def test_shortcut_roundtrip():
     dest = os.path.join(ROOT, "lnk")
     res = IL.install(name="KB Graph 3D TEST", hotkey="CTRL+ALT+F9", dest_dir=dest)
@@ -372,6 +393,7 @@ if __name__ == "__main__":
     test_registry_pythonw()
     test_spec()
     test_icon()
+    test_hidden_powershell()
     test_shortcut_roundtrip()
     test_favicon()
     test_refresh_shell()

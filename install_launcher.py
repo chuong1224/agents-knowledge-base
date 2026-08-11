@@ -32,7 +32,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from activity_paths import local_data_dir   # noqa: E402
+from activity_paths import local_data_dir, no_window_kwargs   # noqa: E402
 
 APP_NAME = "KB Graph 3D"
 ENSURE = "ensure_graph3d.py"
@@ -71,12 +71,18 @@ class LauncherError(Exception):
 
 
 def _powershell(script, extra_env=None):
+    """Chạy helper PowerShell mà không để ``pythonw`` làm loé cửa sổ terminal.
+
+    Shell folder và mỗi shortcut đều đi qua đây. Thiếu ``CREATE_NO_WINDOW`` khiến
+    một lần mở app tạo liên tiếp nhiều khung PowerShell rồi tắt (máy công ty, 11/08).
+    """
     env = dict(os.environ)
     env.update(extra_env or {})
     try:
         r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
                            capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", timeout=30, env=env)
+                           errors="replace", timeout=30, env=env,
+                           **no_window_kwargs())
     except Exception as exc:                       # noqa: BLE001
         raise LauncherError("khong goi duoc PowerShell: %s" % exc)
     if r.returncode != 0:
@@ -323,7 +329,7 @@ def refresh_shell():
         # phải lúc nào cũng dọn; ie4uinit là tiện ích sẵn của Windows làm đúng việc đó.
         subprocess.run([os.path.join(os.environ.get("WINDIR", r"C:\Windows"),
                                      "System32", "ie4uinit.exe"), "-show"],
-                       capture_output=True, timeout=15)
+                       capture_output=True, timeout=15, **no_window_kwargs())
     except Exception:                              # noqa: BLE001
         pass
     return ok
