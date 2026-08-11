@@ -160,6 +160,19 @@ check("R CSS clamp Reader theo viewport va panel an",
       all(tok in css for tok in ("--reader-w: 520px", "--reader-split-w: 1046px",
                                  "#panel.hidden ~ #reader", "--reader-right-gap: 72px",
                                  "#rd-resize", ":root.rd-dragging")))
+check("R tay keo nam ngoai Reader, khong de scrollbar doc",
+      '</div>\n<div id="rd-resize"' in html and
+      all(tok in css for tok in ("#reader.show + #rd-resize", "display: block",
+                                 "top: 12px", "bottom: 12px", "--reader-handle-gap: 2px",
+                                 "#panel.hidden ~ #rd-resize", "#reader.split + #rd-resize",
+                                 "var(--reader-handle-gap)")) and
+      "document.documentElement.style.setProperty(READER_W_VAR[mode]" in reader and
+      "h.style.left" not in reader)
+check("R rail resize bam con tro tuc thoi khi dang keo",
+      "#rd-resize" in css and "transition: left .25s ease" in css and
+      ":root.rd-dragging #rd-resize { transition: none; }" in css and
+      "classList.add('rd-dragging')" in reader and
+      "classList.remove('rd-dragging')" in reader)
 
 # Chạy chính hàm JS thuần bằng Node khi có sẵn; app không phụ thuộc Node nên môi trường
 # chỉ có Python được SKIP có báo, không FAIL oan. Phiên release W143 bắt buộc chạy nhánh này.

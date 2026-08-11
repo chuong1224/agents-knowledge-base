@@ -299,7 +299,7 @@ input[type=range] { width: 118px; accent-color: var(--magenta); }
    như Obsidian): không phủ lên nữa; màn hẹp thì Reader TỰ THU HẸP theo chỗ còn lại.
    Bề rộng 1/split là hai preference kéo được; CSS vẫn clamp vào viewport.
    Khi panel phải ẩn, Reader được tận dụng khoảng trống nhưng chừa nút ☰. */
-:root { --reader-w: 520px; --reader-split-w: 1046px; }
+:root { --reader-w: 520px; --reader-split-w: 1046px; --reader-handle-gap: 2px; }
 #reader { position: absolute; top: 12px; left: calc(12px + var(--rail-w)); bottom: 12px; z-index: 15;
   --reader-right-gap: 356px;
   width: clamp(300px, var(--reader-w), calc(100vw - var(--rail-w) - var(--reader-right-gap)));
@@ -314,13 +314,19 @@ input[type=range] { width: 118px; accent-color: var(--magenta); }
 #reader .pane { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
 #reader:not(.split) .pane[data-pane="1"] { display: none; }
 #reader .pane + .pane { border-left: 1px solid var(--border); }
-#rd-resize { position: absolute; top: 0; right: 0; width: 7px; height: 100%;
-  cursor: col-resize; touch-action: none; z-index: 4; }
+#rd-resize { position: absolute; top: 12px; bottom: 12px; width: 7px;
+  --rd-pref: var(--reader-w); --rd-min: 300px; --rd-right-gap: 356px;
+  left: calc(12px + var(--rail-w) + clamp(var(--rd-min), var(--rd-pref), calc(100vw - var(--rail-w) - var(--rd-right-gap))) + var(--reader-handle-gap));
+  display: none; cursor: col-resize; touch-action: none; z-index: 16; transition: left .25s ease; }
+#reader.show + #rd-resize { display: block; }
+#panel.hidden ~ #rd-resize { --rd-right-gap: 72px; }
+#reader.split + #rd-resize { --rd-pref: var(--reader-split-w); --rd-min: 600px; }
 #rd-resize::after { content: ""; position: absolute; inset: 0 2px; border-radius: 2px; }
 #rd-resize:hover::after, #rd-resize.active::after,
 #rd-resize:focus-visible::after { background: rgba(4,217,255,.35); }
 #rd-resize:focus-visible { outline: none; }
 :root.rd-dragging { cursor: col-resize; user-select: none; }
+:root.rd-dragging #rd-resize { transition: none; }
 
 /* tabbar — mỗi pane một hàng tab; Ctrl/middle-click nơi khác mở tab mới vào đây */
 .tabbar { display: flex; align-items: flex-end; gap: 4px; padding: 7px 8px 0; flex: none;

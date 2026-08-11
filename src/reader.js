@@ -305,7 +305,8 @@ function persistReaderWidths() {
 function applyReaderWidth(mode, px, save = false) {
   const w = Math.max(READER_W_MIN[mode], Math.round(px));
   readerWidths[mode] = w;
-  $('reader').style.setProperty(READER_W_VAR[mode], w + 'px');
+  // Root sở hữu preference để Reader và rail sibling dùng đúng cùng một phép tính CSS.
+  document.documentElement.style.setProperty(READER_W_VAR[mode], w + 'px');
   if (save) persistReaderWidths();
   syncReaderResizeAria();
   return w;
@@ -315,8 +316,9 @@ function setReaderWidth(px, save = false) {
   return applyReaderWidth(mode, Math.min(readerMax(mode), px), save);
 }
 function syncReaderResizeAria() {
-  const h = $('rd-resize'), mode = readerMode();
-  const actual = $('reader').getBoundingClientRect().width || Math.min(readerWidths[mode], readerMax(mode));
+  const h = $('rd-resize'), reader = $('reader'), mode = readerMode();
+  const rect = reader.getBoundingClientRect();
+  const actual = rect.width || Math.min(readerWidths[mode], readerMax(mode));
   h.setAttribute('aria-valuemin', String(READER_W_MIN[mode]));
   h.setAttribute('aria-valuemax', String(readerMax(mode)));
   h.setAttribute('aria-valuenow', String(Math.round(actual)));
@@ -353,6 +355,7 @@ function initReaderResize() {
     setReaderWidth($('reader').getBoundingClientRect().width + (ev.key === 'ArrowRight' ? 16 : -16), true);
   };
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(syncReaderResizeAria).observe($('reader'));
+  new MutationObserver(syncReaderResizeAria).observe($('reader'), { attributes: true, attributeFilter: ['class'] });
   new MutationObserver(syncReaderResizeAria).observe($('panel'), { attributes: true, attributeFilter: ['class'] });
   window.addEventListener('resize', syncReaderResizeAria);
   $('sb-resize').addEventListener('pointerup', syncReaderResizeAria);
