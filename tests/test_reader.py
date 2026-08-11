@@ -149,6 +149,17 @@ check("R hop viewer fixed theo viewport, gioi han 80vw x 80vh + responsive 375",
 check("R focus trap + tra focus anh mo",
       "ev.key === 'Tab'" in viewer and "opener.focus({ preventScroll: true })" in viewer and
       "$('reader').setAttribute('inert', '')" in viewer and "$('reader').removeAttribute('inert')" in viewer)
+check("R tay keo Reader co separator + i18n + keyboard",
+      'id="rd-resize"' in html and 'role="separator"' in html and
+      'data-i18n-aria="rd.resize.aria"' in html and "h.onkeydown" in reader)
+check("R Reader nho rieng width single/split + pointer capture",
+      all(tok in reader for tok in ("kbgraph3d.readerW.v1", "single: 520", "split: 1046",
+                                    "setPointerCapture", "onpointermove", "ResizeObserver",
+                                    "READER_W_MIN", "READER_W_VAR", "parseFloat(readerStyle.left)")))
+check("R CSS clamp Reader theo viewport va panel an",
+      all(tok in css for tok in ("--reader-w: 520px", "--reader-split-w: 1046px",
+                                 "#panel.hidden ~ #reader", "--reader-right-gap: 72px",
+                                 "#rd-resize", ":root.rd-dragging")))
 
 # Chạy chính hàm JS thuần bằng Node khi có sẵn; app không phụ thuộc Node nên môi trường
 # chỉ có Python được SKIP có báo, không FAIL oan. Phiên release W143 bắt buộc chạy nhánh này.

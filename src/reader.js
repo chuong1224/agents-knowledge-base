@@ -18,6 +18,11 @@ import { openFileActions } from './file-actions.js';
 
 const IMG_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif', 'ico']);
 const VIDEO_EXTS = new Set(['mp4', 'webm', 'mov']);
+const READER_W_KEY = 'kbgraph3d.readerW.v1';
+const READER_W_DEF = { single: 520, split: 1046 };
+const READER_W_MIN = { single: 300, split: 600 };
+const READER_W_VAR = { single: '--reader-w', split: '--reader-split-w' };
+const readerWidths = { ...READER_W_DEF };
 
 let _md = null;          // instance markdown-it (tạo lười — vendor load trước module)
 let _maps = null;        // index resolve, dựng lại mỗi lần render (vault có thể vừa refresh)
@@ -284,7 +289,77 @@ export async function renderPane(p, opts = {}) {
 export function openReader(node, opts = {}) { wsOpen(node, opts); }
 export function closeReader() { $('reader').classList.remove('show'); }   // model tabs GIỮ NGUYÊN — mở lại còn nguyên workspace
 
+/* ---------- kéo co giãn ngang Reader ---------- */
+function readerMode() { return $('reader').classList.contains('split') ? 'split' : 'single'; }
+function readerMax(mode) {
+  const readerStyle = getComputedStyle($('reader'));
+  // --rail-w là chuỗi calc(...) nên parseFloat trực tiếp cho NaN; left đã được CSS
+  // resolve thành pixel và luôn bằng 12px + rail, kể cả khi Reader đang display:none.
+  const rail = Math.max(0, (parseFloat(readerStyle.left) || 12) - 12);
+  const rightGap = parseFloat(readerStyle.getPropertyValue('--reader-right-gap')) || 356;
+  return Math.max(READER_W_MIN[mode], Math.round(innerWidth - rail - rightGap));
+}
+function persistReaderWidths() {
+  try { localStorage.setItem(READER_W_KEY, JSON.stringify(readerWidths)); } catch (e) {}
+}
+function applyReaderWidth(mode, px, save = false) {
+  const w = Math.max(READER_W_MIN[mode], Math.round(px));
+  readerWidths[mode] = w;
+  $('reader').style.setProperty(READER_W_VAR[mode], w + 'px');
+  if (save) persistReaderWidths();
+  syncReaderResizeAria();
+  return w;
+}
+function setReaderWidth(px, save = false) {
+  const mode = readerMode();
+  return applyReaderWidth(mode, Math.min(readerMax(mode), px), save);
+}
+function syncReaderResizeAria() {
+  const h = $('rd-resize'), mode = readerMode();
+  const actual = $('reader').getBoundingClientRect().width || Math.min(readerWidths[mode], readerMax(mode));
+  h.setAttribute('aria-valuemin', String(READER_W_MIN[mode]));
+  h.setAttribute('aria-valuemax', String(readerMax(mode)));
+  h.setAttribute('aria-valuenow', String(Math.round(actual)));
+}
+function initReaderResize() {
+  const h = $('rd-resize');
+  try {
+    const saved = JSON.parse(localStorage.getItem(READER_W_KEY) || '{}');
+    for (const mode of ['single', 'split'])
+      if (Number.isFinite(saved[mode])) readerWidths[mode] = Math.max(READER_W_MIN[mode], saved[mode]);
+  } catch (e) {}
+  applyReaderWidth('single', readerWidths.single);
+  applyReaderWidth('split', readerWidths.split);
+
+  h.onpointerdown = ev => {
+    if (ev.button !== 0) return;
+    ev.preventDefault();
+    try { h.setPointerCapture(ev.pointerId); } catch (e) {}
+    h.classList.add('active');
+    document.documentElement.classList.add('rd-dragging');
+    const x0 = ev.clientX, start = $('reader').getBoundingClientRect().width;
+    h.onpointermove = e => setReaderWidth(start + (e.clientX - x0));
+    h.onpointerup = h.onpointercancel = () => {
+      h.onpointermove = h.onpointerup = h.onpointercancel = null;
+      h.classList.remove('active');
+      document.documentElement.classList.remove('rd-dragging');
+      setReaderWidth($('reader').getBoundingClientRect().width, true);
+    };
+  };
+  h.ondblclick = () => applyReaderWidth(readerMode(), READER_W_DEF[readerMode()], true);
+  h.onkeydown = ev => {
+    if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
+    ev.preventDefault();
+    setReaderWidth($('reader').getBoundingClientRect().width + (ev.key === 'ArrowRight' ? 16 : -16), true);
+  };
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(syncReaderResizeAria).observe($('reader'));
+  new MutationObserver(syncReaderResizeAria).observe($('panel'), { attributes: true, attributeFilter: ['class'] });
+  window.addEventListener('resize', syncReaderResizeAria);
+  $('sb-resize').addEventListener('pointerup', syncReaderResizeAria);
+}
+
 export function initReader() {
+  initReaderResize();
   [0, 1].forEach(p => {
     const R = paneRefs(p);
     R.x.onclick = closeReader;

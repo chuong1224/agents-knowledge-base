@@ -138,6 +138,8 @@ export const DICT = {
     'sb.tree.tip': 'Duyệt cấu trúc folder vault — click note để đọc, click file đính kèm để mở menu thao tác. Cây độc lập với bộ lọc hiển thị trên graph.',
     'sb.resize.aria': 'Chỉnh bề rộng cây vault',
     'sb.resize.tip': 'Kéo chỉnh bề rộng · click đúp về mặc định · phím ←/→',
+    'rd.resize.aria': 'Chỉnh bề rộng vùng đọc note',
+    'rd.resize.tip': 'Kéo chỉnh bề rộng vùng đọc · click đúp về mặc định · phím ←/→',
     'sb.toggle.tip': 'Ẩn/hiện cây vault',
     'sb.empty': 'Vault trống.',
 
@@ -562,6 +564,8 @@ export const DICT = {
     'sb.tree.tip': 'Browse the vault folder structure — click a note to read it, or an attachment for file actions. The tree is independent of the graph filters.',
     'sb.resize.aria': 'Resize the vault tree',
     'sb.resize.tip': 'Drag to resize · double-click to reset · ←/→ keys',
+    'rd.resize.aria': 'Resize the note reader',
+    'rd.resize.tip': 'Drag to resize the reader · double-click to reset · ←/→ keys',
     'sb.toggle.tip': 'Show/hide the vault tree',
     'sb.empty': 'Vault is empty.',
 

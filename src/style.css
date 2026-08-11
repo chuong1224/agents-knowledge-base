@@ -296,22 +296,31 @@ input[type=range] { width: 118px; accent-color: var(--magenta); }
 
 /* ---------- reader — panel đọc note (giai đoạn 1; đa tab + 2 pane từ giai đoạn 4) ---------- */
 /* Reader LUÔN nằm CẠNH sidebar (chốt 14/07 — cây giữ mở trong lúc đọc,
-   như Obsidian): không phủ lên nữa; màn hẹp thì Reader TỰ THU HẸP theo chỗ còn lại
-   (356px ≈ panel phải + khe; sàn 300px còn đọc được). Chật quá: thu sidebar/panel.
-   Giai đoạn 4: #reader chứa 2 .pane (tabbar + head + body); pane 1 chỉ hiện khi
-   .split — bề rộng nới gấp đôi, mỗi pane flex 1. */
+   như Obsidian): không phủ lên nữa; màn hẹp thì Reader TỰ THU HẸP theo chỗ còn lại.
+   Bề rộng 1/split là hai preference kéo được; CSS vẫn clamp vào viewport.
+   Khi panel phải ẩn, Reader được tận dụng khoảng trống nhưng chừa nút ☰. */
+:root { --reader-w: 520px; --reader-split-w: 1046px; }
 #reader { position: absolute; top: 12px; left: calc(12px + var(--rail-w)); bottom: 12px; z-index: 15;
-  width: clamp(300px, calc(100vw - var(--rail-w) - 356px), 520px);
+  --reader-right-gap: 356px;
+  width: clamp(300px, var(--reader-w), calc(100vw - var(--rail-w) - var(--reader-right-gap)));
   background: var(--panel); border: 1px solid var(--border);
   border-radius: 14px; backdrop-filter: blur(10px); display: none;
   overflow: hidden; box-shadow: 0 0 30px rgba(177,74,237,.14), inset 0 0 40px rgba(4,217,255,.03);
   transition: left .25s ease; }
+#panel.hidden ~ #reader { --reader-right-gap: 72px; }
 #reader.show { display: flex; animation: rdin .22s ease; }
-#reader.split { width: clamp(600px, calc(100vw - var(--rail-w) - 356px), 1046px); }
+#reader.split { width: clamp(600px, var(--reader-split-w), calc(100vw - var(--rail-w) - var(--reader-right-gap))); }
 @keyframes rdin { from { opacity: 0; transform: translateX(-18px); } }
 #reader .pane { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
 #reader:not(.split) .pane[data-pane="1"] { display: none; }
 #reader .pane + .pane { border-left: 1px solid var(--border); }
+#rd-resize { position: absolute; top: 0; right: 0; width: 7px; height: 100%;
+  cursor: col-resize; touch-action: none; z-index: 4; }
+#rd-resize::after { content: ""; position: absolute; inset: 0 2px; border-radius: 2px; }
+#rd-resize:hover::after, #rd-resize.active::after,
+#rd-resize:focus-visible::after { background: rgba(4,217,255,.35); }
+#rd-resize:focus-visible { outline: none; }
+:root.rd-dragging { cursor: col-resize; user-select: none; }
 
 /* tabbar — mỗi pane một hàng tab; Ctrl/middle-click nơi khác mở tab mới vào đây */
 .tabbar { display: flex; align-items: flex-end; gap: 4px; padding: 7px 8px 0; flex: none;
