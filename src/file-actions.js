@@ -6,6 +6,10 @@ import { tr } from './i18n.js';
 let current = null;
 let busy = false;
 const ACTION_QUERY = { open: 'action=open', reveal: 'action=reveal' };
+const PREVIEW_EXTS = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif', 'ico',
+  'pdf', 'txt', 'md', 'mp4', 'webm', 'mp3', 'wav', 'ogg'
+]);
 
 function assetUrl(node) { return '/asset?path=' + encodeURIComponent(node.id); }
 
@@ -44,9 +48,25 @@ async function run(action) {
 export function openFileActions(node) {
   if (!node || node.kind !== 'file') return;
   current = node;
-  $('file-act-title').textContent = node.name || node.id.split('/').pop();
+  const name = node.name || node.id.split('/').pop();
+  const preview = $('file-act-preview');
+  const canPreview = PREVIEW_EXTS.has((node.ext || '').toLowerCase());
+  $('file-act-title').textContent = name;
   $('file-act-path').textContent = node.id;
-  $('file-act-preview').href = assetUrl(node);
+  preview.href = assetUrl(node);
+  if (canPreview) {
+    preview.dataset.i18n = 'file.preview';
+    preview.textContent = tr('file.preview');
+    preview.target = '_blank';
+    preview.rel = 'noopener';
+    preview.removeAttribute('download');
+  } else {
+    preview.dataset.i18n = 'file.download';
+    preview.textContent = tr('file.download');
+    preview.download = name;
+    preview.removeAttribute('target');
+    preview.removeAttribute('rel');
+  }
   setStatus('');
   setBusy(false);
   $('file-act').classList.add('show');

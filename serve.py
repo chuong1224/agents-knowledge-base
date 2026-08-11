@@ -172,7 +172,13 @@ def run_file_action(rel, action, platform=None, startfile=None, popen=None):
                 raise OSError("Windows file association khong kha dung")
             startfile(full)
         else:
-            popen(["explorer.exe", "/select," + os.path.normpath(full)],
+            # Explorer parse /select khac CommandLineToArgvW: dau phay phai nam
+            # NGOAI cap quote cua path. subprocess.list2cmdline() quote ca doi so
+            # khi path co space, tao `"/select,E:\..."` va Explorer roi ve
+            # Documents. Truyen command line dung contract cua Explorer:
+            #     explorer.exe /select,"E:\folder co space\file, x.xlsx"
+            command = 'explorer.exe /select,"%s"' % os.path.normpath(full)
+            popen(command,
                   close_fds=True, **no_window_kwargs())
     elif platform == "darwin":
         argv = ["open", full] if action == "open" else ["open", "-R", full]

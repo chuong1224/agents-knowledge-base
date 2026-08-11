@@ -116,9 +116,20 @@ check("F W173 dialog DOM du %d id" % len(ids),
       all(('id=\"%s\"' % x) in index for x in ids),
       [x for x in ids if ('id=\"%s\"' % x) not in index])
 for key in ("file.title", "file.open", "file.reveal", "file.preview", "file.done.open",
-            "file.done.reveal", "file.error", "qs.files"):
+            "file.download", "file.done.reveal", "file.error", "qs.files"):
     check("F W173 i18n VI+EN %s" % key, i18n.count("'%s'" % key) == 2,
           i18n.count("'%s'" % key))
+
+# W174: Office/archive phai download cung tab, khong de lai cua so app den; chi cac
+# dinh dang browser render duoc moi mo tab preview.
+check("F W174 tach previewable va download-only",
+      all(tok in actions for tok in ("PREVIEW_EXTS", "tr('file.preview')",
+                                     "tr('file.download')", ".download =",
+                                     "removeAttribute('target')", "target = '_blank'")))
+preview_markup = '<a id="file-act-preview" data-i18n="file.preview">'
+check("F W174 markup khong hardcode target blank",
+      preview_markup in index and
+      '<a id="file-act-preview" target="_blank"' not in index)
 
 print("\nTONG KET:", ("FAIL %d muc" % len(fails)) if fails else "ALL PASS")
 sys.exit(1 if fails else 0)

@@ -18,6 +18,8 @@ with open(os.path.join(VAULT, "Sample.md"), "w", encoding="utf-8") as f:
     f.write("# Sample\n")
 with open(os.path.join(VAULT, "Sample.xlsx"), "wb") as f:
     f.write(b"fake-xlsx-for-file-action-test")
+with open(os.path.join(VAULT, "Sample, Quarter 3.xlsx"), "wb") as f:
+    f.write(b"fake-xlsx-with-spaces-and-comma")
 SV.VAULT = VAULT
 
 fails = []
@@ -75,18 +77,20 @@ check("R W173 response chi tra path tuong doi",
 
 calls.clear()
 try:
-    revealed = SV.run_file_action("Sample.xlsx", "reveal", platform="win32",
+    revealed = SV.run_file_action("Sample, Quarter 3.xlsx", "reveal", platform="win32",
                                   startfile=fake_startfile, popen=fake_popen)
 except Exception as exc:
     revealed = {"error": repr(exc)}
 reveal_call = calls[-1] if calls else None
-check("R W173 reveal dung Explorer /select dung file",
+reveal_full = os.path.normpath(SV.vault_file("Sample, Quarter 3.xlsx"))
+reveal_cmd = 'explorer.exe /select,"%s"' % reveal_full
+check("R W174 reveal dung Explorer /select voi quote dung cho space/comma",
       revealed.get("ok") is True and reveal_call and reveal_call[0] == "popen" and
-      reveal_call[1][0].lower().endswith("explorer.exe") and
-      reveal_call[1][1].startswith("/select,") and
-      reveal_call[1][1].endswith("Sample.xlsx"), (revealed, reveal_call))
-check("R W173 Explorer khong loe console",
-      reveal_call and reveal_call[2].get("creationflags") == 0x08000000, reveal_call)
+      isinstance(reveal_call[1], str) and reveal_call[1] == reveal_cmd,
+      (revealed, reveal_call, reveal_cmd))
+check("R W174 Explorer khong qua shell va khong loe console",
+      reveal_call and not reveal_call[2].get("shell") and
+      reveal_call[2].get("creationflags") == 0x08000000, reveal_call)
 
 for rel, action, err_type in [
     ("../Sample.xlsx", "open", FileNotFoundError),
