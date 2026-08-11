@@ -15,7 +15,7 @@
 
 <div id="brand">
   <h1>KB GRAPH 3D</h1>
-  <div class="sub">KNOWLEDGE BASE · SYNTHWAVE · <span id="app-ver" role="button" tabindex="0" data-i18n-title="upd.ver.tip" title="Bấm để xem bản mới và bật/tắt kiểm tra cập nhật">v1.56.2</span><span id="update-badge" role="button" tabindex="0" data-i18n-title="upd.badge.tip" title="Có bản mới trên repo — bấm xem có gì thay đổi" hidden></span><button id="reload-b" type="button" data-i18n-title="reload.tip" data-i18n-aria="reload.aria" title="Nạp lại giao diện — lấy bản mã mới nhất" aria-label="Nạp lại giao diện">⟳</button><span id="lang-sw" role="group" data-i18n-aria="lang.switch" aria-label="Ngôn ngữ giao diện"></span></div>
+  <div class="sub">KNOWLEDGE BASE · SYNTHWAVE · <span id="app-ver" role="button" tabindex="0" data-i18n-title="upd.ver.tip" title="Bấm để xem bản mới và bật/tắt kiểm tra cập nhật">v1.57.0</span><span id="update-badge" role="button" tabindex="0" data-i18n-title="upd.badge.tip" title="Có bản mới trên repo — bấm xem có gì thay đổi" hidden></span><button id="reload-b" type="button" data-i18n-title="reload.tip" data-i18n-aria="reload.aria" title="Nạp lại giao diện — lấy bản mã mới nhất" aria-label="Nạp lại giao diện">⟳</button><span id="lang-sw" role="group" data-i18n-aria="lang.switch" aria-label="Ngôn ngữ giao diện"></span></div>
 </div>
 
 <div id="sidebar">
@@ -27,7 +27,7 @@
     <div class="sb-h" data-i18n-title="sb.recent.tip" title="Note đọc gần đây (nhớ qua phiên) — click mở lại, Ctrl+click mở tab mới"><span data-i18n="sb.recent">🕘 Gần đây</span> <span class="c"></span><span class="clr" data-i18n-title="sb.recent.clear" title="Xoá lịch sử đọc">✕</span></div>
     <div class="sb-list"></div>
   </div>
-  <div id="sidebar-head" data-i18n-title="sb.tree.tip" data-i18n="sb.tree" title="Duyệt cấu trúc folder vault — click note mở panel đọc, click file đính kèm mở tab mới. Cây độc lập với bộ lọc hiển thị trên graph.">🗂 Cây vault</div>
+  <div id="sidebar-head" data-i18n-title="sb.tree.tip" data-i18n="sb.tree" title="Duyệt cấu trúc folder vault — click note để đọc, click file đính kèm để mở menu thao tác. Cây độc lập với bộ lọc hiển thị trên graph.">🗂 Cây vault</div>
   <div id="tree"></div>
   <div id="sb-resize" role="separator" aria-orientation="vertical" tabindex="0"
        data-i18n-aria="sb.resize.aria" data-i18n-title="sb.resize.tip" aria-label="Chỉnh bề rộng cây vault" title="Kéo chỉnh bề rộng · click đúp về mặc định · phím ←/→"></div>
@@ -49,10 +49,10 @@
     <div class="stats" data-i18n-title="stats.tip" title="Đang sáng trên graph / tổng trong vault (khi có lọc — gồm cả lọc nhóm màu)"><span><b id="st-n">0</b> <span data-i18n="stats.notes">note</span></span><span><b id="st-l">0</b> <span data-i18n="stats.links">liên kết</span></span><span><b id="st-f">0</b> <span data-i18n="stats.files">file</span></span><span><b id="st-t">0</b> <span data-i18n="stats.tags">tag</span></span><span style="margin-left:auto;color:var(--faint);font-size:10.5px" data-i18n-title="stats.gen.tip" title="Giờ server quét vault lần cuối">🗘 <span id="st-gen">—</span></span></div>
   </div>
   <div class="sect" data-sect="search">
-    <h2 data-i18n="search.h2">Tìm note</h2>
-    <input id="search" list="notes-dl" data-i18n-ph="search.ph" placeholder="Gõ tên note rồi Enter…">
+    <h2 data-i18n="search.h2">Tìm note hoặc file</h2>
+    <input id="search" list="notes-dl" data-i18n-ph="search.ph" placeholder="Gõ tên note/file rồi Enter…">
     <datalist id="notes-dl"></datalist>
-    <div id="search-miss" data-i18n="search.miss">Không tìm thấy note nào khớp — thử từ khoá khác (không cần gõ dấu).</div>
+    <div id="search-miss" data-i18n="search.miss">Không tìm thấy note hoặc file nào khớp — thử từ khoá khác (không cần gõ dấu).</div>
   </div>
   <div class="sect" data-sect="work">
     <h2 data-i18n="work.h2">🌳 Work Map</h2>
@@ -200,10 +200,29 @@
 </div>
 
 <div id="qs">
-  <div id="qs-box" role="dialog" aria-modal="true" data-i18n-aria="qs.aria" aria-label="Tìm nhanh — mở note trong vault">
-    <input id="qs-input" data-i18n-ph="qs.ph" placeholder="Tìm note… (#tag để duyệt theo tag · từ 2 ký tự tìm cả nội dung)" autocomplete="off" spellcheck="false">
+  <div id="qs-box" role="dialog" aria-modal="true" data-i18n-aria="qs.aria" aria-label="Tìm nhanh note hoặc file trong vault">
+    <input id="qs-input" data-i18n-ph="qs.ph" placeholder="Tìm note hoặc file… (#tag để duyệt tag · từ 2 ký tự tìm nội dung note)" autocomplete="off" spellcheck="false">
     <div id="qs-results"></div>
     <div id="qs-hint" data-i18n="qs.hint">↑↓ chọn · Enter mở · Ctrl+Enter tab mới · Esc đóng · Ctrl+P bật/tắt</div>
+  </div>
+</div>
+
+<div id="file-act">
+  <div id="file-act-box" role="dialog" aria-modal="true" aria-labelledby="file-act-title">
+    <div class="file-act-head">
+      <div>
+        <div class="file-act-kicker" data-i18n="file.title">Tệp đính kèm</div>
+        <h3 id="file-act-title"></h3>
+      </div>
+      <button id="file-act-close" type="button" data-i18n-title="file.close" data-i18n-aria="file.close" title="Đóng (Esc)" aria-label="Đóng (Esc)">✕</button>
+    </div>
+    <div id="file-act-path"></div>
+    <div class="file-act-buttons">
+      <button id="file-act-open" type="button" data-i18n="file.open">Mở file</button>
+      <button id="file-act-reveal" type="button" data-i18n="file.reveal">Hiện trong thư mục</button>
+      <a id="file-act-preview" target="_blank" rel="noopener" data-i18n="file.preview">Xem / tải trong KB</a>
+    </div>
+    <div id="file-act-status" role="status" aria-live="polite" hidden></div>
   </div>
 </div>
 

@@ -9,6 +9,7 @@
 import { S, $, esc, deAccent, focusInto, restoreFocus } from './state.js';
 import { tr } from './i18n.js';
 import { openReader } from './reader.js';
+import { openFileActions } from './file-actions.js';
 import { recentNotes, renderSbSections } from './workspace.js';
 
 const TREE_OPEN_KEY = 'kbgraph3d.treeOpen.v1';
@@ -20,7 +21,6 @@ let _restored = false;
 let _byId = new Map();         // id -> node, dựng lại mỗi buildTree/openSwitcher
 
 const viCmp = (a, b) => a.localeCompare(b, 'vi');
-function assetUrl(node) { return '/asset?path=' + encodeURIComponent(node.id); }
 
 function saveTreeOpen() {
   try { localStorage.setItem(TREE_OPEN_KEY, JSON.stringify([...treeOpen])); } catch (e) {}
@@ -75,7 +75,7 @@ function renderDir(dir, path, depth, out) {
       `<span class="dot" style="background:${n.color}"></span><span class="n">${esc(n.stem)}</span></div>`));
   dir.files.slice().sort((a, b) => viCmp(a.name, b.name)).forEach(f =>
     out.push(`<div class="tr file" role="button" tabindex="0" data-file="${esc(f.id)}"` +
-      ` style="padding-left:${pad}px" title="${tr('tree.newtab', { f: esc(f.id) })}">` +
+      ` style="padding-left:${pad}px" title="${tr('tree.file', { f: esc(f.id) })}">` +
       `<span class="tw">📎</span><span class="n">${esc(f.name)}</span></div>`));
 }
 export function buildTree() {
@@ -98,7 +98,7 @@ function onTreeActivate(row, newTab) {
     if (n) openReader(n, { newTab });
   } else if (row.dataset.file) {
     const f = _byId.get(row.dataset.file);
-    if (f) window.open(assetUrl(f), '_blank', 'noopener');
+    if (f) openFileActions(f);
   }
 }
 
@@ -109,7 +109,7 @@ let _qsSeq = 0;                        // chống response về trễ đè kết
 let _qsContent = { q: '', rows: [] };  // kết quả /search của query gần nhất
 let _qsNewTab = false;                 // mở từ nút ＋ tabbar → mọi lựa chọn thành tab mới
 
-function qsRows() { return [...$('qs-results').querySelectorAll('.qs-row[data-note]')]; }
+function qsRows() { return [...$('qs-results').querySelectorAll('.qs-row[data-note], .qs-row[data-file]')]; }
 function qsSelect(i) {
   const rows = qsRows();
   if (!rows.length) { _qsSel = 0; return; }
@@ -121,6 +121,11 @@ function qsNoteRow(n, extra) {
   return `<div class="qs-row" data-note="${esc(n.id)}" title="${esc(n.name)}">` +
     `<span class="dot" style="background:${n.color}"></span>` +
     `<span class="n">${esc(n.stem)}</span>${extra || ''}<span class="f">${esc(n.folder)}</span></div>`;
+}
+function qsFileRow(n) {
+  return `<div class="qs-row file" data-file="${esc(n.id)}" title="${esc(n.id)}">` +
+    `<span class="paperclip">📎</span><span class="n">${esc(n.name)}</span>` +
+    `<span class="f">${esc(n.folder)}</span></div>`;
 }
 function qsContentRow(r) {
   const n = _byId.get(r.path);
@@ -134,6 +139,7 @@ function qsContentRow(r) {
 function qsRender() {
   const qRaw = $('qs-input').value.trim();
   const notes = S.all.nodes.filter(n => n.kind === 'note');
+  const files = S.all.nodes.filter(n => n.kind === 'file');
   let html = '';
   if (!qRaw) {
     const rc = recentNotes(6);          // giai đoạn 4: mở switcher trống = quay lại chỗ vừa đọc
@@ -161,6 +167,11 @@ function qsRender() {
       .concat(incl.sort((a, b) => viCmp(a.stem, b.stem))).slice(0, 8);
     html = `<div class="qs-h">${tr('qs.byname')}</div>` +
       (named.map(n => qsNoteRow(n)).join('') || `<div class="qs-miss">${tr('qs.name.none')}</div>`);
+    const fileHits = files.filter(n =>
+      deAccent([n.name, n.id, n.folder, n.ext].join(' ')).includes(q))
+      .sort((a, b) => viCmp(a.name, b.name)).slice(0, 12);
+    html += `<div class="qs-h">${tr('qs.files')}</div>` +
+      (fileHits.map(qsFileRow).join('') || `<div class="qs-miss">${tr('qs.files.none')}</div>`);
     if (qRaw.length >= 2) {
       html += `<div class="qs-h">${tr('qs.content')}</div>`;
       if (_qsContent.q === qRaw) {
@@ -193,10 +204,11 @@ function qsOpenSel(newTab) {
   const rows = qsRows();
   const row = rows[_qsSel] || rows[0];
   if (!row) return;
-  const n = _byId.get(row.dataset.note);
+  const n = _byId.get(row.dataset.note || row.dataset.file);
   const force = _qsNewTab;
   closeSwitcher();
   if (n && n.kind === 'note') openReader(n, { newTab: newTab || force });
+  else if (n && n.kind === 'file') openFileActions(n);
 }
 export function openSwitcher(opts) {
   _byId = new Map(S.all.nodes.map(n => [n.id, n]));
@@ -302,14 +314,14 @@ export function initFinder() {
   }, true);
   $('qs').onclick = ev => { if (ev.target === $('qs')) closeSwitcher(); };  // click nền mờ = đóng
   $('qs-results').onclick = ev => {
-    const row = ev.target.closest('.qs-row[data-note]');
+    const row = ev.target.closest('.qs-row[data-note], .qs-row[data-file]');
     if (!row) return;
     _qsSel = qsRows().indexOf(row);
     qsOpenSel(ev.ctrlKey || ev.metaKey);
   };
   $('qs-results').addEventListener('auxclick', ev => {
     if (ev.button !== 1) return;
-    const row = ev.target.closest('.qs-row[data-note]');
+    const row = ev.target.closest('.qs-row[data-note], .qs-row[data-file]');
     if (!row) return;
     ev.preventDefault();
     _qsSel = qsRows().indexOf(row);

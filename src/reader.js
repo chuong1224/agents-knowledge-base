@@ -14,6 +14,7 @@ import { flyTo } from './graph.js';
 import { pulses } from './effects.js';
 import { WS, wsOpen, wsBack, wsSplit, tabAt, isPinned, togglePin, pushRecent } from './workspace.js';
 import { initImageViewer, isImageViewerOpen, decorateViewerImages } from './image-viewer.js';
+import { openFileActions } from './file-actions.js';
 
 const IMG_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif', 'ico']);
 const VIDEO_EXTS = new Set(['mp4', 'webm', 'mov']);
@@ -101,7 +102,7 @@ function resolveFile(target, folder) {
 /* ---------- markdown-it + rule wikilink / ảnh / link thường ---------- */
 function assetUrl(node) { return '/asset?path=' + encodeURIComponent(node.id); }
 function fileAnchor(node, label) {
-  return `<a class="wl file" target="_blank" rel="noopener" href="${assetUrl(node)}">📎 ${esc(label)}</a>`;
+  return `<a class="wl file" href="#" data-file="${esc(node.id)}">📎 ${esc(label)}</a>`;
 }
 function renderWikilink(meta, env) {
   const inner = meta.inner.trim();
@@ -168,7 +169,7 @@ function mediaRules(md) {
       if (n) { t.attrSet('href', '#'); t.attrJoin('class', 'wl'); t.attrSet('data-note', n.id); }
       else {
         const f = resolveFile(dec, (env || {}).folder);
-        if (f) { t.attrSet('href', assetUrl(f)); t.attrSet('target', '_blank'); t.attrSet('rel', 'noopener'); }
+        if (f) { t.attrSet('href', '#'); t.attrJoin('class', 'wl file'); t.attrSet('data-file', f.id); }
       }
     }
     return defLink(tokens, idx, opts, env, self);
@@ -300,9 +301,14 @@ export function initReader() {
   // MỘT handler uỷ quyền cho mọi điều hướng trong panel: wikilink, link .md thường,
   // hàng backlink — mở trong pane chứa link; Ctrl/middle-click = tab mới (giai đoạn 4)
   const navigate = (ev, forceNew) => {
-    const el = ev.target.closest('[data-note]');
+    const el = ev.target.closest('[data-note], [data-file]');
     if (!el) return;
     ev.preventDefault();
+    if (el.dataset.file) {
+      const f = _maps && _maps.allById.get(el.dataset.file);
+      if (f && f.kind === 'file') openFileActions(f);
+      return;
+    }
     const paneEl = ev.target.closest('.pane');
     const n = _maps && _maps.allById.get(el.dataset.note);
     if (n && n.kind === 'note')

@@ -16,6 +16,8 @@ VAULT = os.path.join(SCRATCH, "vault-reader-portable")
 os.makedirs(VAULT, exist_ok=True)
 with open(os.path.join(VAULT, "Sample.md"), "w", encoding="utf-8") as f:
     f.write("# Sample\n")
+with open(os.path.join(VAULT, "Sample.xlsx"), "wb") as f:
+    f.write(b"fake-xlsx-for-file-action-test")
 SV.VAULT = VAULT
 
 fails = []
@@ -51,6 +53,53 @@ for ext, want in [(".jpg", "image/jpeg"), (".webp", "image/webp"), (".pdf", "app
 # Khong hoi quy: cac ham loi serve van nguyen (endpoint moi khong duoc pha contract cu)
 for fn in ("read_activity_all", "read_all_events", "build_chains", "_restart_sources_sane"):
     check("R serve.%s con nguyen" % fn, hasattr(SV, fn))
+
+# W173: action OS cho attachment — cung hang rao vault_file, POST se goi ham nay.
+calls = []
+def fake_startfile(path):
+    calls.append(("startfile", path))
+def fake_popen(argv, **kwargs):
+    calls.append(("popen", argv, kwargs))
+    return object()
+
+try:
+    opened = SV.run_file_action("Sample.xlsx", "open", platform="win32",
+                                startfile=fake_startfile, popen=fake_popen)
+except Exception as exc:
+    opened = {"error": repr(exc)}
+check("R W173 open dung file association Windows",
+      opened.get("ok") is True and calls and calls[-1][0] == "startfile" and
+      calls[-1][1].endswith("Sample.xlsx"), (opened, calls))
+check("R W173 response chi tra path tuong doi",
+      opened.get("path") == "Sample.xlsx" and "full" not in opened, opened)
+
+calls.clear()
+try:
+    revealed = SV.run_file_action("Sample.xlsx", "reveal", platform="win32",
+                                  startfile=fake_startfile, popen=fake_popen)
+except Exception as exc:
+    revealed = {"error": repr(exc)}
+reveal_call = calls[-1] if calls else None
+check("R W173 reveal dung Explorer /select dung file",
+      revealed.get("ok") is True and reveal_call and reveal_call[0] == "popen" and
+      reveal_call[1][0].lower().endswith("explorer.exe") and
+      reveal_call[1][1].startswith("/select,") and
+      reveal_call[1][1].endswith("Sample.xlsx"), (revealed, reveal_call))
+check("R W173 Explorer khong loe console",
+      reveal_call and reveal_call[2].get("creationflags") == 0x08000000, reveal_call)
+
+for rel, action, err_type in [
+    ("../Sample.xlsx", "open", FileNotFoundError),
+    (".graph3d/serve.py", "open", FileNotFoundError),
+    ("Sample.xlsx", "delete", ValueError),
+]:
+    try:
+        SV.run_file_action(rel, action, platform="win32",
+                           startfile=fake_startfile, popen=fake_popen)
+        got = None
+    except Exception as exc:
+        got = type(exc)
+    check("R W173 chan %s %r" % (action, rel), got is err_type, got)
 
 # W139-W143: lightbox anh Reader — contract DOM/module + toan fit/zoom/pan thuần.
 INDEX = os.path.join(G3D, "index.html")

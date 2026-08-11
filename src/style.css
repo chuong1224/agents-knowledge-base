@@ -586,11 +586,41 @@ input[type=range] { width: 118px; accent-color: var(--magenta); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qs-row .hits { color: var(--cyan); font-size: 10px; font-weight: 700; flex: none; }
 .qs-row .tagb { color: var(--cyan); font-size: 10px; flex: none; }
+.qs-row.file .paperclip { flex: none; filter: saturate(.8); }
+.qs-row.file.sel { box-shadow: inset 2px 0 0 var(--magenta); }
 .qs-row .snip { color: var(--faint); font-size: 10.8px; margin: 2px 0 0 16px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 .qs-miss { color: var(--faint); font-size: 11.5px; padding: 4px 9px 7px; }
 #qs-hint { border-top: 1px solid var(--border); color: var(--faint); font-size: 10px;
   padding: 6px 12px; letter-spacing: .4px; }
+
+/* menu attachment dùng chung: mở native app / reveal / xem trong KB */
+#file-act { position: fixed; inset: 0; z-index: 44; display: none; place-items: center;
+  background: rgba(8,6,16,.68); backdrop-filter: blur(3px); }
+#file-act.show { display: grid; }
+#file-act-box { width: min(520px, calc(100vw - 28px)); border: 1px solid var(--border);
+  border-radius: 14px; padding: 16px; background: rgba(15,12,29,.98);
+  box-shadow: 0 22px 70px rgba(0,0,0,.62), 0 0 28px rgba(4,217,255,.08); }
+.file-act-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.file-act-kicker { color: var(--cyan); font-size: 9px; letter-spacing: 1.8px;
+  text-transform: uppercase; margin-bottom: 3px; }
+#file-act-title { color: var(--text); font-size: 16px; line-height: 1.3; margin: 0;
+  overflow-wrap: anywhere; }
+#file-act-close { flex: none; border: 0; background: transparent; color: var(--muted);
+  font-size: 16px; padding: 3px 5px; cursor: pointer; }
+#file-act-close:hover { color: var(--magenta); }
+#file-act-path { margin-top: 9px; color: var(--faint); font: 10.5px/1.5 Consolas, monospace;
+  overflow-wrap: anywhere; }
+.file-act-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 15px; }
+.file-act-buttons button, .file-act-buttons a { min-height: 38px; border: 1px solid var(--border);
+  border-radius: 9px; background: rgba(24,20,40,.9); color: var(--text); font: 600 11.5px "Segoe UI", system-ui, sans-serif;
+  display: inline-flex; align-items: center; justify-content: center; padding: 7px 10px;
+  text-decoration: none; text-align: center; cursor: pointer; }
+.file-act-buttons button:hover, .file-act-buttons a:hover { border-color: var(--cyan); color: var(--cyan); }
+.file-act-buttons button:disabled { opacity: .5; cursor: wait; }
+#file-act-preview { grid-column: 1 / -1; }
+#file-act-status { margin-top: 11px; color: var(--cyan); font-size: 11px; }
+#file-act-status.err { color: #ff799d; }
 
 /* ---------- Cockpit (giai đoạn 3): thanh tua ngày + dashboard hiệu quả ---------- */
 select#ck-day { background: var(--bg2); color: var(--text); border: 1px solid var(--border);

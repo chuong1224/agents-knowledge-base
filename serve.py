@@ -30,6 +30,9 @@ Endpoint:
                      integrity.py; luật đếm được đọc từ vault-rules.json trong vault)
   /onboarding    -> vault có TRỐNG không + lối đi nào sẵn có (W13): starter-vault/
                     và demo/vault/ bundled hay không — UI dựng empty-state từ đây
+  POST /file-action?path=&action= -> mở file bằng ứng dụng mặc định hoặc chọn file
+                    trong trình quản lý tệp; cùng guard vault_file + Origin như các
+                    hành động cục bộ khác, không trả đường dẫn tuyệt đối về client
   POST /starter-init -> chép starter-vault/ vào vault đang trống (không đè file)
   POST /demo-start   -> mở cockpit trên vault demo bundled ở PORT RIÊNG (gọi
                     ensure_graph3d.py --demo, không tự chạy serve.py)
@@ -145,6 +148,41 @@ def vault_file(rel, exts=None):
         return None
     full = os.path.join(VAULT, norm)
     return full if os.path.isfile(full) else None
+
+
+def run_file_action(rel, action, platform=None, startfile=None, popen=None):
+    """Mở attachment bằng app mặc định hoặc reveal đúng file trong file manager.
+
+    Đây là lõi thuần để endpoint POST và unit test dùng chung. ``rel`` luôn đi qua
+    ``vault_file`` nên không thể chạm dot-folder/path ngoài vault; response chỉ có
+    path tương đối để không làm lộ đường dẫn máy chủ cho client.
+    """
+    if action not in ("open", "reveal"):
+        raise ValueError("action khong hop le")
+    full = vault_file(rel)
+    if not full:
+        raise FileNotFoundError(rel)
+
+    platform = platform or sys.platform
+    popen = popen or subprocess.Popen
+    if platform == "win32":
+        if action == "open":
+            startfile = startfile or getattr(os, "startfile", None)
+            if not startfile:
+                raise OSError("Windows file association khong kha dung")
+            startfile(full)
+        else:
+            popen(["explorer.exe", "/select," + os.path.normpath(full)],
+                  close_fds=True, **no_window_kwargs())
+    elif platform == "darwin":
+        argv = ["open", full] if action == "open" else ["open", "-R", full]
+        popen(argv, close_fds=True)
+    else:
+        target = full if action == "open" else os.path.dirname(full)
+        popen(["xdg-open", target], close_fds=True)
+
+    return {"ok": True, "action": action,
+            "path": rel.replace("\\", "/").lstrip("/")}
 
 
 _build_src_mtime = [0.0]
@@ -975,11 +1013,9 @@ class Handler(BaseHTTPRequestHandler):
 
         self._send(404, b'{"error":"not found"}')
 
-    # ---- POST: hai hành động DUY NHẤT có tác dụng phụ (W13 — onboarding) ----
-    # Mọi thứ khác của app là GET thuần đọc. Hai cái này CỐ Ý là POST chứ không phải
-    # GET như /ping: chúng ghi file vào vault / spawn process, mà GET thì một trang web
-    # bất kỳ đang mở trong cùng trình duyệt cũng gọi được (server bind loopback nhưng
-    # trình duyệt của user thì ở trong loopback). POST cùng-origin luôn kèm header
+    # ---- POST: các hành động có tác dụng phụ cục bộ ----
+    # Mọi thứ khác của app là GET thuần đọc. Các endpoint này CỐ Ý là POST: chúng ghi
+    # file, spawn process hoặc mở app/file manager. POST cùng-origin luôn kèm header
     # Origin ⇒ so Origin là hàng rào CSRF đủ chặt cho server local.
     def _origin_ok(self):
         origin = self.headers.get("Origin")
@@ -992,6 +1028,27 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if not self._origin_ok():
             self._send(403, b'{"error":"origin khong hop le"}')
+            return
+
+        if path == "/file-action":
+            qs = parse_qs(urlparse(self.path).query)
+            rel = qs.get("path", [""])[0]
+            action = qs.get("action", [""])[0]
+            try:
+                res = run_file_action(rel, action)
+            except ValueError as exc:
+                self._send(400, json.dumps({"error": str(exc)},
+                                           ensure_ascii=False).encode("utf-8"))
+                return
+            except FileNotFoundError:
+                self._send(404, json.dumps({"error": "file khong ton tai"},
+                                           ensure_ascii=False).encode("utf-8"))
+                return
+            except OSError as exc:
+                self._send(500, json.dumps({"error": str(exc)},
+                                           ensure_ascii=False).encode("utf-8"))
+                return
+            self._send(200, json.dumps(res, ensure_ascii=False).encode("utf-8"))
             return
 
         if path == "/starter-init":

@@ -2,7 +2,7 @@
 """Test Finder (giai doan 2 Vault Cockpit) — endpoint /search: fold khong dau
 mirror deAccent cua UI, AND moi tu, diem ten nang hon than, snippet map nguoc
 ve text goc, loai dot-folder nhu scanner. Scratch trong %TEMP%."""
-import os, sys
+import io, os, sys
 sys.dont_write_bytecode = True   # khong sinh __pycache__ trong vault
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # console cp1252 khong in duoc tieng Viet
@@ -78,6 +78,47 @@ check("F limit=1 tra 1 ket qua", len(SV.search_notes("ngoai trang", vault=TV, li
 for fn in ("vault_file", "read_activity_all", "read_all_events", "build_chains",
            "_restart_sources_sane", "search_notes", "_fold"):
     check("F serve.%s ton tai" % fn, hasattr(SV, fn))
+
+# W173: attachment co mat trong ca hai o tim va moi loi vao deu dung mot dialog.
+def read_app(rel):
+    with io.open(os.path.join(G3D, rel), encoding="utf-8") as f:
+        return f.read()
+
+finder = read_app("src/finder.js")
+reader = read_app("src/reader.js")
+graph = read_app("src/graph.js")
+ui = read_app("src/ui.js")
+main = read_app("src/main.js")
+i18n = read_app("src/i18n.js")
+index = read_app("index.html")
+try:
+    actions = read_app("src/file-actions.js")
+except OSError:
+    actions = ""
+
+check("F W173 module file-actions ton tai + POST open/reveal",
+      all(tok in actions for tok in ("export function openFileActions", "method: 'POST'",
+                                     "action=open", "action=reveal", "assetUrl")))
+check("F W173 Ctrl+P tim va chon attachment",
+      all(tok in finder for tok in ("function qsFileRow", "data-file", "openFileActions(",
+                                    "n.kind === 'file'")))
+check("F W173 Reader link file mo dialog chung",
+      "data-file" in reader and "openFileActions(" in reader)
+check("F W173 click node file tren graph mo dialog",
+      "n.kind === 'file'" in graph and "openFileActions(n)" in graph)
+check("F W173 o Tim note/file tim tren S.all va mo attachment",
+      "openFileActions(" in ui and "n.kind === 'file'" in ui and "S.all.nodes" in ui)
+check("F W173 main khoi tao + debug hook file action",
+      "initFileActions()" in main and "openFileActions" in main)
+ids = ("file-act", "file-act-box", "file-act-title", "file-act-path", "file-act-open",
+       "file-act-reveal", "file-act-preview", "file-act-status", "file-act-close")
+check("F W173 dialog DOM du %d id" % len(ids),
+      all(('id=\"%s\"' % x) in index for x in ids),
+      [x for x in ids if ('id=\"%s\"' % x) not in index])
+for key in ("file.title", "file.open", "file.reveal", "file.preview", "file.done.open",
+            "file.done.reveal", "file.error", "qs.files"):
+    check("F W173 i18n VI+EN %s" % key, i18n.count("'%s'" % key) == 2,
+          i18n.count("'%s'" % key))
 
 print("\nTONG KET:", ("FAIL %d muc" % len(fails)) if fails else "ALL PASS")
 sys.exit(1 if fails else 0)

@@ -9,6 +9,7 @@ import { pollHeat, setHeatScope } from './heat.js';
 import { pollInsight } from './insight.js';
 import { pollIntegrity } from './integrity.js';
 import { openReader } from './reader.js';
+import { openFileActions } from './file-actions.js';
 import { buildTree } from './finder.js';
 
 const EXT_ON_STORAGE_KEY = 'kbgraph3d.extOn.v1';
@@ -248,20 +249,32 @@ export function buildUI() {
   $('ext-none').onclick = () => { extOn.clear(); saveExtOnToStorage(); buildExtChips(); applyFilters(); };
 
   const dl = $('notes-dl'); dl.innerHTML = '';
-  S.all.nodes.filter(n => n.kind === 'note').forEach(n => { const o = document.createElement('option'); o.value = n.stem; dl.appendChild(o); });
-  $('search').onchange = () => {   // gán đè, KHÔNG addEventListener — buildUI() chạy lại (refreshData) không được chồng listener
+  S.all.nodes.filter(n => n.kind === 'note' || n.kind === 'file').forEach(n => {
+    const o = document.createElement('option');
+    o.value = n.kind === 'file' ? n.name : n.stem;
+    o.label = n.id;
+    dl.appendChild(o);
+  });
+  const openSearchResult = () => { // gán đè bên dưới — buildUI() chạy lại không được chồng listener
     const miss = $('search-miss');
     miss.classList.remove('show');
     const qRaw = $('search').value.trim();
     if (!qRaw) return;
     const q = deAccent(qRaw);                    // Ư3.2: khớp không cần gõ dấu
-    const pool = S.data.nodes.filter(n => n.kind === 'note');
-    const node = pool.find(n => deAccent(n.stem) === q) || pool.find(n => deAccent(n.stem).includes(q));
-    if (node) { pulses.push({ node, t0: performance.now(), dur: 2600, color: '#ffffff' }); openReader(node); }
+    const pool = S.all.nodes.filter(n => n.kind === 'note' || n.kind === 'file');
+    const searchable = n => deAccent([n.stem || '', n.name || '', n.id || '', n.ext || ''].join(' '));
+    const node = pool.find(n => deAccent(n.kind === 'file' ? n.name : n.stem) === q) ||
+      pool.find(n => searchable(n).includes(q));
+    if (node && node.kind === 'file') openFileActions(node);
+    else if (node) { pulses.push({ node, t0: performance.now(), dur: 2600, color: '#ffffff' }); openReader(node); }
     else miss.classList.add('show');             // Ư3.2: không match phải NÓI, không im lặng
   };
+  $('search').onchange = openSearchResult;
   $('search').oninput = () => $('search-miss').classList.remove('show');
-  $('search').onkeydown = ev => { if (ev.key === 'Escape') { $('search').value = ''; $('search-miss').classList.remove('show'); } };
+  $('search').onkeydown = ev => {
+    if (ev.key === 'Enter') { ev.preventDefault(); openSearchResult(); }
+    else if (ev.key === 'Escape') { $('search').value = ''; $('search-miss').classList.remove('show'); }
+  };
 
   const sw = (id, fn) => {
     const el = $(id);

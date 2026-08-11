@@ -7,6 +7,7 @@ import { glowSprite, glowTexture, textSprite } from './sprites.js';
 import { pulses, hotLinks, visitFx } from './effects.js';
 import { heatActive, heatNorm } from './heat.js';
 import { openReader } from './reader.js';
+import { openFileActions } from './file-actions.js';
 
 /* ---------- node 3D object (theo kind) ---------- */
 export function nodeObject(node) {
@@ -688,7 +689,9 @@ export function initGraph() {
       const now = performance.now();
       if (_lastClick.id === n.id && now - _lastClick.t < 400) { _lastClick = { id: null, t: 0 }; unpinNode(n); return; }
       _lastClick = { id: n.id, t: now };
-      if (n.kind === 'note') openReader(n); else flyTo(n, 1000);
+      if (n.kind === 'note') openReader(n);
+      else if (n.kind === 'file') openFileActions(n);
+      else flyTo(n, 1000);
     })
     .onNodeHover(n => { S.hoverNode = n || null; refreshLinkStyles(); document.body.style.cursor = n ? 'pointer' : 'default'; })
     .onNodeDragEnd(n => { n.fx = n.x; n.fy = n.y; n.fz = n.z; })
