@@ -49,6 +49,24 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   #vault-label { max-width: 70px; }
 }
 
+/* Native folder picker is modal to the app, while this full-screen status
+   makes the pending action unmistakable even before Windows paints that dialog. */
+#vault-pick-wait { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center;
+  padding: 20px; background: rgba(2,2,8,.62); backdrop-filter: blur(5px);
+  pointer-events: auto; }
+#vault-pick-wait[hidden] { display: none; }
+.vault-pick-card { display: flex; align-items: center; gap: 16px; max-width: 440px;
+  padding: 18px 22px; border: 1px solid rgba(4,217,255,.48); border-radius: 14px;
+  background: rgba(13,11,25,.96); color: var(--text);
+  box-shadow: 0 0 34px rgba(4,217,255,.18), 0 18px 70px rgba(0,0,0,.55); }
+.vault-pick-card strong { display: block; color: var(--cyan); font-size: 15px; letter-spacing: .4px; }
+.vault-pick-card p { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.vault-pick-spin { width: 22px; height: 22px; flex: 0 0 22px; border-radius: 50%;
+  border: 2px solid rgba(4,217,255,.2); border-top-color: var(--cyan);
+  animation: vault-pick-spin .8s linear infinite; }
+@keyframes vault-pick-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .vault-pick-spin { animation-duration: 1.8s; } }
+
 /* Biên PHẢI của hint dừng trước mép cụm nút bố cục #layout-fab (nổi đáy GIỮA, nửa bề
    rộng ~86px + khe 14px) — text dài thì xuống dòng (mọc lên từ đáy); màn quá hẹp
    (left vượt biên phải → width 0) thì overflow hidden tự ẩn, không chữ đè chữ. */

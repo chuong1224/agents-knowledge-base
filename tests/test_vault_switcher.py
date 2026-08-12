@@ -100,11 +100,22 @@ class Result:
 def fake_runner(argv, **kwargs):
     check("4 picker goi PowerShell STA", "-STA" in argv, argv)
     check("4 picker truyen initial qua env", kwargs["env"].get("GRAPH3D_PICK_INITIAL") == other)
+    check("4 picker truyen HWND cua app foreground", kwargs["env"].get("GRAPH3D_PICK_OWNER_HWND") == "424242",
+          kwargs["env"].get("GRAPH3D_PICK_OWNER_HWND"))
     return Result()
+original_foreground = getattr(VS, "foreground_window_handle", None)
+if original_foreground:
+    VS.foreground_window_handle = lambda platform=None, user32=None: 424242
 picked = VS.choose_folder(other, runner=fake_runner, platform="nt")
 check("4 picker tra root da validate", picked == os.path.realpath(external), picked)
 Result.stdout = ""
 check("4 cancel tra None", VS.choose_folder(other, runner=fake_runner, platform="nt") is None)
+if original_foreground:
+    VS.foreground_window_handle = original_foreground
+check("4 co ham lay HWND foreground", callable(original_foreground))
+check("4 PowerShell tao IWin32Window owner", "IWin32Window" in VS._POWERSHELL_PICKER and
+      "GRAPH3D_PICK_OWNER_HWND" in VS._POWERSHELL_PICKER)
+check("4 FolderBrowserDialog ShowDialog voi owner", "ShowDialog($owner)" in VS._POWERSHELL_PICKER)
 
 # Restore valid config for the live process.
 VS.save_selection(external)

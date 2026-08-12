@@ -163,6 +163,15 @@ _POWERSHELL_PICKER = r"""
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -TypeDefinition @'
+using System;
+using System.Windows.Forms;
+public sealed class Graph3dWindowOwner : IWin32Window {
+    private readonly IntPtr _handle;
+    public Graph3dWindowOwner(IntPtr handle) { _handle = handle; }
+    public IntPtr Handle { get { return _handle; } }
+}
+'@ -ReferencedAssemblies System.Windows.Forms
 $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
 $dlg.Description = 'Chọn thư mục vault / Choose a vault folder'
 $dlg.ShowNewFolderButton = $true
@@ -170,10 +179,39 @@ try { $dlg.AutoUpgradeEnabled = $true } catch {}
 if ($env:GRAPH3D_PICK_INITIAL -and (Test-Path -LiteralPath $env:GRAPH3D_PICK_INITIAL)) {
   $dlg.SelectedPath = $env:GRAPH3D_PICK_INITIAL
 }
-if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+$owner = $null
+try {
+  $rawHwnd = [long]$env:GRAPH3D_PICK_OWNER_HWND
+  if ($rawHwnd -ne 0) { $owner = [Graph3dWindowOwner]::new([IntPtr]$rawHwnd) }
+} catch {}
+$result = if ($null -ne $owner) { $dlg.ShowDialog($owner) } else { $dlg.ShowDialog() }
+if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
   [Console]::Out.Write($dlg.SelectedPath)
 }
 """
+
+
+def foreground_window_handle(platform=None, user32=None):
+    """Return the current Windows foreground HWND, or 0 when unavailable.
+
+    The HTTP request arrives while the user is still in the app window.  Capture its
+    HWND *before* starting hidden PowerShell, then give it to ``ShowDialog(owner)`` so
+    Windows keeps the folder picker above that app and minimizes/restores them together.
+    """
+    platform = platform or os.name
+    if platform != "nt":
+        return 0
+    try:
+        if user32 is None:
+            import ctypes
+            fn = ctypes.windll.user32.GetForegroundWindow
+            fn.restype = ctypes.c_void_p
+        else:
+            fn = user32.GetForegroundWindow
+        hwnd = fn()
+        return int(hwnd or 0)
+    except (AttributeError, OSError, TypeError, ValueError):
+        return 0
 
 
 def choose_folder(initial=None, runner=None, platform=None):
@@ -190,6 +228,7 @@ def choose_folder(initial=None, runner=None, platform=None):
             raise VaultSwitchError("picker_unavailable", "không tìm thấy PowerShell để mở hộp chọn folder")
         env = os.environ.copy()
         env["GRAPH3D_PICK_INITIAL"] = initial or ""
+        env["GRAPH3D_PICK_OWNER_HWND"] = str(foreground_window_handle(platform=platform))
         call = runner or subprocess.run
         try:
             res = call([exe, "-NoProfile", "-STA", "-Command", _POWERSHELL_PICKER],

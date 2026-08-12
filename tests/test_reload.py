@@ -190,5 +190,20 @@ for k in ("vault.tip", "vault.locked", "vault.picking", "vault.switching",
     check("14 khoa %s co ca vi lan en" % k,
           ("'%s'" % k) in vi_block and ("'%s'" % k) in en_block)
 
+# --- 15: picker native phải có feedback lớn, không để user tưởng app treo ---
+check("15 index co lop bao picker dang mo", html.count('id="vault-pick-wait"') == 1 and
+      'role="status"' in html, html.count('id="vault-pick-wait"'))
+check("15 overlay picker phu viewport va tren moi chrome", "#vault-pick-wait" in css and
+      "position: fixed" in css_block(css, "#vault-pick-wait") and
+      "z-index: 10000" in css_block(css, "#vault-pick-wait"))
+check("15 UI bat overlay truoc POST va cho browser ve mot frame",
+      vault_js.find("showPickerWait('picking')") < vault_js.find("requestAnimationFrame") <
+      vault_js.find("fetch('/vault-pick'"), vault_js)
+check("15 cancel va loi deu tat overlay", vault_js.count("hidePickerWait()") >= 3,
+      vault_js.count("hidePickerWait()"))
+for k in ("vault.picker.open", "vault.picker.hint", "vault.picker.switching"):
+    check("15 khoa %s co ca vi lan en" % k,
+          ("'%s'" % k) in vi_block and ("'%s'" % k) in en_block)
+
 print("\nTONG KET test_reload: %s" % (("FAIL %d: %s" % (len(fails), ", ".join(fails))) if fails else "ALL PASS"))
 sys.exit(1 if fails else 0)

@@ -50,6 +50,28 @@ function syncButton(message, cls) {
   b.setAttribute('aria-label', tip);
 }
 
+function showPickerWait(mode, vault) {
+  const wait = $('vault-pick-wait');
+  if (!wait) return;
+  const switching = mode === 'switching';
+  const title = $('vault-pick-title');
+  const hint = $('vault-pick-hint');
+  if (title) title.textContent = switching
+    ? tr('vault.picker.switching', { vault: vault || '' })
+    : tr('vault.picker.open');
+  if (hint) hint.textContent = switching
+    ? tr('vault.picker.switching.hint')
+    : tr('vault.picker.hint');
+  wait.hidden = false;
+  document.documentElement.classList.add('vault-picker-open');
+}
+
+function hidePickerWait() {
+  const wait = $('vault-pick-wait');
+  if (wait) wait.hidden = true;
+  document.documentElement.classList.remove('vault-picker-open');
+}
+
 async function waitForVault(targetId, oldBoot) {
   const deadline = Date.now() + 20000;
   while (Date.now() < deadline) {
@@ -64,6 +86,7 @@ async function waitForVault(targetId, oldBoot) {
       }
     } catch (e) { /* expected while old server releases the port */ }
   }
+  hidePickerWait();
   syncButton(tr('vault.reload'), 'err');
   const b = $('vault-switch');
   if (b) {
@@ -77,17 +100,24 @@ async function waitForVault(targetId, oldBoot) {
 export async function pickVault() {
   if (S.vaultLocked) return;
   syncButton(tr('vault.picking'), 'busy');
+  showPickerWait('picking');
+  // Bảo đảm lớp báo đã được paint trước khi POST giữ request trong suốt thời gian
+  // native dialog mở; nếu dialog bị OS đặt sai z-order, user vẫn biết nó đang tồn tại.
+  await new Promise(resolve => requestAnimationFrame(resolve));
   try {
     const r = await fetch('/vault-pick', { method: 'POST' });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
     if (d.cancelled || !d.changed) {
+      hidePickerWait();
       syncButton();
       return;
     }
     syncButton(tr('vault.switching', { vault: d.vault || '' }), 'busy');
+    showPickerWait('switching', d.vault || '');
     await waitForVault(d.vault_id, d.boot_id || (vaultState && vaultState.boot_id));
   } catch (e) {
+    hidePickerWait();
     syncButton(tr('vault.failed'), 'err');
     const b = $('vault-switch');
     if (b) {
