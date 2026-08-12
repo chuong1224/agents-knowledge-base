@@ -6,9 +6,11 @@ organise the notes in your vault.
 
 ## What this is
 
-A Python-stdlib server plus vanilla ES modules and a vendored copy of three.js. It is
-meant to be cloned into a vault as that vault's `.graph3d` folder; the vault root is
-simply the parent folder of the clone.
+A Python-stdlib server plus vanilla ES modules and a vendored copy of three.js. It is meant
+to be cloned into a vault as that vault's `.graph3d` folder. The app **starts** on the
+parent folder of the clone, but since v1.59.0 that is only the default: the user can switch
+to any vault root on the machine from the UI, so never assume the served vault is the
+parent of `.graph3d/`. Read the active root from the server rather than deriving it.
 
 **No build step, no npm, no pip install needed to run the app.** Do not introduce a
 bundler, a framework, or a runtime dependency. `PyYAML` is the one optional extra, and the
@@ -37,8 +39,14 @@ looks green.
   record. Bump it in the same commit as the change it describes, then tag `vX.Y.Z`.
 - **Published tags are never amended or force-pushed.** A mistake ships as a new PATCH.
 - Commit messages in English; one logical change per commit.
-- Code comments and docstrings here are Vietnamese while the README is English. Match the
-  file you are editing instead of converting it.
+- Code comments and docstrings here are Vietnamese; the README and this file are English,
+  and the README additionally carries a full Vietnamese section at the end. Match the file
+  and the section you are editing instead of converting it, and keep both halves of the
+  README in step when you change what the app claims to do.
+- The UI ships in English and Vietnamese. A user-visible string needs both locales in
+  `src/i18n.js`, and `tests/test_i18n.py` enforces it: the two dictionaries must carry the
+  same key set, every `tr('key')` and `data-i18n*` attribute must resolve, and a `{placeholder}`
+  present in one locale must be present in the other.
 
 ## One file list, not several
 
