@@ -3,6 +3,7 @@
 /note + /asset (server bat dau phuc vu noi dung vault): traversal, dot-folder,
 duoi file, MIME. Scratch trong %TEMP%."""
 import io, json, os, pathlib, shutil, subprocess, sys
+from unittest import mock
 sys.dont_write_bytecode = True   # khong sinh __pycache__ trong vault
 
 from _scratch import SCRATCH, G3D
@@ -47,6 +48,18 @@ for bad in [
 
 # Loc duoi: /note chi nhan .md
 check("R exts loc duoi khac .md", SV.vault_file("Sample.md", exts={".png"}) is None)
+
+# W180: vault root nay do user chon; reparse point ben trong khong duoc bien /asset
+# thanh cua doc file ngoai root. Mock realpath de test duoc ca khi Windows khong cho
+# tao symlink (quyen Developer Mode khong phai luc nao cung co).
+real_realpath = os.path.realpath
+outside = os.path.join(os.path.dirname(VAULT), "outside.md")
+def fake_realpath(path):
+    if os.path.normpath(path) == os.path.normpath(os.path.join(VAULT, "link.md")):
+        return outside
+    return real_realpath(path)
+with mock.patch.object(SV.os.path, "realpath", side_effect=fake_realpath):
+    check("R chan symlink/junction thoat active vault", SV.vault_file("link.md") is None)
 
 # MIME cho /asset: cac duoi anh pho bien phai co, duoi la fallback octet-stream
 for ext, want in [(".jpg", "image/jpeg"), (".webp", "image/webp"), (".pdf", "application/pdf")]:

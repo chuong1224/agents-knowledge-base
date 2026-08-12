@@ -368,9 +368,14 @@ def cumulative_heat_path():
     return os.path.join(cumulative_heat_dir(), "heat_cumulative-%s.json" % host_name())
 
 
-def cumulative_heat_files():
-    """Mọi file cumulative của mọi máy (để server gộp khi xem scope=all)."""
-    return sorted(glob.glob(os.path.join(cumulative_heat_dir(), "heat_cumulative-*.json")))
+def cumulative_heat_files(directory=None):
+    """Mọi file cumulative của mọi máy (để server gộp khi xem scope=all).
+
+    ``directory`` cho Vault Switcher đọc store của CHÍNH active vault thay vì thư
+    mục app runtime. ``None`` giữ contract cũ cho logger/CLI.
+    """
+    base = os.path.normpath(directory) if directory else cumulative_heat_dir()
+    return sorted(glob.glob(os.path.join(base, "heat_cumulative-*.json")))
 
 
 def vault_journal_dir():
@@ -389,9 +394,10 @@ def vault_journal_path():
     return os.path.join(vault_journal_dir(), "activity-%s.jsonl" % host_name())
 
 
-def vault_journal_files():
-    """Journal của MỌI máy (reader serve.py gộp)."""
-    return sorted(glob.glob(os.path.join(vault_journal_dir(), "activity-*.jsonl")))
+def vault_journal_files(directory=None):
+    """Journal của MỌI máy (reader serve.py gộp), có thể chỉ định active vault."""
+    base = os.path.normpath(directory) if directory else vault_journal_dir()
+    return sorted(glob.glob(os.path.join(base, "activity-*.jsonl")))
 
 
 def journal_host(path):
@@ -409,7 +415,8 @@ def journal_host(path):
 # backup_graph3d.py KHÔNG nằm đây: file vận hành riêng bản private, không publish.
 APP_PY = ("activity_paths.py", "build_graph_data.py", "ensure_graph3d.py",
           "insight.py", "install_launcher.py", "integrity.py", "log_activity.py",
-          "onboarding.py", "run_graph3d.py", "serve.py", "update_check.py")
+          "onboarding.py", "run_graph3d.py", "serve.py", "update_check.py",
+          "vault_switcher.py")
 APP_TOP = APP_PY + ("index.html", "Start-Graph3D.bat")
 APP_DIRS = ("src", "vendor")
 
@@ -422,8 +429,8 @@ APP_DIRS = ("src", "vendor")
 # thẳng lệnh import trong serve.py) — thiếu thì sửa module xong server vẫn phục vụ
 # bản cũ, lặng thinh (bug integrity.py, đợt 8 repo public).
 _VERSION_FILES = ("serve.py", "index.html", "activity_paths.py", "log_activity.py",
-                  "insight.py", "integrity.py", "onboarding.py", "install_launcher.py",
-                  "update_check.py")
+                   "insight.py", "integrity.py", "onboarding.py", "install_launcher.py",
+                   "update_check.py", "vault_switcher.py")
 
 
 def restart_py_files():

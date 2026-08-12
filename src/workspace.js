@@ -4,7 +4,7 @@
    reader.js chỉ lo fetch /note + render markdown vào pane. Thuần client-side —
    không endpoint mới, không database phụ trong vault (ràng buộc Vault Cockpit).
    Top-level chỉ ĐỊNH NGHĨA (không gọi chéo module lúc eval) — an toàn vòng import. */
-import { S, $, esc } from './state.js';
+import { S, $, esc, vaultStoreGet, vaultStoreSet } from './state.js';
 import { tr, locale } from './i18n.js';
 import { renderPane, paneRefs, saveScroll, syncPin, closeReader } from './reader.js';
 import { openSwitcher } from './finder.js';
@@ -23,11 +23,20 @@ export const WS = { tabs: [[], []], active: [-1, -1] };
 let pins = [];               // [noteId] — ghim mới lên ĐẦU danh sách
 let recent = [];             // [{id, ts}] — mới nhất trước, dedup move-to-front
 let sbOpen = new Set(['pins', 'recent']);
+const VAULT_KEYS = new Set([WS_KEY, PINS_KEY, RECENT_KEY]);
 
 /* ---------- persist ---------- */
-function saveJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
+function saveJSON(key, val) {
+  try {
+    const raw = JSON.stringify(val);
+    VAULT_KEYS.has(key) ? vaultStoreSet(key, raw) : localStorage.setItem(key, raw);
+  } catch (e) {}
+}
 function loadJSON(key, fallback) {
-  try { const v = JSON.parse(localStorage.getItem(key) || 'null'); return v == null ? fallback : v; }
+  try {
+    const raw = VAULT_KEYS.has(key) ? vaultStoreGet(key) : localStorage.getItem(key);
+    const v = JSON.parse(raw || 'null'); return v == null ? fallback : v;
+  }
   catch (e) { return fallback; }
 }
 function persistWS() { saveJSON(WS_KEY, { t: WS.tabs.map(l => l.map(t => t.note)), a: WS.active }); }

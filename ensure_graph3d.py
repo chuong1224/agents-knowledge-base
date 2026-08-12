@@ -3,8 +3,8 @@
 agent mở graph) gọi cái NÀY thay cho serve.py. Diệt tận gốc lỗi "nhiều server / zombie
 phục vụ snapshot cũ":
 
-  - Đã có server CÙNG version đang khỏe  -> dùng lại, chỉ mở trình duyệt.
-  - Có server CŨ version / zombie giữ port -> supervisor giết & thay bằng bản mới.
+  - Đã có server CÙNG version + vault đang khỏe -> dùng lại, chỉ mở trình duyệt.
+  - Khác version/vault hoặc zombie giữ port      -> supervisor thay bằng bản đúng.
   - Chưa có gì                             -> spawn supervisor NGẦM (nền), chờ tới khi khỏe.
 
 Agent chỉ GHI hoạt động thì KHÔNG gọi cái này — dùng log_activity.py (offline) hoặc
@@ -15,6 +15,10 @@ Hai cờ onboarding cho người CHƯA có vault (W13 — logic ở onboarding.p
                       server đang chạy trên vault thật)
   --init-starter DIR  dựng vault đầu tiên tại DIR từ starter-vault/ rồi thoát;
                       thêm --force để nhập note hướng dẫn vào vault đang có
+
+Vault Switcher (v1.59.0): UI có thể chọn một vault root bất kỳ. Lựa chọn được
+lưu ngoài vault và supervisor restart cùng port để đổi toàn bộ context atomically.
+CLI ``--vault DIR`` chọn root cố định cho phiên đó và khóa nút đổi vault.
 
 Cờ --app (W58/W60): nếu Edge đã cài site-app KB Graph 3D thì ưu tiên AUMID packaged
 trong Windows Start Apps (Edge hiện hành), kế đến ``--app-id`` trong shortcut kiểu cũ,
@@ -37,6 +41,7 @@ from activity_paths import local_data_dir, source_version   # noqa: E402
 import onboarding as onb                     # noqa: E402  (W13 — demo / starter vault)
 import run_graph3d as sup                    # noqa: E402  (health/port_pid/kill_pid/flags)
 import install_launcher as launcher          # noqa: E402  (doc/scan shortcut PWA Windows)
+import vault_switcher                         # noqa: E402  (W180 — chọn vault root)
 
 APP_TITLE_PREFIX = "KB Graph 3D"
 APP_TITLE = "KB Graph 3D — Knowledge Base"
@@ -281,17 +286,17 @@ def init_starter(target, force=False):
         print("  + " + rel)
     for rel in res["skipped"]:
         print("  . %s (da co san, giu nguyen)" % rel)
-    print("Buoc ke: chep .graph3d vao vault do roi chay")
-    print("  python \"%s\"" % os.path.join(res["target"], ".graph3d", "ensure_graph3d.py"))
+    print("Buoc ke: mo KB Graph 3D va chon folder nay, hoac chay")
+    print('  python "%s" --vault "%s"' %
+          (os.path.join(HERE, "ensure_graph3d.py"), res["target"]))
     return 0
 
 
 def run_demo(port, open_browser, app_mode=False):
     """--demo: mirror app sang demo/vault/.graph3d rồi gọi LẠI chính ensure ở bản sao đó.
 
-    Vì "vault = thư mục cha của .graph3d", chỉ cần đặt bản sao app cạnh vault demo là
-    server phục vụ đúng vault demo — KHÔNG phải kéo thêm đường truyền --vault xuyên qua
-    supervisor/serve (việc đó là mục riêng trong roadmap repo public).
+    Bản sao giữ demo tự chứa như repo public trước đây; ``--vault`` nay truyền root
+    demo xuyên supervisor/serve và đồng thời khóa nút đổi vault cho phiên demo.
     """
     demo = onb.demo_vault_dir()
     if not os.path.isdir(demo):
@@ -307,7 +312,8 @@ def run_demo(port, open_browser, app_mode=False):
     # flush: tiến trình con in thẳng ra console, không flush thì dòng này rơi SAU nó
     print("KB Graph 3D: vault demo %s (%d note) — app dong bo %d file"
           % (demo, onb.count_notes(demo), res["copied"]), flush=True)
-    cmd = [sys.executable, os.path.join(app, "ensure_graph3d.py"), "--port", str(port)]
+    cmd = [sys.executable, os.path.join(app, "ensure_graph3d.py"), "--port", str(port),
+           "--vault", demo]
     if not open_browser:
         cmd.append("--no-open")
     if app_mode:
@@ -331,6 +337,8 @@ def main():
                     help="kem --init-starter: cho vault dang co; van KHONG de file trung ten")
     ap.add_argument("--app", action="store_true",
                     help="mo bang cua so app cua Edge/Chrome thay vi tab trinh duyet")
+    ap.add_argument("--vault", metavar="DIR",
+                    help="mo vault root cu the; bo trong = vault da chon tren UI")
     args = ap.parse_args()
     log = bind_console()
 
@@ -343,28 +351,37 @@ def main():
     args.port = args.port or 8321
 
     want = source_version(HERE)
+    try:
+        vault_ctx = vault_switcher.resolve_active_vault(HERE, explicit=args.vault)
+    except vault_switcher.VaultSwitchError as exc:
+        print("KB Graph 3D: vault khong hop le (%s): %s" % (exc.code, exc))
+        return 2
     url = "http://127.0.0.1:%d" % args.port
     h = sup.health(args.port)
 
     # want=None = KHÔNG ĐỌC ĐƯỢC version (file bị khóa tạm — OneDrive), không phải version
     # lệch: server đang khỏe thì dùng lại, không được lấy đó làm cớ khởi động lại.
-    if h and (want is None or h.get("version") == want):
-        print("KB Graph 3D: dung lai server co san (pid=%s version=%s) %s"
-              % (h.get("pid"), h.get("version"), url))
+    if sup.health_matches(h, want, vault_ctx["id"]):
+        print("KB Graph 3D: dung lai server co san (pid=%s version=%s vault=%s) %s"
+              % (h.get("pid"), h.get("version"), vault_ctx["name"], url))
     else:
         if h:
-            print("KB Graph 3D: server CU (version %s != %s) -> khoi dong lai"
-                  % (h.get("version"), want))
+            print("KB Graph 3D: server khac version/vault -> khoi dong lai "
+                  "(version %s -> %s, vault %s -> %s)"
+                  % (h.get("version"), want, h.get("vault_name"), vault_ctx["name"]))
         # Spawn supervisor NGẦM (sống độc lập với tiến trình ensure này).
         flags = sup.DETACHED | sup.NO_WINDOW
+        cmd = [sys.executable, os.path.join(HERE, "run_graph3d.py"), "--port", str(args.port)]
+        if args.vault:
+            cmd += ["--vault", vault_ctx["path"]]
         subprocess.Popen(
-            [sys.executable, os.path.join(HERE, "run_graph3d.py"), "--port", str(args.port)],
+            cmd,
             cwd=HERE, creationflags=flags, close_fds=True,
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         ok = None
         for _ in range(40):                 # chờ tối đa ~10s
             ok = sup.health(args.port, 0.5)
-            if ok and (not want or ok.get("version") == want):
+            if sup.health_matches(ok, want, vault_ctx["id"]):
                 break
             time.sleep(0.25)
         if ok:
@@ -388,4 +405,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)

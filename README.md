@@ -32,6 +32,11 @@ Point it at a folder of markdown notes (an Obsidian-style vault) and it serves a
 
 ![Feature map](docs/features.svg)
 
+### Vault roots
+- Click the folder name beside the logo to choose **any markdown vault on this machine** with the native folder picker. The supervisor restarts on the same port and the graph, Reader, Finder, search, onboarding, integrity and insight all move to the selected root together
+- The choice is stored outside every vault in `%LOCALAPPDATA%/claude-graph3d/vaults.json`. Tabs, pins, recent notes, tree expansion and content filters are namespaced by a stable vault id, so vaults do not inherit each other's working state
+- For a fixed session, run `python ensure_graph3d.py --vault "path/to/AnyVault"`; this locks the picker. A selected vault is treated as untrusted data: real paths cannot escape through symlinks/junctions, active HTML/SVG assets are sandboxed, and its `work.py` is never imported
+
 ### 🌌 The graph
 - Force-directed 3D graph of notes, tags and attachments, colored by tag groups, with a bloom "neon" glow and adjustable intensity
 - Degree-aware physics (hubs get room, leaves hug their hub), optional 🧲 cluster-magnet mode per color group, collision guard, smooth settling when filtering
@@ -105,7 +110,7 @@ cd "path/to/YourVault/.graph3d"
 python ensure_graph3d.py
 ```
 
-That's it — the app opens at `http://127.0.0.1:8321`. The vault root is simply the parent folder of `.graph3d/`. Re-running `ensure_graph3d.py` is idempotent (reuses a healthy server, replaces a stale one). On Windows you can also double-click `Start-Graph3D.bat`.
+That's it — the app opens at `http://127.0.0.1:8321`. It starts on the parent folder of `.graph3d/`; click the folder name beside the logo to switch to any vault on the machine, or launch a fixed root with `python ensure_graph3d.py --vault "path/to/AnyVault"`. Re-running `ensure_graph3d.py` is idempotent (reuses a healthy server only when both version and vault match, and replaces a stale one). On Windows you can also double-click `Start-Graph3D.bat`.
 
 **Give it a real launcher (Windows).** Once per machine:
 
@@ -205,7 +210,6 @@ Each run gets an isolated scratch directory, so private and public clones can be
 ## Roadmap
 
 - Config file for tag groups & colors (no code edits needed)
-- Standalone mode (`--vault path`) without installing into the vault
 - Cross-platform process management (mac/linux)
 - Semantic search for vaults that outgrow full-text
 
@@ -227,6 +231,7 @@ Trỏ vào một thư mục note markdown (vault kiểu Obsidian), app phục v�
 
 - **Chạy thử 60 giây (không cần vault):** clone repo → `python try_demo.py` → mở ngay demo vault 120 note (nguồn của mọi ảnh/GIF phía trên).
 - **Cài đặt vào vault của bạn:** chỉ cần Python 3.9+ — clone vào vault thành thư mục `.graph3d` (trong lệnh mẫu, thay `YourVault` bằng **đường dẫn thư mục vault của bạn** — thư mục chứa các note markdown, ví dụ `D:/Notes`), chạy `python ensure_graph3d.py`, app mở tại `http://127.0.0.1:8321`. Không npm, không build; `PyYAML` là tuỳ chọn để bật phép kiểm cú pháp frontmatter thật (`python -m pip install pyyaml`). Windows có thể double-click `Start-Graph3D.bat`.
+- **Chọn vault root ngay trên UI:** bấm tên folder cạnh logo để mở hộp chọn folder của hệ điều hành; chọn một vault bất kỳ trên máy thì graph, Reader, Finder, tìm kiếm, onboarding, integrity và insight cùng chuyển sang root đó sau khi server khởi động lại trên đúng port cũ. Lựa chọn lưu ngoài mọi vault ở `%LOCALAPPDATA%/claude-graph3d/vaults.json`; tab, ghim, lịch sử, cây folder và bộ lọc nội dung được tách riêng theo vault. Muốn cố định một phiên: `python ensure_graph3d.py --vault "đường/dẫn/Vault"` — nút đổi vault sẽ bị khoá. Vault được chọn được coi là dữ liệu không tin cậy: chặn symlink/junction thoát root, sandbox asset HTML/SVG và không bao giờ import `work.py` của folder đó.
 - **Lối vào đàng hoàng (Windows):** chạy MỘT lần mỗi máy `python install_launcher.py --hotkey "CTRL+ALT+G"` → shortcut Start Menu + Desktop chạy `pythonw ensure_graph3d.py --app`: click là ra **cửa sổ app riêng**, không thanh địa chỉ, không lẫn giữa hai chục tab. Muốn **nút taskbar đang chạy** cũng có icon neon riêng, mở app một lần trong Edge rồi chọn **⋯ → Apps → Install this site as an app**; các lần sau `ensure` mở AppUserModelID packaged mà Windows đăng ký qua `shell:AppsFolder` (Edge hiện hành), hoặc dùng `--app-id` từ shortcut Chromium kiểu cũ; chưa cài thì lùi về `--app=<url>`. Chỉ cần đặt `GRAPH3D_PWA_SHORTCUT` khi bản Chromium kiểu cũ dùng shortcut đã đổi tên/di chuyển. `--status` xem launcher đang cài gì · `--uninstall` gỡ launcher · `--python` ghim interpreter cụ thể. Mặc định installer tìm Python đã đăng ký trước khi lùi về runtime hiện hành; đường Store Python có số build được đổi sang app-exec alias ổn định khi alias tồn tại, nên Store cập nhật không làm shortcut chết. Không có console nên thông báo của ensure nằm ở `%LOCALAPPDATA%\claude-graph3d\launcher.log`. Ý nghĩa thật: đường dẫn vault là thuộc tính của **máy**, nên nó nằm trong shortcut chứ không nằm trong một note mà bạn phải mở ra trước.
 - **Chưa có vault? KHÔNG cần Obsidian trước.** Vault chỉ là một thư mục chứa file `.md` — soạn bằng Notepad cũng được. Obsidian là editor tuỳ chọn về sau, dùng chung đúng thư mục này.
 - **Mở app trên thư mục chưa có note nào → app tự mời 3 lối đi** thay vì graph rỗng: **🌌 xem demo** 120 note (server riêng cổng 8322, server trên vault thật của bạn vẫn chạy nguyên), **🌱 tạo vault đầu tiên ngay tại đó** (chép [`starter-vault/`](starter-vault/) 9 note — dạy note/wikilink/tag/hub ngay trong app, có bản tiếng Việt; **không bao giờ đè file đã có**), **📖 tự làm 1 phút** + nút quét lại. Khi chưa có note, app ẩn cây/panel/control graph và các số kỹ thuật `0/0` để màn đầu chỉ còn đúng hướng dẫn cần thiết.

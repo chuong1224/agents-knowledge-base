@@ -17,6 +17,7 @@
      + test_integrity (den bao toan ven vault /integrity — link/nhung/anchor gay,
        anh mo coi, YAML frontmatter vo/thieu truong, "mo nilon"; W11/W149)
      + test_onboarding (vault trong: state/install_starter/mirror_app, W13)
+     + test_vault_switcher (active root/config/restart routing, W180)
      + test_i18n (song ngu VI/EN: 2 ngon ngu cung tap khoa, khoa dung deu co that,
        bien {x} khop, src/*.js het chuoi giao dien tieng Viet; W43)
      + test_launcher (loi vao he dieu hanh: shortcut .lnk goi ensure --app, icon .ico,
@@ -224,7 +225,8 @@ def lop3_unit(slow):
     files = ["test_p1.py", "test_p3.py", "test_p4.py", "test_p5.py", "test_reader.py",
              "test_finder.py", "test_cockpit.py", "test_journal.py", "test_insight.py",
              "test_integrity.py", "test_onboarding.py", "test_i18n.py",
-             "test_launcher.py", "test_reload.py", "test_update.py"]
+             "test_launcher.py", "test_reload.py", "test_update.py",
+             "test_vault_switcher.py"]
     if slow:
         files.append("test_p2.py")
     jobs = [(name, os.path.join(TESTS, name)) for name in files]

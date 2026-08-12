@@ -428,8 +428,8 @@ check("V serve co endpoint /insight goi insight.build_insight",
 check("V endpoint va CLI dung chain canonical cho worklist",
       "chains=build_chains(events" in sv_src
       and "chains=serve.build_chains(events" in open(os.path.join(G3D, "insight.py"), encoding="utf-8").read())
-check("V server nap taxonomy qua cache cua insight.py",
-      "insight.measure_taxonomy(graph)" in sv_src)
+check("V server nap taxonomy active vault qua cache cua insight.py",
+      "insight.measure_taxonomy(graph, vault=VAULT)" in sv_src)
 check("V insight.py nam trong _VERSION_FILES (sua module PHAI restart server)",
       '"insight.py"' in open(os.path.join(G3D, "activity_paths.py"), encoding="utf-8").read())
 ui_src = open(os.path.join(G3D, "src", "insight.js"), encoding="utf-8").read()

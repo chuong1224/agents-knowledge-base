@@ -26,6 +26,10 @@ private (vault thật không bao giờ trống nên cũng không dùng tới). T
 sinh nội dung mẫu. Test trỏ nguồn khác bằng `GRAPH3D_STARTER_DIR` /
 `GRAPH3D_DEMO_DIR` (mirror pattern `GRAPH3D_JOURNAL_DIR`).
 
+Từ v1.59.0, app runtime không bắt buộc nằm trong active vault: khi user đã chọn
+vault ngoài bằng Vault Switcher, `state()` coi lựa chọn đó là cài đặt hợp lệ và
+không hiện cảnh báo W42 "app cài sai chỗ".
+
 Chạy tay:
   python .graph3d/ensure_graph3d.py --demo              # xem demo 120 note
   python .graph3d/ensure_graph3d.py --init-starter DIR  # dựng vault đầu tiên tại DIR
@@ -149,6 +153,9 @@ def state(vault, notes=None):
     sd, dd = starter_dir(), demo_vault_dir()
     s_notes, d_notes = count_bundled(sd), count_bundled(dd)
     app = os.path.abspath(HERE)
+    app_parent = os.path.dirname(app)
+    selected_elsewhere = (os.path.normcase(os.path.realpath(vault)) !=
+                          os.path.normcase(os.path.realpath(app_parent)))
     return {
         "empty": not notes,
         "notes": notes,
@@ -156,7 +163,9 @@ def state(vault, notes=None):
         "vault_path": vault,
         # W42: app nằm đúng chỗ chưa (tên thư mục = .graph3d). False = rất có thể user
         # đang xem thư mục CHA của bản clone chứ không phải vault của mình.
-        "installed": installed_in_vault(app),
+        # W180: app runtime có thể đứng ngoài vault. Khi active vault khác app-parent,
+        # folder đã được chọn tường minh nên không được bật cảnh báo "cài sai chỗ" W42.
+        "installed": installed_in_vault(app) or selected_elsewhere,
         "app_dir": os.path.basename(app),
         "starter": {"available": s_notes > 0, "notes": s_notes, "path": sd},
         "demo": {"available": d_notes > 0, "notes": d_notes, "path": dd,

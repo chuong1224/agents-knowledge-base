@@ -20,6 +20,7 @@ import { initInsight, openInsight, closeInsight, pollInsight } from './insight.j
 import { initIntegrity, openIntegrity, closeIntegrity, pollIntegrity } from './integrity.js';
 import { initOnboarding, openOnboarding, closeOnboarding, syncOnbFab } from './onboarding.js';
 import { initUpdate, pollUpdate, openUpdate, closeUpdate, toggleConsent } from './update.js';
+import { loadVaultState, initVaultSwitcher, pickVault } from './vault-switcher.js';
 import { initWorkspace, WS, wsOpen, wsSwitch, wsCloseTab, wsSplit, wsBack,
          togglePin, pushRecent, renderSbSections } from './workspace.js';
 
@@ -29,6 +30,7 @@ window.addEventListener('unhandledrejection', e => console.error('promise reject
 
 /* ---------- boot ---------- */
 async function boot() {
+  await loadVaultState();                // W180: namespace localStorage TRƯỚC mọi restore
   const res = await fetch('/graph-data');
   S.all = await res.json();
   S.vaultName = S.all.meta.vaultName || S.vaultName;
@@ -41,11 +43,12 @@ async function boot() {
 
   initGraph();                           // ForceGraph3D + orphanPull + controls + trailGroup
   window.__G = S.Graph; // debug hook: truy cập Graph từ DevTools console
-  window.__fx = { nodeOnScreen, followFlyTo, agentTrails, agentFlow, replayFlow, buildUI, updateTrails, updateWarps, spawnWarp, warps, openReader, closeReader, openSwitcher, closeSwitcher, buildTree, openFileActions, closeFileActions, openTimeline, closeTimeline, openDashboard, closeDashboard, openWorkMap, closeWorkMap, openInsight, closeInsight, pollInsight, openIntegrity, closeIntegrity, pollIntegrity, openOnboarding, closeOnboarding, WS, wsOpen, wsSwitch, wsCloseTab, wsSplit, wsBack, togglePin, pushRecent, renderSbSections, pollActivity, openUpdate, closeUpdate, pollUpdate, toggleConsent }; // debug hook nghiệm thu (Ư1/Ư4/Ư6/Reader/Finder/Cockpit/Workspace/Insight — tab ẩn không có rAF, phải gọi tay; pollActivity thêm ở W64 để nghiệm thu nhánh boot_id đổi mà không cần tab hiện)
+  window.__fx = { nodeOnScreen, followFlyTo, agentTrails, agentFlow, replayFlow, buildUI, updateTrails, updateWarps, spawnWarp, warps, openReader, closeReader, openSwitcher, closeSwitcher, buildTree, openFileActions, closeFileActions, openTimeline, closeTimeline, openDashboard, closeDashboard, openWorkMap, closeWorkMap, openInsight, closeInsight, pollInsight, openIntegrity, closeIntegrity, pollIntegrity, openOnboarding, closeOnboarding, WS, wsOpen, wsSwitch, wsCloseTab, wsSplit, wsBack, togglePin, pushRecent, renderSbSections, pollActivity, openUpdate, closeUpdate, pollUpdate, toggleConsent, pickVault }; // debug hook nghiệm thu (Ư1/Ư4/Ư6/Reader/Finder/Cockpit/Workspace/Insight — tab ẩn không có rAF, phải gọi tay; pollActivity thêm ở W64 để nghiệm thu nhánh boot_id đổi mà không cần tab hiện)
 
   // W43: dich markup tinh TRUOC khi cac module doc/dung UI — chay mot lan, khong ton kem
   applyI18n();
   initLangSwitch();
+  initVaultSwitcher();              // W180: nút vault trên brand, native picker + restart
   initReload();                   // W64: nút ⟳ — cửa sổ app không có nút reload của trình duyệt
   initUpdate();                   // W69: báo có bản mới trên repo (chỉ hỏi mạng khi đã được đồng ý)
   pollUpdate(true);               // 1 lượt lúc boot; server tự chặn theo consent + TTL 1 ngày

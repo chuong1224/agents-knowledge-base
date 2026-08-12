@@ -1,6 +1,7 @@
 /* ui.js — panel điều khiển: chip/lọc, section gập/mở + persist, demo hiệu ứng,
    refreshData khi vault đổi. (Card thông tin cũ đã thay bằng reader.js — giai đoạn 1.) */
-import { S, byId, adjacency, tagOn, tagOff, extOn, $, esc, deAccent, GROUP_ORDER } from './state.js';
+import { S, byId, adjacency, tagOn, tagOff, extOn, $, esc, deAccent, GROUP_ORDER,
+         vaultStoreGet, vaultStoreSet, vaultStoreRemove } from './state.js';
 import { tr } from './i18n.js';
 import { applyFilters, refreshAllNodes, updateStats, applyNodeState, physics, pauseRotate, setNeon, linkAux, setCluster } from './graph.js';
 import { pulses, agentFlow, endAgentFlow } from './effects.js';
@@ -26,12 +27,12 @@ export function restoreClusterFromStorage() {
 }
 
 export function saveExtOnToStorage() {
-  try { localStorage.setItem(EXT_ON_STORAGE_KEY, JSON.stringify([...extOn])); } catch (e) {}
+  try { vaultStoreSet(EXT_ON_STORAGE_KEY, JSON.stringify([...extOn])); } catch (e) {}
 }
 
 export function restoreExtOnFromStorage() {
   try {
-    const raw = localStorage.getItem(EXT_ON_STORAGE_KEY);
+    const raw = vaultStoreGet(EXT_ON_STORAGE_KEY);
     if (!raw) return;
     const arr = JSON.parse(raw);
     if (!Array.isArray(arr)) return;
@@ -45,13 +46,14 @@ export function restoreExtOnFromStorage() {
    Mặc định tag là HIỆN HẾT (ngược với đuôi file), nên KHÔNG lưu tagOn mà lưu phía
    TẮT (`tagOff`): tag mới sinh trong vault vẫn hiện như cũ, tag user đã tắt thì ở yên
    trạng thái tắt. Không prune theo node hiện có — tag biến mất tạm (đang sửa note)
-   quay lại vẫn giữ đúng trạng thái. Reset tay: localStorage.removeItem('kbgraph3d.tagOff.v1'). */
+   quay lại vẫn giữ đúng trạng thái. Từ W180, key thật có suffix vault id qua
+   `vaultStore*()` để hai vault cùng có tag trùng tên không dùng chung filter. */
 export function saveTagOffToStorage() {
-  try { localStorage.setItem(TAG_OFF_STORAGE_KEY, JSON.stringify([...tagOff])); } catch (e) {}
+  try { vaultStoreSet(TAG_OFF_STORAGE_KEY, JSON.stringify([...tagOff])); } catch (e) {}
 }
 export function restoreTagOffFromStorage() {
   try {
-    const raw = localStorage.getItem(TAG_OFF_STORAGE_KEY);
+    const raw = vaultStoreGet(TAG_OFF_STORAGE_KEY);
     if (!raw) return;
     const arr = JSON.parse(raw);
     if (!Array.isArray(arr)) return;
@@ -67,13 +69,13 @@ function setTagOn(id, on) {
    vì một nhóm đã biến mất khỏi vault (buildUI chỉ dọn cờ, không vẽ lại node). */
 function saveGroupToStorage() {
   try {
-    if (S.selectedGroup) localStorage.setItem(GROUP_STORAGE_KEY, S.selectedGroup);
-    else localStorage.removeItem(GROUP_STORAGE_KEY);
+    if (S.selectedGroup) vaultStoreSet(GROUP_STORAGE_KEY, S.selectedGroup);
+    else vaultStoreRemove(GROUP_STORAGE_KEY);
   } catch (e) {}
 }
 export function restoreGroupFromStorage() {
   try {
-    const g = localStorage.getItem(GROUP_STORAGE_KEY);
+    const g = vaultStoreGet(GROUP_STORAGE_KEY);
     if (g && S.all.nodes.some(n => n.kind === 'note' && n.group === g)) S.selectedGroup = g;
   } catch (e) {}
 }

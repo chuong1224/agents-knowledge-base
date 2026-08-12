@@ -6,7 +6,8 @@
    từ giai đoạn 4: nhóm "Đọc gần đây" khi ô trống + Ctrl/middle-click mở TAB MỚI
    (cây lẫn switcher; nút ＋ tabbar mở switcher ở chế độ tab mới).
    Top-level chỉ ĐỊNH NGHĨA (không gọi chéo module lúc eval) — an toàn vòng import. */
-import { S, $, esc, deAccent, focusInto, restoreFocus } from './state.js';
+import { S, $, esc, deAccent, focusInto, restoreFocus,
+         vaultStoreGet, vaultStoreSet } from './state.js';
 import { tr } from './i18n.js';
 import { openReader } from './reader.js';
 import { openFileActions } from './file-actions.js';
@@ -23,11 +24,11 @@ let _byId = new Map();         // id -> node, dựng lại mỗi buildTree/openS
 const viCmp = (a, b) => a.localeCompare(b, 'vi');
 
 function saveTreeOpen() {
-  try { localStorage.setItem(TREE_OPEN_KEY, JSON.stringify([...treeOpen])); } catch (e) {}
+  try { vaultStoreSet(TREE_OPEN_KEY, JSON.stringify([...treeOpen])); } catch (e) {}
 }
 function restoreTreeOpen() {
   try {
-    const arr = JSON.parse(localStorage.getItem(TREE_OPEN_KEY) || '[]');
+    const arr = JSON.parse(vaultStoreGet(TREE_OPEN_KEY) || '[]');
     if (Array.isArray(arr)) treeOpen = new Set(arr.filter(x => typeof x === 'string'));
   } catch (e) {}
 }

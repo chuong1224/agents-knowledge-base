@@ -70,6 +70,10 @@ main = read(os.path.join(SRC, "main.js"))
 act = read(os.path.join(SRC, "activity.js"))
 css = read(os.path.join(SRC, "style.css"))
 i18n = read(os.path.join(SRC, "i18n.js"))
+vault_js = read(os.path.join(SRC, "vault-switcher.js"))
+state_js = read(os.path.join(SRC, "state.js"))
+finder_js = read(os.path.join(SRC, "finder.js"))
+workspace_js = read(os.path.join(SRC, "workspace.js"))
 
 # --- 1: nut ton tai, dung mot lan ---
 check("1 index.html co dung 1 nut #reload-b", html.count('id="reload-b"') == 1,
@@ -140,11 +144,51 @@ toggle_narrow = css_block(narrow, "#panel-toggle")
 panel_top = px_prop(panel_narrow, "top")
 toggle_top = px_prop(toggle_narrow, "top")
 check("11 W65 co breakpoint hep <=700px", bool(narrow))
-check("11 W65 panel lui xuong duoi brand (top >=64px)",
-      panel_top is not None and panel_top >= 64, panel_top)
+check("11 W65/W180 panel lui xuong duoi vault button (top >=68px)",
+      panel_top is not None and panel_top >= 68, panel_top)
 check("11 W65 panel-toggle lui theo panel (top >= panel+6px)",
       toggle_top is not None and panel_top is not None and toggle_top >= panel_top + 6,
       (panel_top, toggle_top))
+sidebar_top = px_prop(css_block(css, "\n#sidebar "), "top")
+check("11 W180 sidebar cung lui xuong duoi vault button (top >=68px)",
+      sidebar_top is not None and sidebar_top >= 68, sidebar_top)
+
+# --- 12: W180 Vault Switcher nằm đúng vùng click brand + có nhãn hiện hành ---
+check("12 index.html co dung 1 nut #vault-switch", html.count('id="vault-switch"') == 1,
+      html.count('id="vault-switch"'))
+check("12 nut vault nam cung div.sub", bool(m) and 'id="vault-switch"' in m.group(1))
+vault_btn = re.search(r'<button[^>]*id="vault-switch"[^>]*>', html)
+vault_btn = vault_btn.group(0) if vault_btn else ""
+check("12 nut vault la button ban phim + co aria", 'type="button"' in vault_btn and
+      'data-i18n-aria="vault.choose"' in vault_btn, vault_btn)
+check("12 nut vault co label ellipsis", 'id="vault-label"' in html and '#vault-label {' in css)
+vault_css = css_block(css, "#vault-switch")
+check("12 nut vault nhan pointer event that", "pointer-events: auto" in vault_css, vault_css)
+check("12 hit-area vault phu border sub-pixel", "#vault-switch::before" in css and
+      "inset: -3px" in css)
+
+# --- 13: vault_id phải có TRƯỚC mọi localStorage restore ---
+load_pos = main.find("await loadVaultState()")
+graph_pos = main.find("fetch('/graph-data')")
+restore_pos = main.find("restoreTagOffFromStorage()")
+check("13 load vault-state truoc graph va restore storage",
+      0 <= load_pos < graph_pos < restore_pos, (load_pos, graph_pos, restore_pos))
+check("13 state.js co namespace vaultKey", "export const vaultKey" in state_js)
+check("13 legacy state chi migrate vao app vault", "S.vaultMigrateLegacy" in vault_js and
+      "value == null && S.vaultMigrateLegacy" in state_js)
+check("13 finder dung vaultStore cho tree", "vaultStoreGet(TREE_OPEN_KEY)" in finder_js)
+check("13 workspace namespace tab/ghim/recent", "VAULT_KEYS" in workspace_js and
+      all(k in workspace_js for k in ("WS_KEY", "PINS_KEY", "RECENT_KEY")))
+
+# --- 14: picker/restart contract + song ngữ ---
+check("14 module POST /vault-pick", "fetch('/vault-pick', { method: 'POST' })" in vault_js)
+check("14 client doi dung vault_id va boot_id moi", "h.vault_id === targetId" in vault_js and
+      "h.boot_id !== oldBoot" in vault_js)
+check("14 --vault/demo khoa nut UI", "b.disabled = S.vaultLocked || cls === 'busy'" in vault_js)
+for k in ("vault.tip", "vault.locked", "vault.picking", "vault.switching",
+          "vault.timeout", "vault.error"):
+    check("14 khoa %s co ca vi lan en" % k,
+          ("'%s'" % k) in vi_block and ("'%s'" % k) in en_block)
 
 print("\nTONG KET test_reload: %s" % (("FAIL %d: %s" % (len(fails), ", ".join(fails))) if fails else "ALL PASS"))
 sys.exit(1 if fails else 0)

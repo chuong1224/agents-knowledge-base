@@ -9,6 +9,9 @@ Endpoint:
   /src/*         -> ES modules + CSS của UI (giai đoạn 0 Vault Cockpit — tách monolith)
   /vendor/*      -> thư viện three.js / 3d-force-graph / markdown-it (vendored, offline OK)
   /graph-data    -> quét vault, trả JSON nodes/links (build in-memory, không ghi file)
+  /vault-state   -> active vault + id ổn định + trạng thái khóa/cảnh báo
+  POST /vault-pick -> native folder picker; lưu lựa chọn ngoài vault rồi exit 4 để
+                    supervisor relaunch atomically trên cùng port
   /note?path=    -> markdown thô + mtime/size của 1 note (giai đoạn 1 Vault Cockpit — Reader)
   /asset?path=   -> file đính kèm trong vault (ảnh/video/pdf… cho Reader hiển thị)
                     cả hai chặn path traversal + dot-folder (xem vault_file)
@@ -36,8 +39,7 @@ Endpoint:
   POST /starter-init -> chép starter-vault/ vào vault đang trống (không đè file)
   POST /demo-start   -> mở cockpit trên vault demo bundled ở PORT RIÊNG (gọi
                     ensure_graph3d.py --demo, không tự chạy serve.py)
-                    Hai POST này là hành động DUY NHẤT có tác dụng phụ — có hàng rào
-                    Origin; xem onboarding.py.
+                    Các POST có tác dụng phụ đều có hàng rào Origin; xem onboarding.py.
   /activity?cursor=N -> event mới trong activity.jsonl từ byte-offset N
                         (hook log_activity.py của Claude Code ghi file này)
   /work          -> bản đồ việc đang mở của vault, đã phân loại (làm ngay được / chờ việc / chờ điều kiện)
@@ -63,7 +65,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VAULT = os.path.dirname(HERE)
+APP_VAULT = os.path.dirname(HERE)
 from activity_paths import (active_activity_log_path,  # noqa: E402
                             activity_log_candidates, codex_session_candidates,
                             is_codex_rollout, parse_codex_rollout, source_version,
@@ -77,6 +79,7 @@ BOOT_ID = uuid.uuid4().hex[:12]
 VERSION = source_version(HERE) or "unknown"
 _httpd = None            # gán trong main() để /shutdown gọi được
 PORT = [8321]            # gán trong main() — POST guard so Origin theo port đang chạy
+EXIT_CODE = [0]          # 4 = đổi vault, supervisor relaunch cùng port
 
 sys.path.insert(0, HERE)
 import build_graph_data  # noqa: E402
@@ -85,35 +88,64 @@ import insight  # noqa: E402  (tầng insight sức khoẻ vault — /insight)
 import integrity  # noqa: E402  (đèn báo toàn vẹn vault — /integrity)
 import onboarding  # noqa: E402  (vault trống: empty-state + starter vault — /onboarding)
 import update_check  # noqa: E402  (báo có bản mới trên repo — /update, W69)
+import vault_switcher  # noqa: E402  (W180 — chọn active vault từ UI)
+
+# Direct import/test/serve.py keeps the historical app-parent vault.  The supported
+# launcher path passes GRAPH3D_VAULT for every server process.  Normal processes may
+# switch; --vault/demo marks the process locked.
+_process_vault = os.environ.get(vault_switcher.VAULT_ENV, "").strip()
+_process_locked = os.environ.get(vault_switcher.LOCKED_ENV, "") == "1"
+if _process_vault:
+    if _process_locked:
+        _VAULT_CTX = vault_switcher.resolve_active_vault(HERE, explicit=_process_vault)
+    else:
+        _VAULT_CTX = vault_switcher.resolve_active_vault(HERE)
+        if not vault_switcher.same_vault(_VAULT_CTX["path"], _process_vault):
+            _VAULT_CTX = vault_switcher.resolve_active_vault(HERE, explicit=_process_vault)
+    _VAULT_CTX["locked"] = _process_locked
+else:
+    _VAULT_CTX = vault_switcher.resolve_active_vault(HERE, explicit=APP_VAULT)
+    _VAULT_CTX["locked"] = False
+    _VAULT_CTX["source"] = "app"
+VAULT = _VAULT_CTX["path"]
+ACTIVE_STORE_DIR = os.path.join(VAULT, ".graph3d")
+ACTIVE_STORE_DIR = ACTIVE_STORE_DIR if os.path.isdir(ACTIVE_STORE_DIR) else None
+ACTIVE_JOURNAL_DIR = os.environ.get("GRAPH3D_JOURNAL_DIR", "").strip() or ACTIVE_STORE_DIR
+ACTIVE_HEAT_DIR = os.environ.get("GRAPH3D_HEAT_DIR", "").strip() or ACTIVE_STORE_DIR
+APP_TELEMETRY = vault_switcher.same_vault(VAULT, APP_VAULT)
 
 _cache = {"ts": 0.0, "data": None}
 _cache_lock = threading.Lock()
 CACHE_SECONDS = 3.0
 
-# Work Map: registry + logic phân loại nằm TRONG vault (note "Work Map").
-# Server chỉ là cửa đọc — vault không có bản đồ thì endpoint trả 404, app vẫn chạy.
+# Work Map: active vault chỉ cung cấp registry JSON. Tuyệt đối không import ``work.py``
+# từ một vault user vừa chọn: Vault Switcher cho phép folder bất kỳ, nên làm vậy sẽ
+# biến thao tác xem graph thành thực thi mã không tin cậy. Engine chỉ lấy từ app vault.
 WORKMAP_DIR = os.environ.get("GRAPH3D_WORKMAP_DIR") or os.path.join(
     VAULT, "Vault Operation", "Work Map", "attachments")
+WORKMAP_ENGINE = os.environ.get("GRAPH3D_WORKMAP_ENGINE") or os.path.join(
+    APP_VAULT, "Vault Operation", "Work Map", "attachments", "work.py")
 _workmap_cache = {"key": None, "data": None}
 
 
 def workmap_export():
     """Bản đồ việc đã phân loại, hoặc None nếu vault này không có Work Map.
 
-    Cache theo mtime của cả script lẫn registry — sửa work.json là F5 thấy ngay,
-    không phải restart server (cùng tinh thần /src/* đọc thẳng đĩa).
+    Cache theo mtime của engine tin cậy + registry active — sửa work.json là F5 thấy
+    ngay, không phải restart server (cùng tinh thần /src/* đọc thẳng đĩa).
     """
-    script = os.path.join(WORKMAP_DIR, "work.py")
     registry = os.path.join(WORKMAP_DIR, "work.json")
-    if not (os.path.isfile(script) and os.path.isfile(registry)):
+    if not (os.path.isfile(WORKMAP_ENGINE) and os.path.isfile(registry)):
         return None
-    key = (os.path.getmtime(script), os.path.getmtime(registry))
+    key = (os.path.getmtime(WORKMAP_ENGINE), os.path.getmtime(registry))
     if _workmap_cache["key"] == key:
         return _workmap_cache["data"]
-    spec = importlib.util.spec_from_file_location("kb_workmap", script)
+    spec = importlib.util.spec_from_file_location("kb_workmap", WORKMAP_ENGINE)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    data = mod.export_data(mod.load())
+    with open(registry, "r", encoding="utf-8") as f:
+        cfg = json.load(f)
+    data = mod.export_data(cfg)
     _workmap_cache.update(key=key, data=data)
     return data
 
@@ -146,7 +178,13 @@ def vault_file(rel, exts=None):
         return None
     if exts and os.path.splitext(norm)[1].lower() not in exts:
         return None
-    full = os.path.join(VAULT, norm)
+    root = os.path.realpath(VAULT)
+    full = os.path.realpath(os.path.join(root, norm))
+    try:
+        if os.path.normcase(os.path.commonpath((root, full))) != os.path.normcase(root):
+            return None                    # symlink/junction trong vault trỏ ra ngoài
+    except ValueError:                     # khác drive trên Windows
+        return None
     return full if os.path.isfile(full) else None
 
 
@@ -329,9 +367,17 @@ def _read_source(act_path, start):
 
 
 def _realtime_sources():
-    """Nguon live local: hook Claude/Hermes va rollout Codex Desktop."""
+    """Nguồn live của active vault, không suy diễn provenance bị thiếu.
+
+    Log hook Claude/Hermes chỉ lưu path TƯƠNG ĐỐI của app vault nên không thể phân
+    biệt hai vault cùng có ``Index.md``. Khi xem vault ngoài, bỏ nguồn đó hoàn toàn;
+    rollout Codex có workdir/path tuyệt đối nên vẫn parse an toàn theo active vault.
+    """
     out, seen = [], set()
-    for path in activity_log_candidates() + codex_session_candidates():
+    paths = codex_session_candidates()
+    if APP_TELEMETRY:
+        paths = activity_log_candidates() + paths
+    for path in paths:
         key = os.path.normcase(os.path.normpath(path))
         if key not in seen:
             seen.add(key)
@@ -408,7 +454,8 @@ def _event_sources():
     laptop thấy event máy cty và ngược lại). Local đứng TRƯỚC: bản trùng log↔journal
     của chính máy này dedup giữ bản local (không host)."""
     out = [(p, None) for p in _realtime_sources()]
-    out += [(p, journal_host(p)) for p in vault_journal_files()]
+    if ACTIVE_JOURNAL_DIR:
+        out += [(p, journal_host(p)) for p in vault_journal_files(ACTIVE_JOURNAL_DIR)]
     return out
 
 
@@ -536,12 +583,14 @@ def merge_cumulative_stores():
     Tách riêng khỏi build_heat_cumulative để hai người tiêu thụ (/heat và /insight)
     dùng CHUNG một logic gộp — /heat giữ nguyên contract của nó (chỉ counts + top).
     """
-    try:
-        log_activity.reconcile_cumulative_with_log()
-    except Exception:
-        pass
+    if APP_TELEMETRY:
+        try:
+            log_activity.reconcile_cumulative_with_log()
+        except Exception:
+            pass
     merged, machines, since, updated = {}, [], None, 0
-    for p in cumulative_heat_files():
+    stores = cumulative_heat_files(ACTIVE_HEAT_DIR) if ACTIVE_HEAT_DIR else []
+    for p in stores:
         try:
             with open(p, "r", encoding="utf-8") as f:
                 d = json.load(f)
@@ -706,15 +755,32 @@ class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     timeout = 75
 
-    def _send(self, code, body, ctype="application/json; charset=utf-8"):
+    def _host_ok(self):
+        """Reject DNS-rebinding Host names before any GET can expose local paths/data."""
+        raw = (self.headers.get("Host") or "").strip().lower()
+        if not raw:                           # HTTP/1.0 script on the local machine
+            return True
+        if raw.startswith("["):
+            host = raw[1:].split("]", 1)[0]
+        else:
+            host = raw.rsplit(":", 1)[0] if ":" in raw else raw
+        return host in ("127.0.0.1", "localhost", "::1")
+
+    def _send(self, code, body, ctype="application/json; charset=utf-8", headers=None):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(body)
 
     def do_GET(self):
+        if not self._host_ok():
+            self._send(403, b'{"error":"host khong hop le"}')
+            return
         parsed = urlparse(self.path)
         path = parsed.path
 
@@ -743,9 +809,25 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, body)
             return
 
+        if path == "/vault-state":
+            # Full path chỉ trả trên loopback, dùng làm tooltip và initial directory
+            # cho native picker. Browser khác origin không đọc được response (không CORS).
+            state = dict(_VAULT_CTX)
+            state["boot_id"] = BOOT_ID
+            state["telemetry"] = "full" if APP_TELEMETRY else (
+                "stored" if (ACTIVE_JOURNAL_DIR or ACTIVE_HEAT_DIR) else "codex_only")
+            self._send(200, json.dumps(state, ensure_ascii=False).encode("utf-8"))
+            return
+
         if path == "/ping":
             # Cổng cho agent KHÁC Claude Code (Hermes, script, curl…) báo hoạt động:
             #   GET /ping?type=read&file=Projects/Demo/Note.md&agent=Hermes  (file lặp lại được)
+            if not APP_TELEMETRY:
+                self._send(409, json.dumps(
+                    {"ok": False, "logged": 0, "code": "telemetry_unavailable",
+                     "error": "logger hiện không có vault identity cho vault ngoài"},
+                    ensure_ascii=False).encode("utf-8"))
+                return
             qs = parse_qs(parsed.query)
             ev = qs.get("type", ["read"])[0]
             agent = qs.get("agent", [None])[0]
@@ -756,7 +838,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/health":
             # ensure/run đọc để quyết định: dùng lại (version khớp) hay giết + khởi động lại.
             body = json.dumps({"ok": True, "version": VERSION, "boot_id": BOOT_ID,
-                               "pid": os.getpid()}).encode("utf-8")
+                               "pid": os.getpid(), "vault_id": _VAULT_CTX["id"],
+                               "vault_name": _VAULT_CTX["name"]},
+                              ensure_ascii=False).encode("utf-8")
             self._send(200, body)
             return
 
@@ -788,7 +872,7 @@ class Handler(BaseHTTPRequestHandler):
                 body = json.dumps({"cursor": {}, "file_size": 0, "events": [],
                                    "boot_id": BOOT_ID, "replay": False,
                                    "stale_client": True,
-                                   "log": active_activity_log_path()},
+                                   "log": active_activity_log_path() if APP_TELEMETRY else None},
                                   ensure_ascii=False).encode("utf-8")
                 self._send(200, body)
                 return
@@ -797,7 +881,7 @@ class Handler(BaseHTTPRequestHandler):
                                "file_size": sum(new_cursors.values()),
                                "events": events, "boot_id": BOOT_ID,
                                "replay": bool(replay or forced),
-                               "log": active_activity_log_path()},
+                                "log": active_activity_log_path() if APP_TELEMETRY else None},
                               ensure_ascii=False).encode("utf-8")
             self._send(200, body)
             return
@@ -897,7 +981,7 @@ class Handler(BaseHTTPRequestHandler):
             ins = insight.build_insight(events, graph,
                                         heat_notes=heat_notes, heat_meta=heat_meta,
                                         days=days, cold_days=cold,
-                                        taxonomy_result=insight.measure_taxonomy(graph),
+                                        taxonomy_result=insight.measure_taxonomy(graph, vault=VAULT),
                                         chains=build_chains(events, limit=len(events) + 1))
             ins["boot_id"] = BOOT_ID
             ins["host"] = host_name()
@@ -914,7 +998,7 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 limit = integrity.LIST_N
             try:
-                rep = dict(integrity.collect(list_n=limit))   # copy: đừng bơm field vào bản cache
+                rep = dict(integrity.collect(vault=VAULT, list_n=limit))   # active vault, không app vault
             except Exception as exc:                          # noqa: BLE001
                 self._send(500, json.dumps({"error": str(exc)},
                                            ensure_ascii=False).encode("utf-8"))
@@ -949,8 +1033,8 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/work":
-            # Work Map — xem workmap_export(). Lỗi đọc registry (JSON hỏng, script
-            # lỗi) trả 500 kèm thông điệp để UI hiện thẳng, đừng nuốt im.
+            # Work Map — xem workmap_export(). Lỗi registry/engine trả 500 kèm
+            # thông điệp để UI hiện thẳng, đừng nuốt im.
             try:
                 data = workmap_export()
             except Exception as exc:                              # noqa: BLE001
@@ -984,6 +1068,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/asset":
             # Reader: file đính kèm note (ảnh/video/pdf…) — mọi file trong vault
             # NGOÀI dot-folder; đuôi lạ trả octet-stream (trình duyệt tự tải về).
+            # Asset có thể đến từ folder bất kỳ user vừa chọn. CSP sandbox chặn
+            # HTML/SVG/PDF chủ động chạy script cùng origin rồi gọi các POST local.
             qs = parse_qs(parsed.query)
             full = vault_file(qs.get("path", [""])[0])
             if not full:
@@ -991,7 +1077,12 @@ class Handler(BaseHTTPRequestHandler):
                 return
             ext = os.path.splitext(full)[1].lower()
             with open(full, "rb") as f:
-                self._send(200, f.read(), MIME.get(ext, "application/octet-stream"))
+                self._send(200, f.read(), MIME.get(ext, "application/octet-stream"), {
+                    "Content-Security-Policy": (
+                        "sandbox; default-src 'none'; img-src data:; "
+                        "media-src 'self'; style-src 'unsafe-inline'"),
+                    "Cross-Origin-Resource-Policy": "same-origin",
+                })
             return
 
         if path.startswith("/src/"):
@@ -1032,8 +1123,70 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
+        if not self._host_ok():
+            self._send(403, b'{"error":"host khong hop le"}')
+            return
         if not self._origin_ok():
             self._send(403, b'{"error":"origin khong hop le"}')
+            return
+
+        if path == "/vault-pick":
+            if _VAULT_CTX.get("locked"):
+                self._send(409, json.dumps(
+                    {"error": "vault bị khoá bởi --vault/demo", "code": "locked"},
+                    ensure_ascii=False).encode("utf-8"))
+                return
+            try:
+                chosen = vault_switcher.choose_folder(VAULT)
+            except vault_switcher.VaultSwitchError as exc:
+                self._send(400, json.dumps(
+                    {"error": str(exc), "code": exc.code},
+                    ensure_ascii=False).encode("utf-8"))
+                return
+            if not chosen:
+                self._send(200, b'{"ok":true,"cancelled":true,"changed":false}')
+                return
+            if vault_switcher.same_vault(chosen, VAULT):
+                # Nếu đang fallback vì saved path hỏng, chọn lại chính app vault phải
+                # xóa cảnh báo bền. Restart để /vault-state của process mới sạch.
+                if _VAULT_CTX.get("warning"):
+                    try:
+                        vault_switcher.save_selection(chosen)
+                    except (vault_switcher.VaultSwitchError, OSError) as exc:
+                        self._send(400, json.dumps(
+                            {"error": str(exc), "code": getattr(exc, "code", "save_failed")},
+                            ensure_ascii=False).encode("utf-8"))
+                        return
+                    self._send(200, json.dumps(
+                        {"ok": True, "cancelled": False, "changed": True,
+                         "vault": _VAULT_CTX["name"], "vault_id": _VAULT_CTX["id"],
+                         "boot_id": BOOT_ID}, ensure_ascii=False).encode("utf-8"))
+                    EXIT_CODE[0] = 4
+                    if _httpd is not None:
+                        threading.Timer(0.25, _httpd.shutdown).start()
+                    return
+                self._send(200, json.dumps(
+                    {"ok": True, "cancelled": False, "changed": False,
+                     "vault": _VAULT_CTX["name"], "vault_id": _VAULT_CTX["id"]},
+                    ensure_ascii=False).encode("utf-8"))
+                return
+            try:
+                vault_switcher.save_selection(chosen)
+                new_id = vault_switcher.vault_id(chosen)
+            except (vault_switcher.VaultSwitchError, OSError) as exc:
+                self._send(400, json.dumps(
+                    {"error": str(exc), "code": getattr(exc, "code", "save_failed")},
+                    ensure_ascii=False).encode("utf-8"))
+                return
+            self._send(200, json.dumps(
+                {"ok": True, "cancelled": False, "changed": True,
+                 "vault": os.path.basename(chosen) or chosen, "vault_id": new_id,
+                 "boot_id": BOOT_ID}, ensure_ascii=False).encode("utf-8"))
+            # Response phải rời socket trước. serve_forever trả về code 4; supervisor
+            # đọc config MỚI và spawn process mới cùng port.
+            EXIT_CODE[0] = 4
+            if _httpd is not None:
+                threading.Timer(0.25, _httpd.shutdown).start()
             return
 
         if path == "/file-action":
@@ -1221,7 +1374,8 @@ def main():
 
     _httpd = server
     url = "http://127.0.0.1:%d" % args.port
-    print("KB Graph 3D: %s  (vault: %s)  version=%s boot=%s" % (url, VAULT, VERSION, BOOT_ID))
+    print("KB Graph 3D: %s  (vault: %s id=%s)  version=%s boot=%s"
+          % (url, VAULT, _VAULT_CTX["id"], VERSION, BOOT_ID))
     print("Ctrl+C de dung server.")
     threading.Thread(target=_watch_source, daemon=True).start()
     if not args.no_open:
@@ -1232,7 +1386,7 @@ def main():
         pass
     # serve_forever chỉ trả về khi có /shutdown hoặc Ctrl+C → dừng hẳn, exit 0
     # (supervisor thấy code 0 sẽ KHÔNG relaunch). Reload code do _watch_source lo (exit 3).
-    sys.exit(0)
+    sys.exit(EXIT_CODE[0])
 
 
 if __name__ == "__main__":

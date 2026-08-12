@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Supervisor cho KB Graph 3D — giữ đúng MỘT server sống trên port và tự khởi động
 lại khi mã nguồn đổi (serve.py exit 3) hoặc process chết. PORT chính là "khóa" duy
-nhất: nếu đã có server CÙNG version đang khỏe thì supervisor này tự thoát (idempotent),
+nhất: nếu đã có server CÙNG version + vault id đang khỏe thì supervisor này tự thoát (idempotent),
 nên chạy bao nhiêu lần cũng không đẻ ra nhiều server.
 
 Dùng bởi:
@@ -10,6 +10,7 @@ Dùng bởi:
 
 Exit code của serve.py mà supervisor diễn giải:
   3  = mã nguồn đổi   -> relaunch (reload)
+  4  = active vault đổi -> đọc lại lựa chọn đã lưu rồi relaunch cùng port
   0  = /shutdown/Ctrl+C -> dừng hẳn, KHÔNG relaunch
   75 = port bị chiếm  -> nhường nếu server kia cùng version, ngược lại giết zombie & thử lại
   khác = crash        -> backoff rồi relaunch (chặn vòng lặp điên)
@@ -25,6 +26,7 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from activity_paths import source_version  # noqa: E402
+import vault_switcher  # noqa: E402
 
 DETACHED = 0x00000008     # DETACHED_PROCESS  (cho ensure spawn ngầm)
 # 0 ngoài Windows: `creationflags` khác 0 là ValueError trên POSIX, mà netstat/taskkill/
@@ -117,14 +119,19 @@ def kill_pid(pid):
     return True
 
 
-def free_port(port, want_version):
+def health_matches(h, want_version, want_vault_id=None):
+    return bool(h) and (want_version is None or h.get("version") == want_version) \
+        and (want_vault_id is None or h.get("vault_id") == want_vault_id)
+
+
+def free_port(port, want_version, want_vault_id=None):
     """Dọn port để mình chiếm. Trả True nếu nên NHƯỜNG (đã có server tốt sẵn)."""
     h = health_retry(port)
     # want_version=None = không đọc được version (OneDrive khóa file tạm) -> coi như khớp,
     # KHÔNG shutdown server đang khỏe chỉ vì một lần đọc lỗi thoáng qua.
-    if h and (want_version is None or h.get("version") == want_version):
-        return True                       # đã có server CÙNG version -> nhường
-    if h:                                 # server cũ version -> xin dừng sạch
+    if health_matches(h, want_version, want_vault_id):
+        return True                       # đã có server CÙNG version + vault -> nhường
+    if h:                                 # server khác version/vault -> xin dừng sạch
         request_shutdown(port)
         for _ in range(24):
             if health(port, 0.5) is None and port_pid(port) is None:
@@ -142,6 +149,7 @@ def free_port(port, want_version):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8321)
+    ap.add_argument("--vault", help="vault root cố định; bỏ trống = đọc lựa chọn UI đã lưu")
     args = ap.parse_args()
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -149,17 +157,33 @@ def main():
         pass
 
     want = source_version(HERE)
-    if free_port(args.port, want):
-        print("supervisor: da co server khoe (version=%s) tren %d -> thoat" % (want, args.port))
+    try:
+        ctx = vault_switcher.resolve_active_vault(HERE, explicit=args.vault)
+    except vault_switcher.VaultSwitchError as exc:
+        print("supervisor: vault khong hop le (%s): %s" % (exc.code, exc))
+        return 2
+    if free_port(args.port, want, ctx["id"]):
+        print("supervisor: da co server khoe (version=%s vault=%s) tren %d -> thoat"
+              % (want, ctx["name"], args.port))
         return 0
 
     quick = 0
     while True:
         try:
+            # Không có --vault: đọc LẠI config sau mỗi exit code 4. Nhờ đó active
+            # vault vẫn bất biến trong từng process nhưng switch UI có hiệu lực ngay.
+            ctx = vault_switcher.resolve_active_vault(HERE, explicit=args.vault)
+        except vault_switcher.VaultSwitchError as exc:
+            print("supervisor: vault khong hop le (%s): %s" % (exc.code, exc))
+            return 2
+        child_env = os.environ.copy()
+        child_env[vault_switcher.VAULT_ENV] = ctx["path"]
+        child_env[vault_switcher.LOCKED_ENV] = "1" if args.vault else "0"
+        try:
             proc = subprocess.Popen(
                 [sys.executable, os.path.join(HERE, "serve.py"),
                  "--port", str(args.port), "--no-open"],
-                cwd=HERE)
+                cwd=HERE, env=child_env)
         except Exception as e:
             print("supervisor: khong spawn duoc serve.py: %s" % e)
             return 1
@@ -174,13 +198,21 @@ def main():
             print("supervisor: code doi -> reload")
             quick = 0
             continue
+        if code == 4:
+            print("supervisor: active vault doi -> reload")
+            quick = 0
+            continue
         if code == 0:
             print("supervisor: server dung sach -> thoat")
             return 0
         if code == 75:
             h = health_retry(args.port)
             want = source_version(HERE)
-            if h and (want is None or h.get("version") == want):
+            try:
+                ctx = vault_switcher.resolve_active_vault(HERE, explicit=args.vault)
+            except vault_switcher.VaultSwitchError:
+                return 2
+            if health_matches(h, want, ctx["id"]):
                 print("supervisor: port da co server khac cung version -> nhuong")
                 return 0
             pid = port_pid(args.port)

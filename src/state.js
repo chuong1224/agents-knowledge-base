@@ -11,6 +11,11 @@ export const S = {
   all: null,                   // toàn bộ nodes/links từ /graph-data
   data: null,                  // phần đang hiển thị (sau lọc tag/đuôi)
   vaultName: 'Knowledge Base',
+  vaultId: 'app',              // W180: namespace state nội dung theo active vault
+  vaultPath: '',
+  vaultLocked: false,
+  vaultWarning: '',
+  vaultMigrateLegacy: true,     // chỉ app vault được nhận state v1.58.x chưa có suffix
   selectedGroup: null,         // lọc nhóm màu (spotlight — dim, không gỡ)
   hoverNode: null,
   labelsOn: true,
@@ -37,6 +42,23 @@ export const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt
 export const deAccent = s => String(s).toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/đ/g, 'd');
 export const idOf = x => (typeof x === 'object' && x !== null) ? x.id : x;
 export const linkKey = l => (typeof l.source === 'object' ? l.source.id : l.source) + '|' + (typeof l.target === 'object' ? l.target.id : l.target);
+export const vaultKey = base => `${base}.${S.vaultId || 'app'}`;
+export function vaultStoreGet(base) {
+  const scoped = vaultKey(base);
+  let value = localStorage.getItem(scoped);
+  if (value == null && S.vaultMigrateLegacy) {
+    // One-shot upgrade: v1.58.x state had no vault namespace. First active vault
+    // receives it, then the legacy key is removed so later vaults cannot inherit it.
+    value = localStorage.getItem(base);
+    if (value != null) {
+      localStorage.setItem(scoped, value);
+      localStorage.removeItem(base);
+    }
+  }
+  return value;
+}
+export const vaultStoreSet = (base, value) => localStorage.setItem(vaultKey(base), value);
+export const vaultStoreRemove = base => localStorage.removeItem(vaultKey(base));
 
 /* --- W43: thứ tự focus cho overlay ---------------------------------------------
    Mọi overlay của app nằm CUỐI body, nên bàn phím phải đi qua toàn bộ sidebar +

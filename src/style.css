@@ -26,7 +26,28 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   background: linear-gradient(90deg, var(--magenta), var(--violet), var(--cyan));
   -webkit-background-clip: text; background-clip: text; color: transparent;
   filter: drop-shadow(0 0 10px rgba(255,46,151,.55)); }
-#brand .sub { color: var(--faint); font-size: 11.5px; letter-spacing: 1px; margin-top: 2px; }
+#brand .sub { color: var(--faint); font-size: 11.5px; letter-spacing: 1px; margin-top: 2px;
+  white-space: nowrap; }
+
+/* W180: active vault nằm ngay trên UI chính. #brand không nhận pointer event để khỏi
+   chắn canvas, nên nút này BẮT BUỘC tự bật lại giống VI/EN và ⟳. */
+#vault-switch { position: relative; display: inline-flex; align-items: center; gap: 4px; max-width: 190px;
+  padding: 1px 6px; border-radius: 6px; border: 1px solid var(--border);
+  background: rgba(20,18,31,.6); color: var(--cyan); font: inherit; letter-spacing: .3px;
+  cursor: pointer; vertical-align: middle; pointer-events: auto; }
+/* Nút brand nhỏ để không chiếm canvas, nhưng hit area cần đủ rộng và phải phủ cả
+   border sub-pixel; pseudo-element thuộc chính button nên elementFromPoint vẫn trả nút. */
+#vault-switch::before { content: ""; position: absolute; inset: -3px; }
+#vault-label { max-width: 145px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#vault-switch:hover, #vault-switch:focus-visible { border-color: var(--cyan); outline: none; }
+#vault-switch.busy { color: var(--cyan); animation: reload-pulse 1.2s ease-in-out infinite; }
+#vault-switch.warn { color: var(--orange); border-color: var(--orange); }
+#vault-switch.err { color: var(--magenta); border-color: var(--magenta); }
+#vault-switch:disabled { cursor: default; opacity: .68; }
+@media (max-width: 500px) {
+  #vault-switch { max-width: 105px; padding-left: 4px; padding-right: 4px; }
+  #vault-label { max-width: 70px; }
+}
 
 /* Biên PHẢI của hint dừng trước mép cụm nút bố cục #layout-fab (nổi đáy GIỮA, nửa bề
    rộng ~86px + khe 14px) — text dài thì xuống dòng (mọc lên từ đáy); màn quá hẹp
@@ -77,13 +98,12 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 #panel.hidden + #panel-toggle { right: 14px; }
 #panel-toggle:hover { border-color: var(--cyan); box-shadow: 0 0 12px rgba(4,217,255,.35); }
 
-/* W65: dưới 701px, panel phải bắt đầu sau TOÀN BỘ dòng brand (~60px tính từ mép
-   trên). Chỉ nâng z-index sẽ trả click cho VI/EN nhưng vẫn để chữ đè lên nội dung
-   panel; dời cả panel lẫn toggle giữ nguyên khe 6px của layout rộng và sửa cả hình
-   lẫn hit-test (elementFromPoint) ở cửa sổ snap 640px / mobile 375px. */
+/* W65/W180: dưới 701px, panel phải bắt đầu sau TOÀN BỘ dòng brand. Vault button
+   làm dòng dưới cao tới ~64.2px, nên chừa tới 68px; chỉ nâng z-index sẽ trả click
+   nhưng vẫn để chữ đè nội dung panel. Toggle giữ khe 6px. */
 @media (max-width: 700px) {
-  #panel { top: 64px; }
-  #panel-toggle { top: 70px; }
+  #panel { top: 68px; }
+  #panel-toggle { top: 74px; }
 }
 
 #panel-body { flex: 1; overflow-y: auto; }
@@ -507,7 +527,7 @@ input[type=range] { width: 118px; accent-color: var(--magenta); }
 /* Đang kéo tay nắm: tắt transition các phần tử bám --rail-w — không thì "dây thun" lag theo chuột */
 :root.sb-dragging #sidebar, :root.sb-dragging #sidebar-toggle,
 :root.sb-dragging #reader, :root.sb-dragging #hint { transition: none; }
-#sidebar { position: absolute; top: 64px; left: 12px; bottom: 12px; width: var(--sb-w); z-index: 14;
+#sidebar { position: absolute; top: 68px; left: 12px; bottom: 12px; width: var(--sb-w); z-index: 14;
   background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
   backdrop-filter: blur(10px); display: flex; flex-direction: column; overflow: hidden;
   box-shadow: 0 0 30px rgba(4,217,255,.08), inset 0 0 40px rgba(177,74,237,.04);
@@ -541,7 +561,7 @@ input[type=range] { width: 118px; accent-color: var(--magenta); }
 .sbr .ux { margin-left: auto; visibility: hidden; color: var(--faint); font-size: 10px; flex: none; }
 .sbr:hover .ux { visibility: visible; }
 .sbr .ux:hover { color: var(--magenta); }
-#sidebar-toggle { position: absolute; top: 64px; left: calc(var(--rail-w) + 12px); z-index: 21;
+#sidebar-toggle { position: absolute; top: 68px; left: calc(var(--rail-w) + 12px); z-index: 21;
   width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--border);
   background: var(--panel); color: var(--cyan); cursor: pointer; font-size: 15px;
   backdrop-filter: blur(8px); transition: left .25s ease; }
