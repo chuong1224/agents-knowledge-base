@@ -22,14 +22,22 @@ clean result.
 ```bash
 python tests/selfcheck.py          # compile checks, behavior contracts, unit tests
 python tests/selfcheck.py --slow   # add this whenever you touched port or kill policy
-python integrity.py                # exit 0 clean, 1 broken, 2 PyYAML missing
+python tools/test_publish_from_vault.py  # add this whenever you touched the publish gate
 ```
 
 A red suite is a stop, not a warning.
 
-Read an exit code **directly**, never through a pipe: `python integrity.py | tail -3`
+The maintainer's post-commit denylist audit must reuse the publisher's exact scanner:
+`python tools/publish_from_vault.py --src "<path-to-vault>/.graph3d" --scan-only`.
+Do not recreate it with `git grep`: different case and binary rules once made the two
+gates contradict each other.
+
+Read an exit code **directly**, never through a pipe: `python tests/selfcheck.py | tail -3`
 reports the exit code of `tail`, which almost always succeeds, so a broken gate still
-looks green.
+looks green. Do not run `python integrity.py` from a standalone source clone: the app
+would treat the clone's parent as the vault and audit neighbouring folders. Selfcheck
+already runs the integrity regression; run the CLI itself only from an installed
+`.graph3d` inside the vault you intend to audit.
 
 ## House rules
 

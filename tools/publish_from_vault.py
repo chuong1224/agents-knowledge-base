@@ -3,13 +3,15 @@
 
 Usage:
     python tools/publish_from_vault.py --src "path/to/YourVault/.graph3d"
+    python tools/publish_from_vault.py --src "path/to/YourVault/.graph3d" --scan-only
 
 Steps:
 1. Copies the whitelisted code files/dirs from --src into the repo root.
    Runtime data (logs, heat stores, backups) and private ops files are never copied.
-2. Scans the whole repo tree against a DENYLIST of private strings (hostnames,
-   org names, ...) and FAILS if any is found, so nothing private can be committed
-   by accident. The denylist itself lives OUTSIDE this repo:
+2. Scans text files in the whole repo tree against a DENYLIST of private strings
+   (hostnames, org names, ...) with literal, case-insensitive matching and FAILS
+   if any is found, so nothing private can be committed by accident. Binary files
+   are skipped. The denylist itself lives OUTSIDE this repo:
    `<src>/publish_denylist.txt`, one term per line (never published).
 3. Prints `git status` — review, commit and push manually.
 """
@@ -29,6 +31,7 @@ SKIP_DIR_NAMES = {"__pycache__"}
 SKIP_SUFFIXES = (".jsonl", ".lock")
 SKIP_CONTAINS = (".bak-",)
 SCAN_SKIP_DIRS = {".git"}
+SCAN_SAMPLE_BYTES = 8192
 
 
 def app_lists(src):
@@ -72,18 +75,28 @@ def load_denylist(src):
     return terms
 
 
+def is_binary(path):
+    """Use the same inexpensive binary heuristic as many grep-style tools."""
+    with open(path, "rb") as fh:
+        return b"\0" in fh.read(SCAN_SAMPLE_BYTES)
+
+
 def scan(terms):
     # Denylisted terms are deliberately not echoed in hits, so they never leak into logs.
     hits = []
+    folded_terms = [t.casefold() for t in terms]
     for root, dirs, files in os.walk(REPO):
         dirs[:] = [d for d in dirs if d not in SCAN_SKIP_DIRS]
         for f in files:
             path = os.path.join(root, f)
             try:
+                if is_binary(path):
+                    continue
                 with open(path, "r", encoding="utf-8", errors="ignore") as fh:
                     for i, line in enumerate(fh, 1):
-                        for t in terms:
-                            if t in line:
+                        folded_line = line.casefold()
+                        for t in folded_terms:
+                            if t in folded_line:
                                 hits.append("%s:%d: contains a denylisted term" % (os.path.relpath(path, REPO), i))
             except OSError:
                 pass
@@ -93,21 +106,23 @@ def scan(terms):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", required=True, help="path to the private .graph3d working copy")
+    ap.add_argument("--scan-only", action="store_true",
+                    help="audit the repo with the publisher's exact denylist semantics; copy nothing")
     a = ap.parse_args()
     src = os.path.abspath(a.src)
     if not os.path.isfile(os.path.join(src, "serve.py")):
         sys.exit("--src does not look like a .graph3d copy (serve.py missing): %s" % src)
 
     terms = load_denylist(src)
-    top_files, dirs = app_lists(src)
-
-    for f in top_files:
-        shutil.copyfile(os.path.join(src, f), os.path.join(REPO, f))
-    for d in dirs:
-        dst = os.path.join(REPO, d)
-        if os.path.isdir(dst):
-            shutil.rmtree(dst)
-        copy_tree(os.path.join(src, d), dst)
+    if not a.scan_only:
+        top_files, dirs = app_lists(src)
+        for f in top_files:
+            shutil.copyfile(os.path.join(src, f), os.path.join(REPO, f))
+        for d in dirs:
+            dst = os.path.join(REPO, d)
+            if os.path.isdir(dst):
+                shutil.rmtree(dst)
+            copy_tree(os.path.join(src, d), dst)
 
     hits = scan(terms)
     if hits:
@@ -115,8 +130,11 @@ def main():
         print("\n".join(hits))
         sys.exit(1)
 
-    print("Copy OK, denylist scan CLEAN. Review and commit:")
-    subprocess.run(["git", "-C", REPO, "status", "--short"], check=False)
+    if a.scan_only:
+        print("Denylist scan CLEAN (same scanner as publish; no files copied).")
+    else:
+        print("Copy OK, denylist scan CLEAN. Review and commit:")
+        subprocess.run(["git", "-C", REPO, "status", "--short"], check=False)
 
 
 if __name__ == "__main__":
