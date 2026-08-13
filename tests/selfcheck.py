@@ -22,7 +22,7 @@
        bien {x} khop, src/*.js het chuoi giao dien tieng Viet; W43)
      + test_launcher (loi vao he dieu hanh: shortcut .lnk goi ensure --app, icon .ico,
        uninstall khong dung .lnk nguoi khac, bind_console cho pythonw; W58);
-     test_p2 (~15s, spawn process that + chiem port 8397) chi chay khi --slow.
+     test_p2 (~15s, spawn process that + chiem port rieng) chi chay khi --slow.
 
 Chay:  python .graph3d/tests/selfcheck.py [--slow]
 Exit:  0 = ALL PASS; 1 = co FAIL.
@@ -218,6 +218,14 @@ def lop2_contract():
         local = {m + ".py" for m in mods if os.path.isfile(os.path.join(G3D, m + ".py"))}
         thieu = sorted(local - set(AP._VERSION_FILES) - RELOADABLE)
         check("2k module serve.py import deu nam trong _VERSION_FILES", not thieu, thieu)
+
+    # 2l — W186: private/public selfcheck --slow tung tranh port 8397 khi chay
+    # dong thoi. Test P2 phai giu mot listener bind port 0 xuyen suot phep thu; cach
+    # "tim port rong roi dong socket" van co khoang dua truoc khi process con bind.
+    p2 = read(os.path.join(TESTS, "test_p2.py"))
+    fixed = re.findall(r"(?m)^\s*PORT\s*=\s*(\d+)\s*$", p2)
+    ephemeral = re.search(r"\.bind\(\(\s*[\"']127\.0\.0\.1[\"']\s*,\s*0\s*\)\)", p2)
+    check("2l test_p2 giu listener port 0, khong hardcode port", not fixed and bool(ephemeral), fixed)
 
 
 # ---- Lop 3: unit ----

@@ -49,18 +49,25 @@ finally:
 # t4: pid rong -> True (khong co gi de giet, di tiep)
 check("t4 kill_pid(None) = True", RG.kill_pid(None) is True)
 
-# t5: TICH HOP — app la giu port, supervisor phai bo cuoc exit 2, app song
-PORT = 8397
-holder = subprocess.Popen([sys.executable, "-c",
-    "import socket, time; s = socket.socket(); s.bind(('127.0.0.1', %d)); s.listen(1); time.sleep(120)" % PORT])
+# t5: TICH HOP — app la giu port, supervisor phai bo cuoc exit 2, app song.
+# Holder bind port 0 va IN port ve cho parent NHUNG van giu listener mo xuyen suot
+# phep thu. Nhu vay moi selfcheck co port rieng ma khong co khoang dua
+# "tim port rong -> dong socket -> process khac cuop port".
+holder_code = ("import socket, time; s = socket.socket(); "
+               "s.bind(('127.0.0.1', 0)); s.listen(1); "
+               "print(s.getsockname()[1], flush=True); time.sleep(120)")
+holder = subprocess.Popen([sys.executable, "-c", holder_code], stdout=subprocess.PIPE,
+                          text=True, encoding="ascii", errors="strict")
 try:
-    time.sleep(1.0)
+    port_line = holder.stdout.readline().strip()
+    port = int(port_line)
+    check("t5 port dong duoc OS cap va holder dang giu", 0 < port < 65536 and alive(holder), port)
     # encoding PHAI khai tuong minh: supervisor tu reconfigure stdout sang UTF-8, con
     # text=True tran thi giai ma bang locale cua may. Tren may co locale gbk chang han,
     # dau '—' trong thong diep cua supervisor la E2 80 94 -> UnicodeDecodeError, run.stdout
     # thanh None va test no TypeError o dong duoi. Loi CO SAN, chi lo ra khi chay --slow
     # tren may co locale KHONG phai UTF-8.
-    run = subprocess.run([sys.executable, os.path.join(G3D, "run_graph3d.py"), "--port", str(PORT)],
+    run = subprocess.run([sys.executable, os.path.join(G3D, "run_graph3d.py"), "--port", str(port)],
                          capture_output=True, text=True, timeout=60,
                          encoding="utf-8", errors="replace")
     check("t5a supervisor bo cuoc voi exit code 2", run.returncode == 2, run.returncode)
@@ -68,6 +75,8 @@ try:
     check("t5c app la VAN SONG sau khi supervisor bo cuoc", alive(holder))
 finally:
     holder.kill()
+    holder.wait(timeout=5)
+    holder.stdout.close()
 
 print("\nTONG KET:", ("FAIL %d muc" % len(fails)) if fails else "ALL PASS")
 sys.exit(1 if fails else 0)
