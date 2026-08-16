@@ -188,7 +188,9 @@ check("R rail resize bam con tro tuc thoi khi dang keo",
       "classList.remove('rd-dragging')" in reader)
 
 # Chạy chính hàm JS thuần bằng Node khi có sẵn; app không phụ thuộc Node nên môi trường
-# chỉ có Python được SKIP có báo, không FAIL oan. Phiên release W143 bắt buộc chạy nhánh này.
+# chỉ có Python được khai `[SKIP] ` chứ không FAIL oan — và từ W222 dòng khai đó bị
+# selfcheck ĐẾM, nên "bỏ qua" không còn tàng hình sau exit 0.
+# Phiên release W143 bắt buộc chạy nhánh này.
 node = shutil.which("node")
 if node:
     math_mjs = os.path.join(SCRATCH, "image-viewer-math.mjs")
@@ -218,7 +220,8 @@ if(Object.values(out).some(v=>!v)) process.exit(1);""" % json.dumps(uri)
         syntax = subprocess.run([node, "--check", path], capture_output=True, text=True)
         check("R JS syntax %s" % os.path.basename(path), syntax.returncode == 0, syntax.stderr)
 else:
-    print("SKIP R toan JS fit/zoom/pan — may khong co Node (app van chi can Python)")
+    print("[SKIP] R toan JS fit/zoom/pan + JS syntax — may khong co Node"
+          " (app van chi can Python)")
 
 print("\nTONG KET:", ("FAIL %d muc" % len(fails)) if fails else "ALL PASS")
 sys.exit(1 if fails else 0)

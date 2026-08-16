@@ -6,9 +6,10 @@
      chep tay) + tests/*.py; index.html phai ket thuc </html>;
      src/* (ES modules giai doan 0) khong rong + LF + ket thuc \n + index tro /src/main.js
      (cung logic voi _restart_sources_sane trong serve.py).
-  2. Contract grep — ma hoa cac bug DA SUA (muc 2a..2k, < 1s): moi contract la mot bug
+  2. Contract grep — ma hoa cac bug DA SUA (muc 2a..2n, < 1s): moi contract la mot bug
      tung xay ra, FAIL nghia la co nguoi vua dua bug do quay lai. 2a..2i tu review
-     2026-07-10; 2j/2k tu 2 su co publish doi 7+8 (danh sach file .py chep tay bi sot).
+     2026-07-10; 2j/2k tu 2 su co publish doi 7+8 (danh sach file .py chep tay bi sot);
+     2m/2n tu W222 (quy uoc [SKIP] + danh sach bo unit chep tay).
   3. Unit — test_p1/p3/p4/p5 + test_reader (guard /note + /asset, giai doan 1 Vault
      Cockpit) + test_finder (/search fold + AND + loai dot-folder, giai doan 2)
      + test_cockpit (/timeline + /dashboard theo ngay local, giai doan 3)
@@ -21,11 +22,16 @@
      + test_i18n (song ngu VI/EN: 2 ngon ngu cung tap khoa, khoa dung deu co that,
        bien {x} khop, src/*.js het chuoi giao dien tieng Viet; W43)
      + test_launcher (loi vao he dieu hanh: shortcut .lnk goi ensure --app, icon .ico,
-       uninstall khong dung .lnk nguoi khac, bind_console cho pythonw; W58);
+       uninstall khong dung .lnk nguoi khac, bind_console cho pythonw; W58)
+     + test_selfcheck (chinh runner nay: phan loai PASS/PASS*/THIEU-LIB/FAIL, W222);
      test_p2 (~15s, spawn process that + chiem port rieng) chi chay khi --slow.
+     Bo nao KHONG do het thi phai TU KHAI bang dong `[SKIP] <ly do>` — xem khoi
+     "Quy uoc chua do duoc" ben duoi.
 
 Chay:  python .graph3d/tests/selfcheck.py [--slow]
-Exit:  0 = ALL PASS; 1 = co FAIL.
+Exit:  0 = ALL PASS; 1 = co FAIL hoac THIEU-LIB (phep do hong cung la chua do duoc).
+       Muc tu khai [SKIP] KHONG doi exit code (may nay khong co `node` thi khong the
+       va bang cach sua code) nhung LUON hien ra + duoc dem o TONG KET.
 """
 import glob
 import json, os, re, subprocess, sys, time
@@ -61,6 +67,16 @@ RELOADABLE = {"build_graph_data.py"}
 INDEX = os.path.join(G3D, "index.html")
 SRC = os.path.join(G3D, "src")
 
+# Bo unit cua lop 3. Danh sach nam O DAY chu khong trong lop3_unit() de contract 2n
+# doi chieu duoc voi tests/ tren dia — danh sach chep tay khong ai doi chieu chinh la
+# thu da can he nay 2 lan (doi publish 7+8).
+UNIT_FILES = ("test_p1.py", "test_p3.py", "test_p4.py", "test_p5.py", "test_reader.py",
+              "test_finder.py", "test_cockpit.py", "test_journal.py", "test_insight.py",
+              "test_integrity.py", "test_onboarding.py", "test_i18n.py",
+              "test_launcher.py", "test_reload.py", "test_update.py",
+              "test_vault_switcher.py", "test_selfcheck.py")
+SLOW_FILES = ("test_p2.py",)                         # chi chay khi --slow
+
 
 def src_files():
     return sorted(p for p in glob.glob(os.path.join(SRC, "*")) if os.path.isfile(p))
@@ -73,14 +89,103 @@ def ui_sources():
     return out
 
 fails = []
+skips = []                                           # muc TU KHAI la chua do duoc (W222)
+thieu_lib = {}                                       # ten bo -> module con thieu
+
 def check(name, cond, info=""):
     print(("PASS " if cond else "FAIL ") + name + (("  ->  " + repr(info)) if not cond else ""))
     if not cond:
         fails.append(name)
 
+def an_toan(s):
+    """Ha ky tu ma stdout cua CHINH selfcheck khong ma hoa noi ve '?'.
+
+    Tren Windows, stdout bi pipe lay encoding theo locale (cp1252) chu khong phai UTF-8.
+    Mot ly do bo qua co dau — hay ky tu U+FFFD sinh ra khi giai ma output process con —
+    se nem UnicodeEncodeError va giet CA lan selfcheck, dung tai cho no dang bao "toi
+    chua do gi". Ban ra chu mat dau van doc duoc; mat ca lan chay thi khong."""
+    enc = getattr(sys.stdout, "encoding", None) or "ascii"
+    try:
+        s.encode(enc)
+        return s
+    except (UnicodeEncodeError, LookupError):
+        return s.encode(enc, "replace").decode(enc, "replace")
+
+
+def skip(ly_do):
+    """Khai mot muc CHINH selfcheck khong do duoc — cung quy uoc voi bo test con,
+    de mat nguoi va may deu dem duoc mot kieu."""
+    print(an_toan("[SKIP] " + ly_do))
+    skips.append(ly_do)
+
 def read(path):
     with open(path, encoding="utf-8") as f:
         return f.read()
+
+
+# ---- Quy uoc "chua do duoc" (W222) — CHUNG voi may gac tooling cua vault ----
+# Bug goc, do 14/08/2026 o pass audit nguoc cua W220: lop 3 chi doc returncode. Bo test
+# nao bat ImportError, khong tim thay `node`, hoac khong chay tren Windows thi in mot
+# dong SKIP roi exit 0 — runner dem PASS trong khi no KHONG do gi. Xanh gia nguy hon do
+# gia: do gia con thay ma cai, xanh gia thi im lang. Trong tests/ co dung 5 cho nhu vay.
+#
+# QUY UOC CHOT cho ca hai may gac: bo test tu khai bang dong `[SKIP] <ly do>` o DAU DONG,
+# MOT dong cho MOI muc bi bo qua. Ngoac vuong la co y — bat chu SKIP tran thi bo test nao
+# lo in chu do trong du lieu do choi cua no cung bi dem oan.
+#
+# Ban goc cua bo ba ham nay + 6 case nghiem thu quy uoc (33..38) song o may gac tooling:
+#   Vault Operation/Quy Tac & Van Hanh/May Gac Test Tooling/attachments/tooling_selfcheck.py
+# Hai ban CO Y tach roi: ban public clone ra ngoai vault khong voi toi file kia duoc.
+# Cai phai trung khop la MARKER va NGHIA cua 4 nhan, khong phai chinh ta (file nay ASCII,
+# ben kia tieng Viet co dau) — test_selfcheck.py giu hai ban khong troi nhau.
+SKIP_RE = re.compile(r"^\[SKIP\][ \t]*(.*)$", re.M)
+THIEU_RE = re.compile(r"No module named '([\w.]+)'")
+# Kieu khai CU (truoc W222) ma contract 2m cam: IN thang chu SKIP tran. Bam vao `print(`
+# chu khong bat moi chuoi bat dau bang SKIP — test_selfcheck.py phai chua duoc phan vi du
+# cua kieu cu de chung minh no khong bi dem, va no chi la du lieu chu khong in ra.
+SKIP_TRAN_RE = re.compile(r"""print\(\s*["']SKIP[ :\t-]""")
+# Ten import KHAC ten goi pip — cho duy nhat khong suy ra duoc, nen phai chep.
+TEN_GOI_PIP = {"yaml": "PyYAML", "PIL": "pillow", "docx": "python-docx"}
+
+
+def bo_qua(res):
+    """Nhung muc bo test TU KHAI la chua do duoc. Rong = do tron."""
+    return [s.strip() for s in SKIP_RE.findall(res.get("output") or "")]
+
+
+def thieu_module(res):
+    """Interpreter dang chay THIEU THU VIEN = PHEP DO hong, KHONG phai code hong (W218).
+    Tra ten module thieu; "" = khong dinh loi nay.
+
+    Bat CA hai chieu, vi thieu thu vien hien ra theo hai kieu nguoc nhau:
+      · do  — bo test no ModuleNotFoundError ngay luc import;
+      · XANH GIA — bo test bat ImportError roi [SKIP] va exit 0 (W220)."""
+    if not res.get("ok"):
+        m = THIEU_RE.search(res.get("output") or "")
+        if m:
+            return m.group(1).split(".")[0]
+    for ly_do in bo_qua(res):
+        m = THIEU_RE.search(ly_do)
+        if m:
+            return m.group(1).split(".")[0]
+    return ""
+
+
+def phan_loai(res):
+    """Nhan mot bo test. Bon loai, KHONG duoc nhap nhem vao nhau:
+    PASS (do tron, xanh) · PASS* (xanh nhung co muc chua do) · THIEU-LIB (phep do hong,
+    CHAN) · FAIL (code hong that, CHAN)."""
+    if thieu_module(res):
+        return "THIEU-LIB"
+    if not res.get("ok"):
+        return "FAIL"
+    return "PASS*" if bo_qua(res) else "PASS"
+
+
+def lenh_cai(mods):
+    """Lenh va dung interpreter DANG chay test — khong phai `python` nao khac tren may."""
+    goi = sorted({TEN_GOI_PIP.get(m, m) for m in mods if m})
+    return '"%s" -m pip install %s' % (sys.executable, " ".join(goi))
 
 
 def py_main():
@@ -145,7 +250,7 @@ def lop2_contract():
     if tools is not None and not os.path.isfile(hook_cfg):
         # Ban public (clone ra ngoai vault) khong co hook settings — kiem nay vo nghia
         # o do; bo qua co bao, KHONG FAIL (bug that trong vault van bi bat nhu cu).
-        print("SKIP 2b matcher hook — khong tim thay " + hook_cfg + " (khong chay trong vault)")
+        skip("2b matcher hook — khong tim thay " + hook_cfg + " (khong chay trong vault)")
         tools = None
     if tools is not None:
         cfg = json.loads(read(hook_cfg))
@@ -227,32 +332,62 @@ def lop2_contract():
     ephemeral = re.search(r"\.bind\(\(\s*[\"']127\.0\.0\.1[\"']\s*,\s*0\s*\)\)", p2)
     check("2l test_p2 giu listener port 0, khong hardcode port", not fixed and bool(ephemeral), fixed)
 
+    # 2m — W222: quy uoc khai bao "chua do duoc". Marker phai la `[SKIP] ` co ngoac vuong
+    # o dau dong; chu SKIP tran (kieu cu cua .graph3d) khong ai dem duoc, va do la dung
+    # cach 5 muc trong tests/ da tang hinh suot tu 2026-07 toi 14/08/2026.
+    tran = [os.path.basename(p) for p in sorted(glob.glob(os.path.join(TESTS, "*.py")))
+            if SKIP_TRAN_RE.search(read(p))]
+    check("2m tests/ khai bo qua bang '[SKIP] ', khong dung SKIP tran", not tran, tran)
+
+    # 2n — cung lop bug voi 2j/2k: lop3_unit chay theo danh sach CHEP TAY, nen mot bo
+    # test moi them vao tests/ ma quen khai o day thi KHONG BAO GIO chay — va im lang.
+    tren_dia = {os.path.basename(p) for p in glob.glob(os.path.join(TESTS, "test_*.py"))}
+    thieu_khai = sorted(tren_dia - set(UNIT_FILES) - set(SLOW_FILES))
+    thua_khai = sorted((set(UNIT_FILES) | set(SLOW_FILES)) - tren_dia)
+    check("2n moi tests/test_*.py deu duoc lop 3 chay", not thieu_khai and not thua_khai,
+          {"chua khai": thieu_khai, "khai ma khong co file": thua_khai})
+
 
 # ---- Lop 3: unit ----
 def lop3_unit(slow):
-    files = ["test_p1.py", "test_p3.py", "test_p4.py", "test_p5.py", "test_reader.py",
-             "test_finder.py", "test_cockpit.py", "test_journal.py", "test_insight.py",
-             "test_integrity.py", "test_onboarding.py", "test_i18n.py",
-             "test_launcher.py", "test_reload.py", "test_update.py",
-             "test_vault_switcher.py"]
-    if slow:
-        files.append("test_p2.py")
+    files = list(UNIT_FILES) + (list(SLOW_FILES) if slow else [])
     jobs = [(name, os.path.join(TESTS, name)) for name in files]
     private_backup_test = os.path.join(G3D, "test_backup.py")
     if os.path.isfile(private_backup_test):
         jobs.append(("test_backup.py (private)", private_backup_test))
+    # Process con tren Windows ghi stdout theo locale (cp1252), con o day lai giai ma
+    # UTF-8 — moi em-dash trong output test bien thanh U+FFFD. Nen ep con noi dung mot
+    # thu tieng voi cha thay vi doan chu o dau kia. (env dung luc chay, KHONG chup tu
+    # luc nap module: 2b co setdefault GRAPH3D_ACTIVITY_FILE ma con phai thua ke.)
+    env = dict(os.environ, PYTHONIOENCODING="utf-8")
     for name, path in jobs:
         t0 = time.perf_counter()
         r = subprocess.run([sys.executable, path],
                            capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", timeout=120, cwd=TESTS)
+                           errors="replace", timeout=120, cwd=TESTS, env=env)
         dt = time.perf_counter() - t0
-        check("3 %s (%.1fs)" % (name, dt), r.returncode == 0)
-        if r.returncode != 0:
-            for l in (r.stdout + r.stderr).strip().splitlines()[-12:]:
-                print("      | " + l)
+        # W222: returncode 0 KHONG con dong nghia voi "da do". Phan loai 4 nhan roi moi
+        # ket luan — THIEU-LIB chan nhu FAIL (chua do duoc), PASS* thi hien ra nhung
+        # khong chan (thieu `node` / khong phai Windows thi sua code cung khong het).
+        res = {"test": name, "ok": r.returncode == 0, "output": r.stdout + r.stderr}
+        nhan, muc = phan_loai(res), "3 %s (%.1fs)" % (name, dt)
+        print(nhan + " " + muc)
+        for ly_do in bo_qua(res):
+            print(an_toan("      ~ bo qua: " + ly_do))
+            skips.append(name + ": " + ly_do)
+        # Ca hai deu CHAN, nhung KHONG duoc gop ten: "FAIL" bao nguoi sau di sua code,
+        # con THIEU-LIB thi code dang lanh, phai va interpreter (W218).
+        if nhan == "THIEU-LIB":
+            thieu_lib[name] = thieu_module(res)
+        elif nhan == "FAIL":
+            fails.append(muc)
+        if nhan in ("FAIL", "THIEU-LIB"):
+            for l in res["output"].strip().splitlines()[-12:]:
+                print(an_toan("      | " + l))
     if not slow:
-        print("   (bo qua test_p2 cham ~15s — them --slow khi dung den kill/port policy)")
+        # Bo cham khong chay = mot muc KHONG DO DUOC that su, nen no phai di vao dung
+        # cai so dem do — chu khong nam mot minh o dong ghi chu cuoi nhu truoc W222.
+        skip("test_p2 (kill/port policy, ~15s) — them --slow de do that")
 
 
 if __name__ == "__main__":
@@ -265,6 +400,30 @@ if __name__ == "__main__":
     print("== Lop 3: unit ==")
     lop3_unit(slow)
     dt = time.perf_counter() - t0
-    print("\nTONG KET selfcheck (%.1fs): %s" % (
-        dt, ("FAIL %d muc: %s" % (len(fails), ", ".join(fails))) if fails else "ALL PASS"))
-    sys.exit(1 if fails else 0)
+    phan = []
+    if fails:
+        phan.append("FAIL %d muc: %s" % (len(fails), ", ".join(fails)))
+    if thieu_lib:
+        phan.append("CHUA DO DUOC %d bo vi thieu thu vien: %s"
+                    % (len(thieu_lib), ", ".join(sorted(thieu_lib))))
+    ket = " · ".join(phan) if phan else "ALL PASS"
+    if skips:
+        ket += " · BO QUA %d muc" % len(skips)
+    print("\nTONG KET selfcheck (%.1fs): %s" % (dt, ket))
+    if thieu_lib:
+        # W218: goi dung ten thu pham. Gop vao "FAIL" la moi phien sau di sua code dang lanh.
+        print("\n" + "=" * 72)
+        print("PHEP DO HONG, KHONG PHAI CODE HONG (W218) — %d bo chua do duoc vi thieu"
+              " thu vien:" % len(thieu_lib))
+        for name, mod in sorted(thieu_lib.items()):
+            print("   - %s  <-  thieu `%s`" % (name, mod))
+        print("   Interpreter dang chay test: %s" % sys.executable)
+        print("   DUNG sua code. Va dung interpreter do:")
+        print("   %s" % lenh_cai(thieu_lib.values()))
+        print("=" * 72)
+    if skips:
+        print("\n~ DO THIEU (khong chan): %d muc tu khai bo qua —" % len(skips))
+        for s in skips:
+            print(an_toan("   - " + s))
+        print("  'ALL PASS' o day nghia la phan CON LAI xanh, khong phai da do het.")
+    sys.exit(1 if (fails or thieu_lib) else 0)

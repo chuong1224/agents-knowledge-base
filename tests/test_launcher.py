@@ -15,8 +15,9 @@
   - W60: shortcut PWA co --app-id duoc uu tien de Windows dung AUMID/icon rieng;
     shortcut Python cua launcher khong duoc nhan nham la PWA
 
-Windows-only (shortcut .lnk): may khac -> in SKIP va PASS, de selfcheck ban public
-tren Linux khong do oan.
+Windows-only (shortcut .lnk): may khac -> khai `[SKIP] ` roi exit 0, de selfcheck ban
+public tren Linux khong do oan. Tu W222 dong khai do duoc selfcheck DEM va in ra —
+exit 0 mot minh khong con duoc hieu la "da do".
 """
 import os, re, struct, sys
 from types import SimpleNamespace
@@ -152,7 +153,7 @@ def test_spec():
               not os.path.normcase(spec["target"]).startswith(os.path.normcase(sys.prefix)),
               spec["target"])
     else:
-        print("SKIP spec tranh venv — dang chay bang python he thong")
+        print("[SKIP] spec tranh venv — dang chay bang python he thong")
     forced = IL.shortcut_spec(python=os.path.abspath(__file__))   # file co that = duoc nhan
     check("spec --python chi dinh tay duoc ton trong",
           forced["target"] == os.path.abspath(__file__), forced["target"])
@@ -387,7 +388,7 @@ def test_pwa_app_id():
 
 if __name__ == "__main__":
     if os.name != "nt":
-        print("SKIP test_launcher — shortcut .lnk chi co tren Windows")
+        print("[SKIP] test_launcher — TOAN BO bo test (shortcut .lnk chi co tren Windows)")
         sys.exit(0)
     os.makedirs(ROOT, exist_ok=True)
     test_registry_pythonw()

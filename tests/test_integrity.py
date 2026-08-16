@@ -149,7 +149,7 @@ def build_fake_vault():
     if os.path.isfile(real_py):
         shutil.copyfile(real_py, os.path.join(RULES_DIR, "vault_rules.py"))
     else:
-        print("SKIP dung parser THAT — khong thay vault_rules.py, dung stub")
+        print("[SKIP] dung parser THAT — khong thay vault_rules.py, dung stub")
         with open(os.path.join(RULES_DIR, "vault_rules.py"), "w", encoding="utf-8",
                   newline="\n") as f:
             f.write(STUB_RULES_PY)
@@ -295,17 +295,32 @@ check("2 anh nhac kieu [[x.png]] / markdown KHONG bi coi la mo coi",
           for i in C["orphan"]["list"]), C["orphan"]["list"])
 
 # --- check contract ---
-check("3 YAML vo bi bat dung note + dong + cot",
-      C["yaml"]["total"] == 1
-      and C["yaml"]["list"][0]["file"] == "Work/Vo YAML/Vo YAML.md"
-      and C["yaml"]["list"][0]["line"] == 4
-      and C["yaml"]["list"][0]["column"] > 1,
-      C["yaml"]["list"])
-summary_lines = []
-ITG.print_summary(rep, out=summary_lines.append)
-check("3 YAML vo hien du file:dong:cot tren CLI",
-      any("Work/Vo YAML/Vo YAML.md:4:%s" % C["yaml"]["list"][0]["column"] in line
-          for line in summary_lines), summary_lines)
+# W222: PyYAML la thu vien ben thu ba DUY NHAT ma .graph3d can. Thieu no thi integrity
+# chay degraded DUNG Y DO (case 6 cuoi file kiem chinh duong do) — nhung cac khang dinh
+# duoi day thi khong con do duoc gi, va truoc W222 chung no thang IndexError, doc len
+# nhu "integrity.py hong". Dung cai bay W218: phep do hong bi tuong la code hong.
+# Khai [SKIP] co kem "No module named 'yaml'" de selfcheck xep vao THIEU-LIB (CHAN, vi
+# pip va duoc) chu khong phai bo qua chinh dang kieu thieu `node`.
+try:
+    import yaml as _yaml_that                                   # noqa: F401
+    CO_YAML = True
+except ImportError as _e_yaml:
+    CO_YAML = False
+    print("[SKIP] khang dinh can PyYAML that (%s) — cac check YAML/CLI/tong problems"
+          % _e_yaml)
+
+if CO_YAML:
+    check("3 YAML vo bi bat dung note + dong + cot",
+          C["yaml"]["total"] == 1
+          and C["yaml"]["list"][0]["file"] == "Work/Vo YAML/Vo YAML.md"
+          and C["yaml"]["list"][0]["line"] == 4
+          and C["yaml"]["list"][0]["column"] > 1,
+          C["yaml"]["list"])
+    summary_lines = []
+    ITG.print_summary(rep, out=summary_lines.append)
+    check("3 YAML vo hien du file:dong:cot tren CLI",
+          any("Work/Vo YAML/Vo YAML.md:4:%s" % C["yaml"]["list"][0]["column"] in line
+              for line in summary_lines), summary_lines)
 check("3 YAML vo khong bi parser dong tao them bao loi contract gia",
       all("Vo YAML" not in i["file"]
           for k in ("frontmatter", "tag", "index_tag", "title") for i in C[k]["list"]),
@@ -377,8 +392,9 @@ check("4 thieu vault-rules.json -> ca 5 check contract available=False",
               for k in ("frontmatter", "digest", "tag", "index_tag", "title")), rep2["rules"])
 check("4 check cau truc VAN chay khi thieu nguon luat",
       all(C2[k]["available"] for k in ("link", "embed", "anchor", "orphan")))
-check("4 problems gom cau truc + YAML doc lap nguon luat = 7", rep2["problems"] == 7,
-      {c["id"]: c["total"] for c in rep2["checks"]})
+if CO_YAML:                                  # thieu PyYAML thi 1 problem YAML khong sinh ra
+    check("4 problems gom cau truc + YAML doc lap nguon luat = 7", rep2["problems"] == 7,
+          {c["id"]: c["total"] for c in rep2["checks"]})
 check("4 rules.reason noi ro vi sao tat", bool(rep2["rules"].get("reason")), rep2["rules"])
 
 # --- thieu LE mot khoa policy: chi check do tat ---
