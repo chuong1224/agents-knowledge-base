@@ -33,8 +33,22 @@ could not measure. `ALL PASS · BO QUA n muc` means the *rest* is green — a ru
 `--slow` always has at least one such item, and a clone outside a vault has several.
 `THIEU-LIB` means the interpreter is missing a library: the measurement is broken, not
 the code, so install into the interpreter the run names instead of editing anything.
-A suite that skips something must say so on its own line, starting with `[SKIP] `;
-contract 2m rejects the older bare `SKIP` marker, which nothing could count.
+A suite that skips something must say so on a line starting with `[SKIP] ` (leading
+whitespace is fine); contract 2m rejects the older bare `SKIP` marker, which nothing
+could count.
+
+And a suite can also skip **without saying anything at all** — `if not condition: pass`
+prints nothing, deleted assertions print nothing. So from v1.60.0 the runner stops asking
+and starts measuring: it counts the assertions each item actually ran, stores the count in
+a per-machine mark outside this repo, and compares on the next run. Fewer assertions, or a
+whole suite gone from disk, prints `TUT VUNG PHU` and exits 1 **even though every suite
+says `ALL PASS`**. That is not a bug in the report; it is the report working.
+
+Never conclude from the text alone. `ALL PASS` can accompany exit 1, and only the exit
+code is authoritative. If the drop is deliberate, lower the mark on purpose and on the
+record: `python tests/selfcheck.py --chap-nhan "why"`. Never silence it any other way.
+Contract 2o rejects a new suite that scores itself without printing any `PASS`/`FAIL`
+label, because such a suite can never be measured at all.
 
 The maintainer's post-commit denylist audit must reuse the publisher's exact scanner:
 `python tools/publish_from_vault.py --src "<path-to-vault>/.graph3d" --scan-only`.

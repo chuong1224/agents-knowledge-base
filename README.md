@@ -209,10 +209,19 @@ Each run gets an isolated scratch directory, so private and public clones can be
 
 A suite that cannot measure something says so on a `[SKIP] <reason>` line, and the runner
 counts those items instead of hiding them behind a zero exit code (v1.59.6). So read the
-last line carefully: `ALL PASS` alone means everything ran, while `ALL PASS · BO QUA n muc`
-means the rest passed and *n* items went unmeasured. A clone checked outside a vault
-reports several of these, which is expected — the hook matcher, the real rules parser and
-the cross-check against the vault's own gate simply are not there to measure.
+last line carefully: `ALL PASS · BO QUA n muc` means the rest passed and *n* items went
+unmeasured. A clone checked outside a vault reports several of these, which is expected —
+the hook matcher, the real rules parser and the cross-check against the vault's own gate
+simply are not there to measure.
+
+But a suite can also skip without saying anything: `if not condition: pass` prints
+nothing, and neither do deleted assertions. So from v1.60.0 the runner measures instead of
+asking — it counts the assertions each item actually ran, keeps the count in a per-machine
+mark outside the repo, and compares it on the next run. Fewer assertions, or a whole suite
+missing from disk, prints `TUT VUNG PHU` and exits 1 **even when every suite reports
+`ALL PASS`**. Read the exit code, not the text; `ALL PASS` alone no longer proves a thing.
+When the drop is intentional, lower the mark on the record with
+`python tests/selfcheck.py --chap-nhan "why"` rather than working around it.
 
 ## Roadmap
 
@@ -251,6 +260,6 @@ Trỏ vào một thư mục note markdown (vault kiểu Obsidian), app phục v�
 - **2 máy:** journal per-máy nằm trong vault — 2 máy sync chung vault (OneDrive/Drive/Syncthing) tự thấy lịch sử của nhau, máy thứ hai không cần chạy server.
 - **Ngôn ngữ:** giao diện có **song ngữ VI/EN** — lần đầu tự nhận theo ngôn ngữ trình duyệt, đổi bằng nút **VI | EN** cạnh logo (nhớ lựa chọn). Nội dung của bạn không bị dịch: tên note, tag, nhóm màu, đường dẫn giữ nguyên như trong vault.
 - **Cấu hình:** nhóm màu tag ở `TAG_COLORS` (`build_graph_data.py`) + `GROUP_ORDER` (`src/state.js`); loại folder ở `EXCLUDED_DIRS`; đổi port bằng `--port`. Taxonomy mặc định đang theo vault của tác giả — tách ra file config là mục roadmap số một.
-- **Test:** `python tests/selfcheck.py` (~19s; thêm `--slow` cho test port/kill ~30s). Mỗi lượt có scratch theo run-id, nên clone private/public có thể tự kiểm song song mà không xoá fixture journal của nhau (v1.54.1). Từ v1.59.6, bộ test nào không đo được thì phải tự khai bằng dòng `[SKIP] <lý do>` và runner **đếm** các mục đó — nên `ALL PASS · BO QUA n muc` nghĩa là phần còn lại xanh, còn `ALL PASS` một mình mới là đo trọn. Clone chạy ngoài vault sẽ thấy vài mục như vậy, đúng như thiết kế.
+- **Test:** `python tests/selfcheck.py` (~19s; thêm `--slow` cho test port/kill ~30s). Mỗi lượt có scratch theo run-id, nên clone private/public có thể tự kiểm song song mà không xoá fixture journal của nhau (v1.54.1). Từ v1.59.6, bộ test nào không đo được thì phải tự khai bằng dòng `[SKIP] <lý do>` và runner **đếm** các mục đó — nên `ALL PASS · BO QUA n muc` nghĩa là phần còn lại xanh. Clone chạy ngoài vault sẽ thấy vài mục như vậy, đúng như thiết kế. Từ **v1.60.0**, runner còn **đếm số khẳng định** mỗi mục vừa chạy thật và so với mốc lần trước: đo ít hơn — hoặc mất cả một bộ test — thì in `TUT VUNG PHU` và **exit 1 dù mọi bộ đều `ALL PASS`**, vì đó là cách duy nhất bắt được bộ bỏ qua *im lặng*. **Đọc mã thoát, đừng đọc chữ**; hạ mốc có chủ ý thì dùng `--chap-nhan "lý do"`.
 
 Giấy phép [MIT](LICENSE).
