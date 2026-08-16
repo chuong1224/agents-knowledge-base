@@ -27,6 +27,15 @@ python tools/test_publish_from_vault.py  # add this whenever you touched the pub
 
 A red suite is a stop, not a warning.
 
+A green one is not automatically a measured one. Each suite is labelled `PASS`,
+`PASS*`, `THIEU-LIB` or `FAIL`, and the summary counts every item a suite declared it
+could not measure. `ALL PASS · BO QUA n muc` means the *rest* is green — a run without
+`--slow` always has at least one such item, and a clone outside a vault has several.
+`THIEU-LIB` means the interpreter is missing a library: the measurement is broken, not
+the code, so install into the interpreter the run names instead of editing anything.
+A suite that skips something must say so on its own line, starting with `[SKIP] `;
+contract 2m rejects the older bare `SKIP` marker, which nothing could count.
+
 The maintainer's post-commit denylist audit must reuse the publisher's exact scanner:
 `python tools/publish_from_vault.py --src "<path-to-vault>/.graph3d" --scan-only`.
 Do not recreate it with `git grep`: different case and binary rules once made the two
