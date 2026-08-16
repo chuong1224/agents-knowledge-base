@@ -6,10 +6,11 @@
      chep tay) + tests/*.py; index.html phai ket thuc </html>;
      src/* (ES modules giai doan 0) khong rong + LF + ket thuc \n + index tro /src/main.js
      (cung logic voi _restart_sources_sane trong serve.py).
-  2. Contract grep — ma hoa cac bug DA SUA (muc 2a..2n, < 1s): moi contract la mot bug
+  2. Contract grep — ma hoa cac bug DA SUA (muc 2a..2o, < 1s): moi contract la mot bug
      tung xay ra, FAIL nghia la co nguoi vua dua bug do quay lai. 2a..2i tu review
      2026-07-10; 2j/2k tu 2 su co publish doi 7+8 (danh sach file .py chep tay bi sot);
-     2m/2n tu W222 (quy uoc [SKIP] + danh sach bo unit chep tay).
+     2m/2n tu W222 (quy uoc [SKIP] + danh sach bo unit chep tay); 2o tu W239 (bo test
+     cham diem im lang thi khong dem duoc vung phu).
   3. Unit — test_p1/p3/p4/p5 + test_reader (guard /note + /asset, giai doan 1 Vault
      Cockpit) + test_finder (/search fold + AND + loai dot-folder, giai doan 2)
      + test_cockpit (/timeline + /dashboard theo ngay local, giai doan 3)
@@ -28,13 +29,22 @@
      Bo nao KHONG do het thi phai TU KHAI bang dong `[SKIP] <ly do>` — xem khoi
      "Quy uoc chua do duoc" ben duoi.
 
-Chay:  python .graph3d/tests/selfcheck.py [--slow]
-Exit:  0 = ALL PASS; 1 = co FAIL hoac THIEU-LIB (phep do hong cung la chua do duoc).
-       Muc tu khai [SKIP] KHONG doi exit code (may nay khong co `node` thi khong the
-       va bang cach sua code) nhung LUON hien ra + duoc dem o TONG KET.
+Chay:  python .graph3d/tests/selfcheck.py [--slow] [--chap-nhan "ly do"]
+Exit:  0 = ALL PASS; 1 = co FAIL, THIEU-LIB (phep do hong cung la chua do duoc), hoac
+       VUNG PHU TUT (W239). Muc tu khai [SKIP] KHONG doi exit code (may nay khong co
+       `node` thi khong the va bang cach sua code) nhung LUON hien ra + duoc dem o TONG KET.
+
+W239 (16/08/2026) — ba lop tren van mu truoc bo test bo qua IM LANG:
+
+  W220/W222 day runner doc dong `[SKIP]` TU KHAI. Nhung mot bo viet `if not dieu_kien:
+  pass`, hay bi xoa bot khang dinh, thi khong phat tin hieu nao: khong dong SKIP, exit 0,
+  runner ghi PASS. Nay runner DO thay vi hoi — dem so khang dinh moi muc vua chay that
+  (moi bo test in mot dong PASS/FAIL cho moi khang dinh), ghi vao moc per-MAY ngoai repo,
+  luot sau dem so. Tut thi CHAN nhu FAIL; ha moc hop le di bang `--chap-nhan "ly do"`.
+  Lop 1+2 cua chinh runner cung duoc dem (khoa `__runner__`).
 """
 import glob
-import json, os, re, subprocess, sys, time
+import json, os, re, socket, subprocess, sys, time
 
 sys.dont_write_bytecode = True   # khong sinh __pycache__ trong vault
 from _scratch import SCRATCH, G3D, VAULT
@@ -91,8 +101,14 @@ def ui_sources():
 fails = []
 skips = []                                           # muc TU KHAI la chua do duoc (W222)
 thieu_lib = {}                                       # ten bo -> module con thieu
+so_check = [0]                                       # W239: dem khang dinh cua CHINH runner
+khang_dinh = {}                                      # W239: ten bo -> so khang dinh da chay
 
 def check(name, cond, info=""):
+    # Dem MOI lan goi, ke ca lan FAIL: con so nay do VUNG PHU (bao nhieu khang dinh da
+    # chay), khong do ket qua. Lop 1/2 cua runner cung bi xoa bot khang dinh nhu bat ky
+    # bo test nao — khong dem thi chinh cho phat hien lo hong lai la cho khong ai soi.
+    so_check[0] += 1
     print(("PASS " if cond else "FAIL ") + name + (("  ->  " + repr(info)) if not cond else ""))
     if not cond:
         fails.append(name)
@@ -138,12 +154,114 @@ def read(path):
 # Hai ban CO Y tach roi: ban public clone ra ngoai vault khong voi toi file kia duoc.
 # Cai phai trung khop la MARKER va NGHIA cua 4 nhan, khong phai chinh ta (file nay ASCII,
 # ben kia tieng Viet co dau) — test_selfcheck.py giu hai ban khong troi nhau.
-SKIP_RE = re.compile(r"^\[SKIP\][ \t]*(.*)$", re.M)
+#
+# W239 (16/08/2026): ban W222 neo cung `^\[SKIP\]`, nen dong khai bi THUT LE khong ai dem.
+# Bo test in marker tu trong mot khoi da canh le, hay chuyen tiep output cua runner con
+# (runner con thut output vao 6 dau cach), deu khai dung quy uoc ma van tang hinh. Nay cho
+# phep khoang trang dau dong; NGOAC VUONG van la thu chan dem oan, khong phai cot 0.
+SKIP_RE = re.compile(r"^[ \t]*\[SKIP\][ \t]*(.*)$", re.M)
 THIEU_RE = re.compile(r"No module named '([\w.]+)'")
-# Kieu khai CU (truoc W222) ma contract 2m cam: IN thang chu SKIP tran. Bam vao `print(`
-# chu khong bat moi chuoi bat dau bang SKIP — test_selfcheck.py phai chua duoc phan vi du
-# cua kieu cu de chung minh no khong bi dem, va no chi la du lieu chu khong in ra.
-SKIP_TRAN_RE = re.compile(r"""print\(\s*["']SKIP[ :\t-]""")
+# Kieu khai CU (truoc W222) ma contract 2m cam: PHAT ra chuoi bat dau bang chu SKIP tran.
+#
+# W239: ban W222 chi bam `print(`, nen mot loi ra qua `sys.stdout.write` lot thang. Nay bat
+# ca hai loi ra stdout/stderr, va cho phep thut le ben trong chuoi. (Cho nay co y KHONG
+# viet ra mau vi pham: chinh file nay nam trong pham vi 2m quet, va ban dau tien cua dong
+# chu thich nay da lam 2m tu bat chinh no — bug that, do luc 16/08/2026.)
+# Van neo vao LENH PHAT chu
+# khong bat moi chuoi bat dau bang SKIP: `"SKIP dung parser THAT"` la DU LIEU hop le cua
+# test_selfcheck.py (case A4 phai co mau kieu cu de chung minh no khong bi dem oan), bat
+# ca literal la bat oan chinh cai test dang gac. Nua con lai cua lo — chuoi dung dong roi
+# in bien — khong vao duoc 2m, va khong can: bo test do van bi W239 bat qua SO KHANG DINH.
+SKIP_TRAN_RE = re.compile(
+    r"""(?:print|sys\.std(?:out|err)\.write)\(\s*f?["']\s{0,4}SKIP[ :\t-]""")
+# W239 — LO MA W222 KHONG BIT DUOC: bo test bo qua IM LANG.
+#
+# `bo_qua()` va contract 2m chi thay duoc muc test TU KHAI. Mot bo viet `if not dieu_kien:
+# pass`, hay bi xoa bot khang dinh, thi khong phat tin hieu nao: khong dong SKIP, exit 0,
+# runner ghi PASS. Dung lop bug W220/W222 sinh ra de chan, chi khac o cho no CAM.
+#
+# Cach bit: dung hoi bo test "may co bo qua gi khong" (no phai nho moi tra loi duoc) ma DO
+# xem no vua chay bao nhieu khang dinh, roi so voi lan xanh truoc. Vung phu tut la du kien
+# quan sat duoc, khong can doan y dinh — xoa 5 case hay bo qua im lang 5 case lo y het.
+#
+# Dem duoc vi moi bo test trong he nay in MOT DONG cho MOI khang dinh. Chinh ta co 4 kieu
+# (do 16/08/2026 tren toan vault): `[PASS] x` · `PASS x` (kieu .graph3d) · `  PASS  x` ·
+# `PASS · x`. Regex nhan ca 4 va CO Y doi ky tu phan cach ngay sau nhan — `PASSED`, `PASS*`
+# (nhan cua chinh runner) hay `TONG KET: ALL PASS` khong duoc tinh.
+KHANG_DINH_RE = re.compile(r"(?m)^[ \t]*(?:\[(?:PASS|FAIL)\]|PASS|FAIL)(?=[ \t·:])")
+# Kieu thu 5: bo dung `assert` tran roi in MOT dong gop `PASS 10/10 · <ten>`. Dem dong thi
+# chung mai bang 1 — xoa 9 kich ban van ra 1. Lay VE TRAI (so da chay qua), khong lay mau
+# so: mau so la hang chep tay, xoa kich ban no khong nhuc nhich. That chat de khong cuop
+# nham ten case bat dau bang `3/4`: chi nhan nhan TRAN va phai het dong hoac sang dau `·`.
+GOP_RE = re.compile(r"(?m)^[ \t]*(?:PASS|FAIL)[ \t]+(\d+)[ \t]*/[ \t]*\d+(?=[ \t]*(?:·|$))")
+
+
+def moc_path():
+    """Moc vung phu per-MAY, NGOAI repo. `.graph3d` duoc publish ra repo public — de moc
+    trong do la day mot file rac vao moi clone, va OneDrive lai them mot cho de conflict.
+    Mat cache chi ton dung mot lan chay khong so sanh duoc, khong bao gio sai ket qua."""
+    p = os.environ.get("GRAPH3D_SELFCHECK_STATE")
+    if p:
+        return p
+    base = (os.environ.get("LOCALAPPDATA") or os.environ.get("XDG_CACHE_HOME")
+            or os.path.join(os.path.expanduser("~"), ".cache"))
+    host = socket.gethostname().split(".")[0] or "unknown"
+    # Ten thu muc CO Y khong mang ten repo private: cua gac denylist cua buoc publish
+    # quet ca file nay, va ban dau dat theo ten repo da bi chan dung 16/08/2026.
+    return os.path.join(base, "graph3d-vung-phu", "moc-%s.json" % host)
+
+
+def moc_key(slow):
+    """Moc phai tach theo (thu muc .graph3d, che do chay). Ban private va ban public clone
+    tren CUNG mot may co so bo/so file khac nhau, con --slow them han mot bo — gop chung
+    mot moc la tu che ra bao dong gia moi lan doi che do."""
+    return "%s|%s" % (os.path.normcase(os.path.abspath(G3D)), "slow" if slow else "nhanh")
+
+
+def doc_moc():
+    try:
+        with open(moc_path(), encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def ghi_moc(data):
+    try:
+        p = moc_path()
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        tmp = p + ".tmp-%d" % os.getpid()
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, p)
+    except OSError:
+        pass                                         # cache hong khong duoc lam chet gate
+
+
+def dem_khang_dinh(res):
+    """So khang dinh bo test VUA CHAY THAT — dem tu output, khong hoi no (W239)."""
+    out = res.get("output") or ""
+    gop = [int(n) for n in GOP_RE.findall(out)]
+    # Dong gop da duoc dem la 1 o luot tren; tra lai cai 1 do roi cong so no tu khai.
+    return len(KHANG_DINH_RE.findall(out)) - len(gop) + sum(gop)
+
+
+def so_vung_phu(cu, moi, con_tren_dia):
+    """So so khang dinh voi moc xanh truoc. Tra (tut, bien_mat).
+
+    · tut      — muc con do nhung chay it khang dinh hon: bo qua im lang, hoac xoa case.
+    · bien mat — ca BO khong con tren dia. Xoa mot file test cung la vung phu tut, ma loi
+      W222 con mu hon: khong co bo thi khong co output, khong output thi khong co gi de soi.
+      Chi tinh muc tung do duoc (>0), de bo von im lang dung keu luc bi don.
+
+    Co y KHONG co nguong dung sai: dung sai chinh la cho de lot vai case mot luot, va vai
+    case mot luot la cach vung phu that su tut trong doi thuc."""
+    tut = [(t, cu[t], moi[t]) for t in sorted(moi)
+           if isinstance(cu.get(t), int) and moi[t] < cu[t]]
+    bien_mat = sorted(t for t, n in cu.items()
+                      if isinstance(n, int) and n > 0 and t not in con_tren_dia)
+    return tut, bien_mat
 # Ten import KHAC ten goi pip — cho duy nhat khong suy ra duoc, nen phai chep.
 TEN_GOI_PIP = {"yaml": "PyYAML", "PIL": "pillow", "docx": "python-docx"}
 
@@ -347,6 +465,16 @@ def lop2_contract():
     check("2n moi tests/test_*.py deu duoc lop 3 chay", not thieu_khai and not thua_khai,
           {"chua khai": thieu_khai, "khai ma khong co file": thua_khai})
 
+    # 2o — W239: phep do vung phu chi voi toi bo test co IN nhan PASS/FAIL cho tung khang
+    # dinh. Mot bo cham diem im lang (chi `assert` roi exit 0, khong in gi) thi so khang
+    # dinh cua no mai bang 0: no khong tut duoc vi chua tung co gi de tut, va the la lot
+    # ra ngoai dung cai luoi vua cang. Chan tu luc them file, dung doi den luc no cam.
+    cam = []
+    for p in sorted(glob.glob(os.path.join(TESTS, "test_*.py"))):
+        if not re.search(r"""["']\[?(?:PASS|FAIL)""", read(p)):
+            cam.append(os.path.basename(p))
+    check("2o moi bo test in nhan PASS/FAIL de dem duoc vung phu", not cam, cam)
+
 
 # ---- Lop 3: unit ----
 def lop3_unit(slow):
@@ -371,7 +499,10 @@ def lop3_unit(slow):
         # khong chan (thieu `node` / khong phai Windows thi sua code cung khong het).
         res = {"test": name, "ok": r.returncode == 0, "output": r.stdout + r.stderr}
         nhan, muc = phan_loai(res), "3 %s (%.1fs)" % (name, dt)
-        print(nhan + " " + muc)
+        # W239: dem khang dinh bo nay VUA CHAY THAT. In ra ngay de nguoi doc thay vung phu
+        # truoc khi may keu, va ghi lai de luot sau con cai ma so.
+        khang_dinh[name] = dem_khang_dinh(res)
+        print("%s %s  %d khang dinh" % (nhan, muc, khang_dinh[name]))
         for ly_do in bo_qua(res):
             print(an_toan("      ~ bo qua: " + ly_do))
             skips.append(name + ": " + ly_do)
@@ -391,7 +522,18 @@ def lop3_unit(slow):
 
 
 if __name__ == "__main__":
-    slow = "--slow" in sys.argv[1:]
+    argv = sys.argv[1:]
+    slow = "--slow" in argv
+    # Ha moc vung phu phai TON mot cau giai thich, neu khong day dung la cai nut "tat
+    # tieng" ma W239 dang di bit.
+    vi_sao_nhan = ""
+    if "--chap-nhan" in argv:
+        i = argv.index("--chap-nhan")
+        vi_sao_nhan = (argv[i + 1].strip() if i + 1 < len(argv) else "")
+        if not vi_sao_nhan or vi_sao_nhan.startswith("--"):
+            print("LOI: --chap-nhan phai kem ly do, vi du:\n"
+                  '   python selfcheck.py --chap-nhan "gop 3 case trung nhau thanh 1"')
+            sys.exit(2)
     t0 = time.perf_counter()
     print("== Lop 1: compile ==")
     lop1_compile()
@@ -400,6 +542,33 @@ if __name__ == "__main__":
     print("== Lop 3: unit ==")
     lop3_unit(slow)
     dt = time.perf_counter() - t0
+    # Lop 1+2 la khang dinh cua CHINH runner (lop 3 dem rieng theo tung bo con).
+    khang_dinh["__runner__"] = so_check[0]
+
+    # ---- W239: vung phu tut ----
+    # CHI so khi luot nay xanh tron: bo do thuong chet giua chung nen in thieu khang dinh,
+    # dem so la bao "tut" trong khi thu pham la cai do da bi chan o cua khac roi.
+    xanh_tron = not fails and not thieu_lib
+    moc, khoa = doc_moc(), moc_key(slow)
+    cu = moc.get(khoa) if isinstance(moc.get(khoa), dict) else {}
+    cu_counts = cu.get("counts") if isinstance(cu.get("counts"), dict) else {}
+    tren_dia = set(khang_dinh)
+    tut, bien_mat = (so_vung_phu(cu_counts, khang_dinh, tren_dia) if xanh_tron else ([], []))
+    if xanh_tron and (not (tut or bien_mat) or vi_sao_nhan):
+        ghi = dict(moc)
+        muc_moi = {"counts": khang_dinh, "khi": time.strftime("%Y-%m-%d %H:%M")}
+        if vi_sao_nhan and (tut or bien_mat):
+            lich_su = [x for x in (cu.get("chap_nhan") or []) if isinstance(x, dict)]
+            lich_su.append({"khi": muc_moi["khi"], "vi_sao": vi_sao_nhan,
+                            "tut": [{"test": t, "cu": a, "moi": b} for t, a, b in tut],
+                            "bien_mat": list(bien_mat)})
+            muc_moi["chap_nhan"] = lich_su[-5:]
+        elif cu.get("chap_nhan"):
+            muc_moi["chap_nhan"] = cu["chap_nhan"]
+        ghi[khoa] = muc_moi
+        ghi_moc(ghi)
+    chan_vung_phu = bool(tut or bien_mat) and not vi_sao_nhan
+
     phan = []
     if fails:
         phan.append("FAIL %d muc: %s" % (len(fails), ", ".join(fails)))
@@ -409,7 +578,33 @@ if __name__ == "__main__":
     ket = " · ".join(phan) if phan else "ALL PASS"
     if skips:
         ket += " · BO QUA %d muc" % len(skips)
+    ket += " · %d khang dinh" % sum(khang_dinh.values())
+    if tut or bien_mat:
+        ket += " · TUT VUNG PHU %d muc" % (len(tut) + len(bien_mat))
     print("\nTONG KET selfcheck (%.1fs): %s" % (dt, ket))
+    if tut or bien_mat:
+        print("\n" + "=" * 72)
+        if vi_sao_nhan:
+            print("VUNG PHU TUT — DA CHAP NHAN: %s" % vi_sao_nhan)
+        else:
+            print("VUNG PHU TUT (W239) — moi muc deu XANH, nhung do IT HON lan xanh truoc"
+                  " (%s):" % (cu.get("khi") or "khong ro luc nao"))
+        for ten, a, b in tut:
+            print("   - %s: %d -> %d khang dinh (mat %d)" % (ten, a, b, a - b))
+        for ten in bien_mat:
+            print("   - %s: ca BO khong con chay nua (moc cu %d khang dinh)"
+                  % (ten, cu_counts.get(ten, 0)))
+        if not vi_sao_nhan:
+            print("   Xanh ma do it di = bo qua im lang hoac khang dinh bi xoa. Khong co")
+            print("   dong [SKIP] nao de soi, nen con so nay la tin hieu DUY NHAT.")
+            print("   Tra vung phu ve, HOAC neu ha la co y thi ha moc CO ghi ly do:")
+            print('   python .graph3d/tests/selfcheck.py%s --chap-nhan "…"'
+                  % (" --slow" if slow else ""))
+        print("=" * 72)
+    cam = sorted(t for t, n in khang_dinh.items() if not n)
+    if cam:
+        print("\n~ %d bo khong phat ra khang dinh nao (vung phu KHONG do duoc): %s"
+              % (len(cam), ", ".join(cam)))
     if thieu_lib:
         # W218: goi dung ten thu pham. Gop vao "FAIL" la moi phien sau di sua code dang lanh.
         print("\n" + "=" * 72)
@@ -426,4 +621,7 @@ if __name__ == "__main__":
         for s in skips:
             print(an_toan("   - " + s))
         print("  'ALL PASS' o day nghia la phan CON LAI xanh, khong phai da do het.")
-    sys.exit(1 if (fails or thieu_lib) else 0)
+    # Tut vung phu CHAN nhu FAIL. Bao ma khong chan thi phien sau chi doc exit code (dung
+    # cai bay W222 pass 2 da phai va: tai lieu bao "exit 0 la du") va di tiep — thanh ra
+    # lai dung mot kenh im lang nua. Loi ra la `--chap-nhan "…"`, khong phai lam ngo.
+    sys.exit(1 if (fails or thieu_lib or chan_vung_phu) else 0)

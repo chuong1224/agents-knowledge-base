@@ -49,6 +49,10 @@ check("A4 chu SKIP tran KHONG duoc tinh (do la kieu cu, khong ai dem duoc)",
       SC.bo_qua(res(True, "SKIP dung parser THAT — kieu cu truoc W222\n")) == [])
 check("A5 marker giua dong KHONG duoc tinh (tranh dem nham van xuoi)",
       SC.bo_qua(res(True, "ket qua la [SKIP] nam giua cau\n")) == [])
+# W239: ban W222 neo cung cot 0, nen dong khai THUT LE tang hinh — khai dung quy uoc ma
+# van khong ai dem. Day la mot trong ba lo W239 phai va.
+check("A8 marker THUT LE van duoc dem (lo cot-0 cua W222)",
+      SC.bo_qua(res(True, "linh tinh\n    [SKIP] bi thut le\n")) == ["bi thut le"])
 # Contract 2m gac chieu con lai: cam IN chu SKIP tran. Hai mau duoi duoc NOI luc chay,
 # khong viet thang, de chinh file nay khong bi 2m bat oan — day cung la ly do 2m bam vao
 # `print(` chu khong bat moi chuoi bat dau bang SKIP.
@@ -145,7 +149,7 @@ check("E2 muc bo qua di vao TONG KET, khong nam mot minh o dong ghi chu",
       "BO QUA %d muc" in src_sc)
 check("E3 THIEU-LIB chan, nhung KHONG bi goi ten la FAIL (W218)",
       'elif nhan == "FAIL":' in src_sc
-      and "sys.exit(1 if (fails or thieu_lib) else 0)" in src_sc
+      and "sys.exit(1 if (fails or thieu_lib or chan_vung_phu) else 0)" in src_sc
       and "CHUA DO DUOC %d bo vi thieu thu vien" in src_sc)
 check("E5 PASS* KHONG chan (may khong co node thi sua code cung khong het)",
       "skips.append" in src_sc and "or skips" not in src_sc)
@@ -160,7 +164,9 @@ check("E4 selfcheck khai bo qua cua chinh no bang marker chung",
 goc = glob.glob(os.path.join(VAULT, "*", "*", "*", "attachments", "tooling_selfcheck.py"))
 if goc:
     src_goc = SC.read(goc[0])
-    marker = r'r"^\[SKIP\][ \t]*(.*)$"'
+    # W239 noi rong marker: cho phep khoang trang dau dong. Doi o mot ben la lam mu ben
+    # kia, nen chuoi duoi phai la BAN SAO Y cua ca hai file.
+    marker = r'r"^[ \t]*\[SKIP\][ \t]*(.*)$"'
     check("F1 hai may gac dung CUNG MOT marker [SKIP]",
           marker in src_sc and marker in src_goc, goc[0])
     check("F2 hai ban cung du bo ba ham phan loai",
@@ -168,10 +174,79 @@ if goc:
               for h in ("bo_qua", "thieu_module", "phan_loai")))
     check("F3 hai ban cung co nhan PASS* (xanh nhung chua do het)",
           '"PASS*"' in src_sc and '"PASS*"' in src_goc)
+    # W239: phep dem vung phu cung phai khong troi nhau — hai may gac ma dem khac kieu
+    # thi cung mot bo test cho ra hai con so, va moc ben nay bao dong oan ben kia.
+    dem = r'r"(?m)^[ \t]*(?:\[(?:PASS|FAIL)\]|PASS|FAIL)(?=[ \t·:])"'
+    check("F4 hai ban dem khang dinh bang CUNG MOT regex (W239)",
+          dem in src_sc and dem in src_goc)
+    check("F5 hai ban cung doc duoc dong gop `PASS n/m`",
+          "GOP_RE" in src_sc and "GOP_RE" in src_goc
+          and "def dem_khang_dinh(" in src_sc and "def dem_khang_dinh(" in src_goc)
+    check("F6 hai ban cung co loi ha moc CO ly do, khong ai duoc ha len",
+          "chap-nhan" in src_sc and "chap-nhan" in src_goc
+          and "def so_vung_phu(" in src_sc and "def so_vung_phu(" in src_goc)
 else:
     # Ban public: file goc nam trong vault, khong publish. Dung dip nay tu dien lai quy uoc.
     print("[SKIP] F. doi chieu voi may gac tooling — khong thay tooling_selfcheck.py"
           " (dang chay ngoai vault)")
+
+# ---- G. W239: DO vung phu, khong hoi bo test ----
+# Bay cua ca lop nay: bo "bo qua im lang" khong phat ra dau hieu nao — khong dong SKIP,
+# khong exit code la, output trong nhu bo xanh binh thuong. Nen phep thu duy nhat con lai
+# la SO SANH voi lan xanh truoc, va toy duoi day dung len dung cac tinh huong do.
+TOYS_G = {
+    # Du 4 kieu chinh ta dang co that trong vault, cong hai dong PHAI KHONG duoc dem.
+    "toy_dem.py": ("print('[PASS] mot')\n"
+                   "print('PASS hai')\n"
+                   "print('  PASS  ba')\n"
+                   "print('PASS · bon')\n"
+                   "print('PASSED khong phai khang dinh')\n"
+                   "print('TONG KET: ALL PASS')\n"),
+    # Kieu gop: `assert` tran roi in mot dong tong. Dem dong thi mai bang 1.
+    "toy_gop.py": "print('PASS 10/10 · toy_gop')\n",
+    # Bo qua IM LANG: chay, xanh, va khong noi gi ca. Chinh la ca W239.
+    "toy_cam.py": "print('dang chay...')\nprint('xong')\n",
+    # Bo bi xoa bot khang dinh: van xanh, chi it di.
+    "toy_tut.py": "print('[PASS] mot')\nprint('[PASS] hai')\n",
+}
+for ten, body in TOYS_G.items():
+    with open(os.path.join(TOY_DIR, ten), "w", encoding="utf-8", newline="\n") as f:
+        f.write(body)
+
+g_dem, g_gop, g_cam, g_tut = (chay_nhu_lop3(t) for t in
+                              ("toy_dem.py", "toy_gop.py", "toy_cam.py", "toy_tut.py"))
+check("G1 dem du 4 kieu chinh ta, KHONG dem 'PASSED' va 'ALL PASS'",
+      SC.dem_khang_dinh(g_dem) == 4, g_dem["output"])
+check("G2 dong gop `PASS 10/10` dem la 10, khong phai 1",
+      SC.dem_khang_dinh(g_gop) == 10, g_gop["output"])
+check("G3 bo bo qua IM LANG -> 0 khang dinh (khong co gi de tu khai)",
+      SC.dem_khang_dinh(g_cam) == 0 and SC.bo_qua(g_cam) == []
+      and SC.phan_loai(g_cam) == "PASS", g_cam["output"])
+check("G4 nhan cua runner (PASS*) khong bi dem nham la khang dinh",
+      SC.dem_khang_dinh(res(True, "PASS* test_x.py (1.2s)\n")) == 0)
+
+# So sanh moc: day moi la cho bat duoc bo qua im lang.
+check("G5 xoa bot khang dinh -> bao TUT dung so",
+      SC.so_vung_phu({"toy_tut.py": 4}, {"toy_tut.py": SC.dem_khang_dinh(g_tut)},
+                     {"toy_tut.py"}) == ([("toy_tut.py", 4, 2)], []))
+check("G6 bo qua im lang tron ven -> tut ve 0, van bat duoc",
+      SC.so_vung_phu({"toy_cam.py": 9}, {"toy_cam.py": 0}, {"toy_cam.py"})
+      == ([("toy_cam.py", 9, 0)], []))
+check("G7 xoa ca BO test cung la tut vung phu (W222 mu han cho nay)",
+      SC.so_vung_phu({"da_xoa.py": 12}, {}, set()) == ([], ["da_xoa.py"]))
+check("G8 bo VON da cam thi bien mat khong bi keu oan (chua tung do duoc gi)",
+      SC.so_vung_phu({"cam_tu_dau.py": 0}, {}, set()) == ([], []))
+check("G9 vung phu TANG thi im lang, khong coi la bat thuong",
+      SC.so_vung_phu({"toy.py": 3}, {"toy.py": 8}, {"toy.py"}) == ([], []))
+check("G10 bo MOI chua co moc thi khong bi doi hoi gi",
+      SC.so_vung_phu({}, {"moi.py": 5}, {"moi.py"}) == ([], []))
+
+# Moc phai nam NGOAI repo: .graph3d duoc publish, nhet cache vao la day rac vao moi clone.
+moc = os.path.abspath(SC.moc_path())
+check("G11 moc vung phu nam NGOAI cay .graph3d",
+      not moc.startswith(os.path.abspath(SC.G3D) + os.sep), moc)
+check("G12 moc tach theo (thu muc, che do) — private/public/--slow khong dam nhau",
+      SC.moc_key(False) != SC.moc_key(True) and SC.G3D.lower() in SC.moc_key(False).lower())
 
 print("\nTONG KET test_selfcheck: %s" % (
     ("FAIL %d: %s" % (len(fails), ", ".join(fails))) if fails else "ALL PASS"))
