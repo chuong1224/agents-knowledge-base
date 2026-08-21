@@ -8,16 +8,18 @@ Usage:
 Steps:
 1. Copies the whitelisted code files/dirs from --src into the repo root.
    Runtime data (logs, heat stores, backups) and private ops files are never copied.
-2. Scans text files in the whole repo tree against a DENYLIST of private strings
-   (hostnames, org names, ...) with literal, case-insensitive matching and FAILS
-   if any is found, so nothing private can be committed by accident. Binary files
-   are skipped. The denylist itself lives OUTSIDE this repo:
+2. Scans relative paths and text-file contents in the whole repo tree against a
+   DENYLIST of private strings (hostnames, org names, ...) with literal,
+   case-insensitive matching and FAILS if any is found, so nothing private can be
+   committed by accident. Binary contents are skipped, but their paths are still
+   checked. The denylist itself lives OUTSIDE this repo:
    `<src>/publish_denylist.txt`, one term per line (never published).
 3. Prints `git status` — review, commit and push manually.
 """
 import argparse
 import importlib.util
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -89,6 +91,16 @@ def scan(terms):
         dirs[:] = [d for d in dirs if d not in SCAN_SKIP_DIRS]
         for f in files:
             path = os.path.join(root, f)
+            rel_path = os.path.relpath(path, REPO)
+            folded_path = rel_path.casefold()
+            if any(t in folded_path for t in folded_terms):
+                safe_path = rel_path
+                for term in terms:
+                    safe_path = re.sub(re.escape(term), "[DENYLISTED]", safe_path,
+                                       flags=re.IGNORECASE)
+                if any(t in safe_path.casefold() for t in folded_terms):
+                    safe_path = "<redacted path>"
+                hits.append("%s: path contains a denylisted term" % safe_path)
             try:
                 if is_binary(path):
                     continue
@@ -97,7 +109,7 @@ def scan(terms):
                         folded_line = line.casefold()
                         for t in folded_terms:
                             if t in folded_line:
-                                hits.append("%s:%d: contains a denylisted term" % (os.path.relpath(path, REPO), i))
+                                hits.append("%s:%d: contains a denylisted term" % (rel_path, i))
             except OSError:
                 pass
     return hits

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regression tests for the public-repo denylist gate (W70)."""
+"""Regression tests for the public-repo denylist gate (W70, W185)."""
 import contextlib
 import importlib.util
 import io
@@ -45,9 +45,28 @@ with tempfile.TemporaryDirectory(prefix="graph3d-publish-test-") as td:
               len(hits) == 1 and hits[0].startswith("exact.txt:1:"), hits)
         (repo / "exact.txt").unlink()
 
+        # The path is public metadata too. A denylisted hostname or org name must be
+        # blocked even when the file contents are clean, including for binary files.
+        named = repo / "exports" / "atlas - internal workspace-report.txt"
+        named.parent.mkdir()
+        named.write_text("clean contents\n", encoding="utf-8")
+        hits = P.scan([term])
+        check("tên/đường dẫn khác hoa thường vẫn bị chặn",
+              len(hits) == 1 and hits[0].startswith(str(Path("exports") / "[DENYLISTED]-report.txt")), hits)
+        check("hit từ đường dẫn không làm lộ chuỗi cấm",
+              all(term.casefold() not in hit.casefold() for hit in hits), hits)
+        named.unlink()
+
         # Binary assets are not public text and previously produced random byte matches.
         (repo / "image.png").write_bytes(b"\x89PNG\r\n\x1a\n\x00atlas - internal workspace\x00")
         check("binary bị bỏ qua", P.scan([term]) == [])
+
+        named_binary = repo / "atlas - internal workspace-image.png"
+        named_binary.write_bytes(b"\x89PNG\r\n\x1a\n\x00clean binary payload\x00")
+        hits = P.scan([term])
+        check("tên file nhị phân vẫn bị chặn",
+              len(hits) == 1 and hits[0].startswith("[DENYLISTED]-image.png"), hits)
+        named_binary.unlink()
 
         # Post-commit audit must reuse the publisher scanner, without copying anything.
         src = base / "private" 
